@@ -1,0 +1,7 @@
+.woocommerce #taxpayer_type_field .woocommerce-input-wrapper label {
+    display: inline-block;
+}
+.woocommerce #taxpayer_type_field .woocommerce-input-wrapper input {
+    margin-left: 15px;
+    margin-right: 5px;
+}

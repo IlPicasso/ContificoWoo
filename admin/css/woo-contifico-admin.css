@@ -1,0 +1,53 @@
+#woo-contifico-settings-page .container {
+    padding: 1em 3em;
+    width: 60%;
+}
+
+#woo-contifico-settings-page .container ul {
+    list-style: initial;
+    padding-left: 2rem;
+}
+
+#woo-contifico-settings-page .container h2 {
+    margin-left: -15px;
+    font-size: 1.8rem;
+}
+
+#woo-contifico-settings-page .container h3 {
+    margin-left: -10px;
+    font-size: 1.3rem;
+    padding-bottom: 0;
+}
+
+#woo-contifico-settings-page .container h4 {
+    font-size: 0.8rem;
+    padding-bottom: 0;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+#woo-contifico-settings-page th, #woo-contifico-settings-page td {
+    padding: 5px;
+    vertical-align: top;
+    min-width: 250px;
+}
+
+#woo-contifico-settings-page label {
+    padding-right: 10px;
+}
+
+#woo-contifico-settings-page td span {
+    font-size: smaller;
+}
+
+#woo-contifico-settings-page .field-error{
+    border: thin solid red;
+}
+
+#woo-contifico-settings-page .fetch-products .result, #woo-contifico-settings-page .fetch-products img {
+    display: none;
+}
+
+#setting-error-settings_updated b {
+    font-weight: bold;
+}

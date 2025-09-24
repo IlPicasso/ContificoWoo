@@ -1,0 +1,651 @@
+#, fuzzy
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+"Project-Id-Version: Woocommerce - Facturación Electrónica - Contífico\n"
+"POT-Creation-Date: 2020-05-18 16:35-0500\n"
+"PO-Revision-Date: 2020-05-18 16:34-0500\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 2.3.1\n"
+"X-Poedit-Basepath: ..\n"
+"X-Poedit-Flags-xgettext: --add-comments=translators:\n"
+"X-Poedit-WPHeader: woo-contifico.php\n"
+"X-Poedit-SourceCharset: UTF-8\n"
+"X-Poedit-KeywordsList: __;_e;_n:1,2;_x:1,2c;_ex:1,2c;_nx:4c,1,2;esc_attr__;"
+"esc_attr_e;esc_attr_x:1,2c;esc_html__;esc_html_e;esc_html_x:1,2c;_n_noop:1,2;"
+"_nx_noop:3c,1,2;__ngettext_noop:1,2\n"
+"X-Poedit-SearchPath-0: .\n"
+"X-Poedit-SearchPathExcluded-0: *.min.js\n"
+
+#: admin/class-woo-contifico-admin.php:121
+#: admin/partials/woo-contifico-admin-display.php:9
+msgid "Licencia"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:122
+#: admin/partials/woo-contifico-admin-display.php:10
+msgid "WooCommerce"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:123
+msgid "Integración con Contífico"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:124
+msgid "Emisor de documentos"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:125
+msgid "Establecimiento asociado"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:166
+msgid "Ajustes"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:181
+msgid "Facturación Electrónica Contifico"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:237
+#, php-format
+msgid ""
+"<b>Facturación Electrónica Contífico:</b> Plugin en ambiente de pruebas. <a "
+"href=\"%s\">Cambiar a producción</a>"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:247
+msgid "Configura la opción"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:256
+#, php-format
+msgid ""
+"<br> - La configuración para <!--suppress HtmlUnknownTarget -->\n"
+"\t\t\t\t\t\t\t<a href=\"%s\">%s</a> es incorrecta: %s"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:617
+msgid "Referencia: Tienda online Orden "
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:654
+msgid "Referencia: Tienda online reembolso Orden "
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:694
+msgid "<br>&nbsp;&nbsp; + API Key de prueba requerido"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:695
+msgid "<br>&nbsp;&nbsp;  + API Token de prueba requerido"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:698
+msgid "<br>&nbsp;&nbsp; +  API Key de producción requerido"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:699
+msgid "<br>&nbsp;&nbsp; +  API Token de producción requerido"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:711
+msgid "<br> - Frecuencia de actualización de stock modificada"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:715
+msgid "<br> - Error al modificar la frecuencia de actualización stock"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:721
+#: admin/class-woo-contifico-admin.php:915
+#, php-format
+msgid "Existen errores que deben ser corregidos: %s"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:731
+#, php-format
+msgid "Opciones almacenadas correctamente %s"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:765
+#, php-format
+msgid "<br> - Ha ocurrido un error al desactivar la licencia: %s"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:807
+msgid "<b>Licencia activada correctamente</b> "
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:810
+#, php-format
+msgid "<b>:</b> Tu licencia es válida hasta el %s"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:822
+#, php-format
+msgid "<b>Error al activar la licencia:</b> <br> - Error(%d) %s"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:869
+#: admin/class-woo-contifico-admin.php:909
+#: admin/class-woo-contifico-admin.php:939
+msgid "Opciones almacenadas correctamente"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:894
+#: admin/class-woo-contifico-admin.php:899
+msgid "<br> - Código del establecimiento de prueba requerido"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:895
+#: admin/class-woo-contifico-admin.php:900
+msgid "<br> - Código del punto de emisión de prueba requerido"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:896
+#: admin/class-woo-contifico-admin.php:901
+msgid "<br> - Número secuencial de la factura de prueba requerido"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:965
+msgid ""
+"Woo-Contifico no está correctamente configurado. Por favor corrija los "
+"errores para poder emitir esta factura"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:973
+msgid ""
+"Para facturas fuera del Ecuador, por favor seleccione tipo de "
+"identificación: \"exterior\""
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:985
+msgid ""
+"Solamente se emite factura electrónica para pedidos con valor mayor a 0 "
+"dólares"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:992
+msgid ""
+"Ya se emitió una factura para esta orden. Para emitir una nueva factura es "
+"necesario crear una nueva orden."
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:1000
+msgid ""
+"Se eligió la opción de emitir la factura a nombre de la empresa, pero no "
+"está registrado el nombre de la empresa. Por favor corregir el error y "
+"volver a emitir la factura"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:1012
+msgid "No fue posible generar la factura. "
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:1077
+msgid ""
+"No se encontró en Contífico un producto para el envío, por favor revisar que "
+"el código del producto de envío configurado sea el correcto."
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:1143
+msgid "Factura para la la orden "
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:1169
+#, php-format
+msgid ""
+"Contífico retornó errores en la petición. La respuesta del servidor es: %s"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:1177
+#, php-format
+msgid ""
+"La factura fue generada correctamente.<br><br>El número de la factura es: %s"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:1220
+msgid "Emitir la factura a nombre de la empresa"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:1222
+#: includes/class-woo-contifico.php:845
+msgid "Persona Natural"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:1222
+#: includes/class-woo-contifico.php:374 includes/class-woo-contifico.php:846
+msgid "Persona Jurídica"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:1328
+#: public/class-woo-contifico-public.php:176
+msgid ""
+"<strong>Nombre de la empresa</strong> es un campo requerido cuando solicita "
+"emitir la factura a nombre de la empresa"
+msgstr ""
+
+#: admin/class-woo-contifico-admin.php:1357
+msgid "Generar factura electrónica"
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:2
+msgid "Facturación Electrónica Contífico"
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:11
+msgid "Contífico"
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:12
+msgid "Emisor"
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:13
+msgid "Establecimiento"
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:22
+msgid "Guardar opciones"
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:32
+msgid "<strong>Licencia válida hasta:</strong> "
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:69
+msgid "Sincronizar manualmente desde Contífico"
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:70
+msgid ""
+"El plugin actualiza periódicamente el inventario de productos desde "
+"Contífico. La frecuencia de actualización se determina por el campo <strong>"
+"\"Actualizar stock\"</strong>.<br>Si lo deseas puede hacer una actualización "
+"manual del inventario de los productos."
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:71
+msgid "Sincronizar inventario manualmente"
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:75
+msgid "Productos obtenidos desde Contífico: "
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:76
+msgid "Productos encontrados en WooCommerce: "
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:77
+msgid "Productos con inventario actualizado: "
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-display.php:78
+msgid "Productos sin inventario: "
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-edit-fields.php:18
+msgid "Tipo de Contribuyente:"
+msgstr ""
+
+#: admin/partials/woo-contifico-admin-user-fields.php:1
+msgid "Información Fiscal"
+msgstr ""
+
+#: includes/class-woo-contifico-activator.php:66
+#, php-format
+msgid "No fue posible activar la licencia almacenada: %s"
+msgstr ""
+
+#: includes/class-woo-contifico-activator.php:70
+#, php-format
+msgid "Licencia inválida: %s"
+msgstr ""
+
+#: includes/class-woo-contifico-activator.php:134
+msgid ""
+"Este plugin funciona con PHP 5.5 o superior, la versión de Wordpress 4.9 o "
+"superior y la versión de Woocommerce 3.4 o superior"
+msgstr ""
+
+#: includes/class-woo-contifico-activator.php:138
+msgid ""
+"Es necesario tener Woocommerce instalado y activado para usar este plugin"
+msgstr ""
+
+#: includes/class-woo-contifico.php:149 includes/class-woo-contifico.php:155
+msgid "Configuración de la licencia"
+msgstr ""
+
+#: includes/class-woo-contifico.php:150
+msgid "Tu licencia está activa en este sitio."
+msgstr ""
+
+#: includes/class-woo-contifico.php:156
+msgid ""
+"La licencia del producto fue entregada al momento de la compra. Si no la "
+"tienes, contáctame a pablo@otakupahp.com<br><br><strong>Nota: </strong>El "
+"plugin no sincronizará stock ni enviará facturas sin una licencia activa"
+msgstr ""
+
+#: includes/class-woo-contifico.php:161
+msgid "Licencia del producto"
+msgstr ""
+
+#: includes/class-woo-contifico.php:170
+msgid "Configuración WooCommerce"
+msgstr ""
+
+#: includes/class-woo-contifico.php:171
+msgid ""
+"Opciones utilizadas en WooCommerce para emitir la factura automaticamente"
+msgstr ""
+
+#: includes/class-woo-contifico.php:176
+msgid "Etapa envío factura"
+msgstr ""
+
+#: includes/class-woo-contifico.php:177
+msgid " (Etapa en la que el plugin disparará el envío de la factura)"
+msgstr ""
+
+#: includes/class-woo-contifico.php:181
+msgid "Elige una etapa de envío"
+msgstr ""
+
+#: includes/class-woo-contifico.php:182
+msgid "Procesando pedido"
+msgstr ""
+
+#: includes/class-woo-contifico.php:183
+msgid "Pedido completado"
+msgstr ""
+
+#: includes/class-woo-contifico.php:188
+msgid "Borrar datos al desactivar"
+msgstr ""
+
+#: includes/class-woo-contifico.php:196
+msgid "Configuración Integración Contífico"
+msgstr ""
+
+#: includes/class-woo-contifico.php:198
+msgid ""
+"<p><b>IMPORTANTE:</b> A continuación una explicación de los distintos campos "
+"que se deben ingresar.</p>\n"
+"\t\t\t\t\t\t<ul>\n"
+"\t\t\t\t\t\t\t<li>La clave y el token API son entregados por Contífico al "
+"momento de solicitar el acceso al API. Hay un par de Key/Token por cada "
+"ambiente</li>\n"
+"\t\t\t\t\t\t\t<li>El código de envío en el código de producto en Contífico "
+"para poder emitir correctamente la factura. Sin este producto no será "
+"posible cobrar envío en los productos.</li>\n"
+"\t\t\t\t\t\t\t<li>La sincronización buscará el código del producto de "
+"Contífico y lo comparará con el SKU del producto en WooCommerce, traerá el "
+"inventario de la bodega definida y el PVP1 del producto para actualizar el "
+"precio regular del producto.</li>\n"
+"\t\t\t\t\t\t\t<li>Número de productos a procesar por bloque. Se utiliza un "
+"número que sirve en la mayoría de servidores, pero puedes aumentar o reducir "
+"este número dependiendo de la capacidad de tu servidor.</li>\n"
+"\t\t\t\t\t\t</ul>\n"
+"\t\t\t\t\t"
+msgstr ""
+
+#: includes/class-woo-contifico.php:215
+msgid "Ambiente"
+msgstr ""
+
+#: includes/class-woo-contifico.php:220
+msgid "Pruebas"
+msgstr ""
+
+#: includes/class-woo-contifico.php:221
+msgid "Producción"
+msgstr ""
+
+#: includes/class-woo-contifico.php:231 includes/class-woo-contifico.php:252
+msgid "Clave del API (API Key)"
+msgstr ""
+
+#: includes/class-woo-contifico.php:239 includes/class-woo-contifico.php:260
+msgid "Token del API (API Token)"
+msgstr ""
+
+#: includes/class-woo-contifico.php:273
+msgid "Código del envío"
+msgstr ""
+
+#: includes/class-woo-contifico.php:286
+msgid "Sincronizar precio"
+msgstr ""
+
+#: includes/class-woo-contifico.php:293
+msgid "Código de la bodega"
+msgstr ""
+
+#: includes/class-woo-contifico.php:301
+msgid "Frecuencia"
+msgstr ""
+
+#: includes/class-woo-contifico.php:306
+msgid "Diario"
+msgstr ""
+
+#: includes/class-woo-contifico.php:307
+msgid "Dos veces al día"
+msgstr ""
+
+#: includes/class-woo-contifico.php:308
+msgid "Cada hora"
+msgstr ""
+
+#: includes/class-woo-contifico.php:313
+msgid "Productos por bloque"
+msgstr ""
+
+#: includes/class-woo-contifico.php:322
+msgid "Datos del emisor"
+msgstr ""
+
+#: includes/class-woo-contifico.php:323
+msgid "Datos del emisor de los documentos electrónicos para el SRI"
+msgstr ""
+
+#: includes/class-woo-contifico.php:328 includes/class-woo-contifico.php:826
+msgid "RUC"
+msgstr ""
+
+#: includes/class-woo-contifico.php:336
+msgid "Razón social"
+msgstr ""
+
+#: includes/class-woo-contifico.php:344
+msgid "Teléfono"
+msgstr ""
+
+#: includes/class-woo-contifico.php:352
+msgid "Dirección"
+msgstr ""
+
+#: includes/class-woo-contifico.php:360
+msgid "Correo Electrónico"
+msgstr ""
+
+#: includes/class-woo-contifico.php:368 includes/class-woo-contifico.php:840
+msgid "Tipo de contribuyente"
+msgstr ""
+
+#: includes/class-woo-contifico.php:373
+msgid "Persona natural"
+msgstr ""
+
+#: includes/class-woo-contifico.php:379
+msgid "Extranjero"
+msgstr ""
+
+#: includes/class-woo-contifico.php:384
+msgid "Si"
+msgstr ""
+
+#: includes/class-woo-contifico.php:385
+msgid "No"
+msgstr ""
+
+#: includes/class-woo-contifico.php:391
+msgid "Datos del establecimiento"
+msgstr ""
+
+#: includes/class-woo-contifico.php:392
+msgid "Opciones del punto de venta asociado a esta tienda en línea"
+msgstr ""
+
+#: includes/class-woo-contifico.php:397
+msgid "Dirección del establecimiento"
+msgstr ""
+
+#: includes/class-woo-contifico.php:410 includes/class-woo-contifico.php:439
+msgid "Código del establecimiento"
+msgstr ""
+
+#: includes/class-woo-contifico.php:418 includes/class-woo-contifico.php:447
+msgid "Código del punto de emisión"
+msgstr ""
+
+#: includes/class-woo-contifico.php:426 includes/class-woo-contifico.php:455
+msgid "Número secuencial de la factura"
+msgstr ""
+
+#: includes/class-woo-contifico.php:427 includes/class-woo-contifico.php:456
+msgid ""
+" (Usar el número de la siguiente factura a emitir, no colocar 0s a la "
+"izquierda)"
+msgstr ""
+
+#: includes/class-woo-contifico.php:754
+msgid "Cédula incorrecta: "
+msgstr ""
+
+#: includes/class-woo-contifico.php:759
+msgid "RUC incorrecto: "
+msgstr ""
+
+#: includes/class-woo-contifico.php:763
+msgid "Ingresa una cédula correcta"
+msgstr ""
+
+#: includes/class-woo-contifico.php:765
+msgid "Ingresa un ruc correcto"
+msgstr ""
+
+#: includes/class-woo-contifico.php:811
+msgid "¿Emitir la factura a nombre de la empresa?"
+msgstr ""
+
+#: includes/class-woo-contifico.php:819
+msgid "Tipo de identificación"
+msgstr ""
+
+#: includes/class-woo-contifico.php:824
+msgid "Elije un tipo de identificación..."
+msgstr ""
+
+#: includes/class-woo-contifico.php:825
+msgid "Cédula"
+msgstr ""
+
+#: includes/class-woo-contifico.php:827
+msgid "Pasaporte"
+msgstr ""
+
+#: includes/class-woo-contifico.php:828
+msgid "Identificación del exterior"
+msgstr ""
+
+#: includes/class-woo-contifico.php:833
+msgid "Número de identificación"
+msgstr ""
+
+#: libraries/license-sdk/License.php:245
+msgid "The license has not been activated yet"
+msgstr ""
+
+#: libraries/license-sdk/License.php:264
+msgid "A license has not been submitted"
+msgstr ""
+
+#: libraries/license-sdk/License.php:277
+msgid "The license entered does not belong to this plugin"
+msgstr ""
+
+#: libraries/license-sdk/License.php:282
+msgid "The license entered is expired"
+msgstr ""
+
+#: libraries/puc/PahpPuc/v4p9/Plugin/Ui.php:54
+msgid "View details"
+msgstr ""
+
+#: libraries/puc/PahpPuc/v4p9/Plugin/Ui.php:77
+#, php-format
+msgid "More information about %s"
+msgstr ""
+
+#: libraries/puc/PahpPuc/v4p9/Plugin/Ui.php:128
+msgid "Check for updates"
+msgstr ""
+
+#: libraries/puc/PahpPuc/v4p9/Plugin/Ui.php:213
+#, php-format
+msgctxt "the plugin title"
+msgid "The %s plugin is up to date."
+msgstr ""
+
+#: libraries/puc/PahpPuc/v4p9/Plugin/Ui.php:215
+#, php-format
+msgctxt "the plugin title"
+msgid "A new version of the %s plugin is available."
+msgstr ""
+
+#: libraries/puc/PahpPuc/v4p9/Plugin/Ui.php:217
+#, php-format
+msgctxt "the plugin title"
+msgid "Could not determine if updates are available for %s."
+msgstr ""
+
+#: libraries/puc/PahpPuc/v4p9/Plugin/Ui.php:223
+#, php-format
+msgid "Unknown update checker status \"%s\""
+msgstr ""
+
+#: libraries/puc/PahpPuc/v4p9/Vcs/PluginUpdateChecker.php:98
+msgid "There is no changelog available."
+msgstr ""
+
+#. Plugin Name of the plugin/theme
+msgid "Woocommerce - Facturación Electrónica - Contífico"
+msgstr ""
+
+#. Plugin URI of the plugin/theme
+msgid ""
+"https://otakupahp.com/producto/woocommerce-factura-electronica-con-contifico/"
+msgstr ""
+
+#. Description of the plugin/theme
+msgid ""
+"Integración simple de facturación electrónica para woocommerce a través del "
+"servicio de Contífico. Servicio solo válido en Ecuador"
+msgstr ""
+
+#. Author of the plugin/theme
+msgid "Pablo Hernández (OtakuPahp)"
+msgstr ""
+
+#. Author URI of the plugin/theme
+msgid "https://otakupahp.com/quien-es-pablo-hernandez-otakupahp"
+msgstr ""
