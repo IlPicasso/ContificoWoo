@@ -326,22 +326,22 @@ class Woo_Contifico_Admin {
 		echo "<span>{$this->woo_contifico->settings_fields[$section['id']]['description']}</span>";
 	}
 
-	/**
-	 * Display settings fields
-	 *
-	 * @param array $args Arguments send by add_contact_fields()
-	 *
-	 * @return void
-	 * @since 1.2.0
-	 * @see    add_contact_fields()
-	 *
-	 */
-	public function print_fields( $args ) {
-		$name     = "{$args['setting_name']}[{$args['id']}]";
-		$key       = "{$this->plugin_name}_{$args['id']}";
-		$value    =  $this->woo_contifico->settings[ $args['id'] ] ?? '';
-		$required = ( isset($args['required']) && $args['required'] ) ? 'required' : '';
-		$field    = '';
+        /**
+         * Display settings fields
+         *
+         * @param array $args Arguments send by add_contact_fields()
+         *
+         * @return void
+         * @since 1.2.0
+         * @see    add_contact_fields()
+         *
+         */
+        public function print_fields( $args ) {
+                $name     = "{$args['setting_name']}[{$args['id']}]";
+                $key       = "{$this->plugin_name}_{$args['id']}";
+                $value    =  $this->woo_contifico->settings[ $args['id'] ] ?? '';
+                $required = ( isset($args['required']) && $args['required'] ) ? 'required' : '';
+                $field    = '';
 
 		switch ( $args['type'] ) {
 			case 'hidden':
@@ -380,9 +380,25 @@ class Woo_Contifico_Admin {
 				break;
 		}
 
-		$desc = empty( $args['description'] ) ? '' : "<span>{$args['description']}</span>";
-		echo "{$field}&nbsp;{$desc}";
-	}
+                $desc = empty( $args['description'] ) ? '' : "<span>{$args['description']}</span>";
+                echo "{$field}&nbsp;{$desc}";
+        }
+
+        /**
+         * Maintain backward compatibility with the old activation flag.
+         *
+         * @since 2.1.0
+         *
+         * @return bool
+         */
+        public function is_active() : bool {
+                if ( isset( $this->config_status['errors']['plugin'] ) ) {
+                        unset( $this->config_status['errors']['plugin'] );
+                        $this->update_config_status();
+                }
+
+                return true;
+        }
 
         /**
          * Ajax function to fetch and save products
