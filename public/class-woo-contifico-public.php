@@ -72,8 +72,12 @@ class Woo_Contifico_Public {
 			'hourly' => HOUR_IN_SECONDS,
 		];
 
-		# Schedule stock sync event
-		if ( isset( $this->woo_contifico->settings['actualizar_stock'] ) && ( $this->woo_contifico->settings['actualizar_stock'] !== 'manual' ) && ! (boolean) as_next_scheduled_action( 'woo_contifico_sync_stock' ) ) {
+                if ( ! function_exists( 'as_next_scheduled_action' ) || ! function_exists( 'as_schedule_recurring_action' ) ) {
+                        return;
+                }
+
+                # Schedule stock sync event
+                if ( isset( $this->woo_contifico->settings['actualizar_stock'] ) && ( $this->woo_contifico->settings['actualizar_stock'] !== 'manual' ) && ! (boolean) as_next_scheduled_action( 'woo_contifico_sync_stock' ) ) {
 			as_schedule_recurring_action(
 				strtotime('now'),
 				$time_in_seconds[ $this->woo_contifico->settings['actualizar_stock'] ],
