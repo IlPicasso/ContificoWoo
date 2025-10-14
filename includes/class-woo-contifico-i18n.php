@@ -34,11 +34,11 @@ class Woo_Contifico_i18n {
 	 */
 	public function load_plugin_textdomain() {
 
-		load_plugin_textdomain(
-			'woo-contifico',
-			false,
-			WOO_CONTIFICO_PATH . 'languages/'
-		);
+                load_plugin_textdomain(
+                        'woo-contifico',
+                        false,
+                        dirname( plugin_basename( WOO_CONTIFICO_FILE ) ) . '/languages/'
+                );
 
 	}
 
