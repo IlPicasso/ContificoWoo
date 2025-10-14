@@ -619,12 +619,13 @@ class Woo_Contifico_Admin {
 	public function transfer_contifico_stock( $order ) {
 
 		# Transfer stock to a provisional web warehouse if is configured
-		$order_id = $order->get_id();
-		if(
-			!wc_string_to_bool( get_post_meta( $order_id, '_woo_contifico_stock_reduced', true ) ) &&
-			isset($this->woo_contifico->settings['bodega_facturacion']) &&
-			!empty($this->woo_contifico->settings['bodega_facturacion'])
-		) {
+                $order_id       = $order->get_id();
+                $stock_reduced  = wc_string_to_bool( $order->get_meta( '_woo_contifico_stock_reduced', true ) );
+                if(
+                        !$stock_reduced &&
+                        isset($this->woo_contifico->settings['bodega_facturacion']) &&
+                        !empty($this->woo_contifico->settings['bodega_facturacion'])
+                ) {
 			$id_origin_warehouse = $this->contifico->get_id_bodega( $this->woo_contifico->settings['bodega'] );
 			$id_destination_warehouse = $this->contifico->get_id_bodega( $this->woo_contifico->settings['bodega_facturacion'] );
 			$env                 = ( (int) $this->woo_contifico->settings['ambiente'] === WOO_CONTIFICO_TEST ) ? 'test' : 'prod';
@@ -656,12 +657,13 @@ class Woo_Contifico_Admin {
 				}
 
 				$result = $this->contifico->transfer_stock( json_encode( $transfer_stock ) );
-				$order->add_order_note( sprintf(
-						__( '<b>Contífico: </b><br> Inventario trasladado a la bodega web %s', $this->plugin_name ),
-						$result['codigo']
-					)
-				);
-				update_post_meta( $order_id, '_woo_contifico_stock_reduced', wc_bool_to_string( true ) );
+                                $order->add_order_note( sprintf(
+                                                __( '<b>Contífico: </b><br> Inventario trasladado a la bodega web %s', $this->plugin_name ),
+                                                $result['codigo']
+                                        )
+                                );
+                                $order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( true ) );
+                                $order->save();
 			}
 			catch ( Exception $exception ) {
 				$order->add_order_note( sprintf(
@@ -695,10 +697,10 @@ class Woo_Contifico_Admin {
 		}
 
 		# Transfer stock from the provisional web warehouse if is configured
-		if(
-			wc_string_to_bool( get_post_meta( $order_id, '_woo_contifico_stock_reduced', true ) ) &&
-			isset($this->woo_contifico->settings['bodega_facturacion'])
-		) {
+                if(
+                        wc_string_to_bool( $order->get_meta( '_woo_contifico_stock_reduced', true ) ) &&
+                        isset($this->woo_contifico->settings['bodega_facturacion'])
+                ) {
 
 			# Ger refund data
 			$refund = null;
@@ -1336,8 +1338,9 @@ class Woo_Contifico_Admin {
 				));
 			}
 			else {
-				update_post_meta( $order_id, '_id_factura', $documento_electronico['id'] );
-				update_post_meta( $order_id, '_numero_factura', $documento_electronico['documento'] );
+                                $order->update_meta_data( '_id_factura', $documento_electronico['id'] );
+                                $order->update_meta_data( '_numero_factura', $documento_electronico['documento'] );
+                                $order->save();
 				$order_note = __( 'El documento fue generado correctamente.<br><br>', $this->plugin_name );
 				switch( $this->woo_contifico->settings['tipo_documento'] ) {
 					case 'FAC':
@@ -1392,11 +1395,11 @@ class Woo_Contifico_Admin {
 	public function display_admin_order_meta( $order ) {
 
 		# Order info
-		$order_id      = $order->get_id();
-		$tax_subject   = get_post_meta( $order_id, '_billing_tax_subject', true );
-		$tax_type      = get_post_meta( $order_id, '_billing_tax_type', true );
-		$tax_id        = get_post_meta( $order_id, '_billing_tax_id', true );
-		$taxpayer_type = get_post_meta( $order_id, '_billing_taxpayer_type', true );
+                $order_id      = $order->get_id();
+                $tax_subject   = $order->get_meta( '_billing_tax_subject', true );
+                $tax_type      = $order->get_meta( '_billing_tax_type', true );
+                $tax_id        = $order->get_meta( '_billing_tax_id', true );
+                $taxpayer_type = $order->get_meta( '_billing_taxpayer_type', true );
 
 		# Order labels
 		/* @noinspection PhpUnusedLocalVariableInspection */
@@ -1430,10 +1433,16 @@ class Woo_Contifico_Admin {
 		$tax_id        = sanitize_text_field( $_POST['tax_id'] );
 		$taxpayer_type = sanitize_text_field( $_POST['taxpayer_type'] );
 
-		update_post_meta( $order_id, '_billing_tax_subject', $tax_subject );
-		update_post_meta( $order_id, '_billing_tax_type', $tax_type );
-		update_post_meta( $order_id, '_billing_tax_id', $tax_id );
-		update_post_meta( $order_id, '_billing_taxpayer_type', $taxpayer_type );
+                $order = wc_get_order( $order_id );
+                if ( ! $order ) {
+                        return;
+                }
+
+                $order->update_meta_data( '_billing_tax_subject', $tax_subject );
+                $order->update_meta_data( '_billing_tax_type', $tax_type );
+                $order->update_meta_data( '_billing_tax_id', $tax_id );
+                $order->update_meta_data( '_billing_taxpayer_type', $taxpayer_type );
+                $order->save();
 
 		#  updating user meta (for customer my account edit details page post data)
 		$user_id = sanitize_text_field( $_POST['customer_user'] );
