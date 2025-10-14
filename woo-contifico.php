@@ -90,4 +90,4 @@ function run_woo_contifico() {
         $plugin->run();
 
 }
-run_woo_contifico();
+add_action( 'init', 'run_woo_contifico', 0 );
