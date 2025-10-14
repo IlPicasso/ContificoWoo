@@ -94,11 +94,15 @@ class Woo_Contifico
             $this->version = '1.0.0';
         }
         $this->plugin_name = 'woo-contifico';
+
+        if ( $load ) {
+            $this->load_dependencies();
+        }
+
+        $this->set_locale();
         $this->init_settings();
 
         if ($load) {
-            $this->load_dependencies();
-            $this->set_locale();
             $this->define_admin_hooks();
             $this->define_public_hooks();
         }
@@ -571,9 +575,23 @@ class Woo_Contifico
     private function set_locale()
     {
 
+        if ( ! class_exists( 'Woo_Contifico_i18n' ) ) {
+            require_once WOO_CONTIFICO_PATH . 'includes/class-woo-contifico-i18n.php';
+        }
+
         $plugin_i18n = new Woo_Contifico_i18n();
 
-        $this->loader->add_action('plugins_loaded', $plugin_i18n, 'load_plugin_textdomain');
+        if ( did_action( 'init' ) || doing_action( 'init' ) ) {
+            $plugin_i18n->load_plugin_textdomain();
+            return;
+        }
+
+        if ( isset( $this->loader ) && is_object( $this->loader ) && method_exists( $this->loader, 'add_action' ) ) {
+            $this->loader->add_action('init', $plugin_i18n, 'load_plugin_textdomain');
+            return;
+        }
+
+        add_action( 'init', [ $plugin_i18n, 'load_plugin_textdomain' ] );
 
     }
 

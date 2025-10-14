@@ -72,8 +72,12 @@ class Woo_Contifico_Public {
 			'hourly' => HOUR_IN_SECONDS,
 		];
 
-		# Schedule stock sync event
-		if ( isset( $this->woo_contifico->settings['actualizar_stock'] ) && ( $this->woo_contifico->settings['actualizar_stock'] !== 'manual' ) && ! (boolean) as_next_scheduled_action( 'woo_contifico_sync_stock' ) ) {
+                if ( ! function_exists( 'as_next_scheduled_action' ) || ! function_exists( 'as_schedule_recurring_action' ) ) {
+                        return;
+                }
+
+                # Schedule stock sync event
+                if ( isset( $this->woo_contifico->settings['actualizar_stock'] ) && ( $this->woo_contifico->settings['actualizar_stock'] !== 'manual' ) && ! (boolean) as_next_scheduled_action( 'woo_contifico_sync_stock' ) ) {
 			as_schedule_recurring_action(
 				strtotime('now'),
 				$time_in_seconds[ $this->woo_contifico->settings['actualizar_stock'] ],
@@ -218,21 +222,27 @@ class Woo_Contifico_Public {
 		$tax_id        = sanitize_text_field( $_POST['tax_id'] ?? '' );
 		$taxpayer_type = sanitize_text_field( $_POST['taxpayer_type'] ?? '' );
 
-		if ( ! empty( $tax_id ) ) {
-			update_post_meta( $order_id, '_billing_tax_subject', $tax_subject );
-			update_post_meta( $order_id, '_billing_tax_type', $tax_type );
-			update_post_meta( $order_id, '_billing_tax_id', $tax_id );
-			update_post_meta( $order_id, '_billing_taxpayer_type', $taxpayer_type );
+                if ( ! empty( $tax_id ) ) {
+                        $order = wc_get_order( $order_id );
+                        if ( ! $order ) {
+                                return;
+                        }
 
-			// updating user meta (for customer my account edit details page post data)
-			$user_id = get_post_meta( $order_id, '_customer_user', true );
-			if ( ! empty( $user_id ) ) {
-				update_user_meta( $user_id, 'tax_subject', $tax_subject );
-				update_user_meta( $user_id, 'tax_type', $tax_type );
-				update_user_meta( $user_id, 'tax_id', $tax_id );
-				update_user_meta( $user_id, 'taxpayer_type', $taxpayer_type );
-			}
-		}
+                        $order->update_meta_data( '_billing_tax_subject', $tax_subject );
+                        $order->update_meta_data( '_billing_tax_type', $tax_type );
+                        $order->update_meta_data( '_billing_tax_id', $tax_id );
+                        $order->update_meta_data( '_billing_taxpayer_type', $taxpayer_type );
+                        $order->save();
+
+                        // updating user meta (for customer my account edit details page post data)
+                        $user_id = $order->get_customer_id();
+                        if ( ! empty( $user_id ) ) {
+                                update_user_meta( $user_id, 'tax_subject', $tax_subject );
+                                update_user_meta( $user_id, 'tax_type', $tax_type );
+                                update_user_meta( $user_id, 'tax_id', $tax_id );
+                                update_user_meta( $user_id, 'taxpayer_type', $taxpayer_type );
+                        }
+                }
 	}
 
 	/**

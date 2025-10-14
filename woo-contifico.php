@@ -69,6 +69,12 @@ register_deactivation_hook( WOO_CONTIFICO_FILE, 'deactivate_woo_contifico' );
  */
 require WOO_CONTIFICO_PATH . 'includes/class-woo-contifico.php';
 
+add_action( 'before_woocommerce_init', static function() {
+        if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+                \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
+        }
+} );
+
 /**
  * Begins execution of the plugin.
  *
@@ -80,8 +86,8 @@ require WOO_CONTIFICO_PATH . 'includes/class-woo-contifico.php';
  */
 function run_woo_contifico() {
 
-	$plugin = new Woo_Contifico();
-	$plugin->run();
+        $plugin = new Woo_Contifico();
+        $plugin->run();
 
 }
-run_woo_contifico();
+add_action( 'init', 'run_woo_contifico', 0 );
