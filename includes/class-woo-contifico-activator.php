@@ -35,15 +35,10 @@ class Woo_Contifico_Activator {
 
             if( version_compare( $php_version, '7.2', '>=' ) && version_compare( $wp_version, '5.0', '>=' ) && version_compare( $wc_version, '5.0', '>=' ) ) {
 
-	            # Create basic configuration
-	            add_option( 'woo_contifico_plugin_settings',
-		            [
-			            'licencia_plugin' => '',
-		            ]
-	            );
-	            add_option( 'woo_contifico_woocommerce_settings',
-		            [
-			            'etapa_envio'          => '',
+                    # Create basic configuration
+                    add_option( 'woo_contifico_woocommerce_settings',
+                            [
+                                    'etapa_envio'          => '',
 			            'borrar_configuracion' => 0,
 		            ]
 	            );
@@ -88,10 +83,10 @@ class Woo_Contifico_Activator {
 
 
 	            # Configuration status to know if all the info stored is correct
-	            $config_status = [
-		            'status' => empty($message),
-		            'errors' => (empty($message)) ? [] : ['plugin' => $message]
-	            ];
+                    $config_status = [
+                            'status' => false,
+                            'errors' => []
+                    ];
 	            update_option('woo_contifico_config_status', $config_status);
 
             }
