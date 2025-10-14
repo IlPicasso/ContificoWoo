@@ -1,4 +1,5 @@
-<div id="<?php echo $this->plugin_name ?>-settings-page" class="wrap <?php echo $this->is_active() ? 'active' : 'inactive' ?>">
+<?php $is_active = method_exists( $this, 'is_active' ) ? $this->is_active() : true; ?>
+<div id="<?php echo $this->plugin_name ?>-settings-page" class="wrap <?php echo $is_active ? 'active' : 'inactive' ?>">
     <h2 class="wp-heading-inline"><?php _e('Facturación Electrónica Contífico',$this->plugin_name) ?></h2>
 
     <?php settings_errors('woo_contifico_settings'); ?>
@@ -10,7 +11,7 @@
         <a href="?page=woo-contifico&tab=contifico" class="nav-tab <?php echo $active_tab == 'contifico' ? 'nav-tab-active' : ''; ?>"><?php _e('Contífico', $this->plugin_name) ?></a>
         <a href="?page=woo-contifico&tab=emisor" class="nav-tab <?php echo $active_tab == 'emisor' ? 'nav-tab-active' : ''; ?>"><?php _e('Emisor', $this->plugin_name) ?></a>
         <a href="?page=woo-contifico&tab=establecimiento" class="nav-tab <?php echo $active_tab == 'establecimiento' ? 'nav-tab-active' : ''; ?>"><?php _e('Establecimiento', $this->plugin_name) ?></a>
-	    <?php if( $this->config_status['status'] && $this->is_active() ): ?>
+            <?php if( $this->config_status['status'] && $is_active ): ?>
         <a href="?page=woo-contifico&tab=sincronizar" class="nav-tab <?php echo $active_tab == 'sincronizar' ? 'nav-tab-active' : ''; ?>"><?php _e('Sincronización manual', $this->plugin_name) ?></a>
         <?php endif; ?>
     </h2>
@@ -52,7 +53,7 @@
              ?>
         </form>
 
-        <?php if( $this->config_status['status'] && $this->is_active() && $active_tab === 'sincronizar' ): ?>
+        <?php if( $this->config_status['status'] && $is_active && $active_tab === 'sincronizar' ): ?>
             <div class="fetch-products">
                 <h3><?php _e('Sincronizar manualmente desde Contífico', $this->plugin_name); ?></h3>
                 <?php _e('<p>El plugin actualiza periódicamente el inventario de productos desde Contífico.</p>', $this->plugin_name); ?>
