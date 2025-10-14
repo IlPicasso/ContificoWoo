@@ -28,7 +28,9 @@
                     settings_fields( 'woo_contifico_woocommerce_settings' );
                     do_settings_sections( 'woo_contifico_woocommerce_settings' );
 
-	                if( $this->woo_contifico->settings['activar_registro'] && file_exists($this->log_path)) {
+                $activar_registro = ! empty( $this->woo_contifico->settings['activar_registro'] );
+
+                if( $activar_registro && file_exists($this->log_path)) {
 		                /** @noinspection HtmlUnknownTarget */
 		                printf( __('<p><a class="button button-small button-secondary" target="_blank" href="%s">%s</a></p>', $this->plugin_name), $this->log_route, 'Descargar registro de llamadas al API');
 	                }
