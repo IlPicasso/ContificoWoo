@@ -18,8 +18,6 @@ use Pahp\SDK\Contifico;
  */
 class Woo_Contifico_Admin {
 
-	private const NO_LICENSE = 'xxxxxx';
-
 	/**
 	 * The ID of this plugin.
 	 *
@@ -113,13 +111,20 @@ class Woo_Contifico_Admin {
 			$this->log_path
 		);
 
-		# Load config status
-		$this->config_status = get_option('woo_contifico_config_status');
+                # Load config status
+                $this->config_status = get_option('woo_contifico_config_status', [ 'status' => false, 'errors' => [] ]);
+                if ( ! is_array( $this->config_status ) ) {
+                        $this->config_status = [ 'status' => false, 'errors' => [] ];
+                }
+                if ( ! isset( $this->config_status['errors'] ) || ! is_array( $this->config_status['errors'] ) ) {
+                        $this->config_status['errors'] = [];
+                }
+                unset( $this->config_status['errors']['plugin'] );
+                $this->config_status['status'] = (bool) ( $this->config_status['status'] ?? false );
 
-		# Set settings names
-		$this->settings_names = [
-			'plugin'          => __( 'Licencia', $this->plugin_name ),
-			'woocommerce'     => __( 'WooCommerce', $this->plugin_name ),
+                # Set settings names
+                $this->settings_names = [
+                        'woocommerce'     => __( 'WooCommerce', $this->plugin_name ),
 			'contifico'       => __( 'Integración con Contífico', $this->plugin_name ),
 			'emisor'          => __( 'Emisor de documentos', $this->plugin_name ),
 			'establecimiento' => __( 'Establecimiento asociado', $this->plugin_name ),
@@ -203,12 +208,7 @@ class Woo_Contifico_Admin {
 	 */
 	public function admin_init() {
 
-		# If the global config status is OK, then check if the license is active
-		if($this->config_status['status']) {
-			$this->is_active();
-		}
-
-		# Register plugin settings
+                # Register plugin settings
 		foreach ( $this->woo_contifico->settings_fields as $index => $section ) {
 			add_settings_section( $index, $section['name'], [ $this, 'show_settings_section' ], "{$index}_settings" );
 			foreach ( $section['fields'] as $field ) {
@@ -236,19 +236,12 @@ class Woo_Contifico_Admin {
 		global $pagenow;
 		if ( $pagenow !== 'options.php' ) {
 
-			# Check that all needed settings are filled
-			foreach ( $this->woo_contifico->settings['settings_status'] as $key => $value ) {
-				if (
-					( $value === TRUE && !isset($this->config_status['errors'][$key]) ) ||
-					isset( $this->config_status['errors'][$key] )
-				) {
-					$this->config_status['errors'][$key] = ($key === 'plugin')
-						? ($value === TRUE)
-							? __('Configure la opción', $this->plugin_name)
-							: sprintf( __('Licencia inválida (%s)', $this->plugin_name), $this->config_status['errors'][$key] )
-						: __('Configure la opción', $this->plugin_name);
-				}
-			}
+                        # Check that all needed settings are filled
+                        foreach ( $this->woo_contifico->settings['settings_status'] as $key => $value ) {
+                                if ( $value === TRUE && ! isset( $this->config_status['errors'][ $key ] ) ) {
+                                        $this->config_status['errors'][ $key ] = __( 'Configure la opción', $this->plugin_name );
+                                }
+                        }
 
 			$message = '';
 			if( $this->config_status['status'] === false ) {
@@ -333,22 +326,22 @@ class Woo_Contifico_Admin {
 		echo "<span>{$this->woo_contifico->settings_fields[$section['id']]['description']}</span>";
 	}
 
-	/**
-	 * Display settings fields
-	 *
-	 * @param array $args Arguments send by add_contact_fields()
-	 *
-	 * @return void
-	 * @since 1.2.0
-	 * @see    add_contact_fields()
-	 *
-	 */
-	public function print_fields( $args ) {
-		$name     = "{$args['setting_name']}[{$args['id']}]";
-		$key       = "{$this->plugin_name}_{$args['id']}";
-		$value    =  $this->woo_contifico->settings[ $args['id'] ] ?? '';
-		$required = ( isset($args['required']) && $args['required'] ) ? 'required' : '';
-		$field    = '';
+        /**
+         * Display settings fields
+         *
+         * @param array $args Arguments send by add_contact_fields()
+         *
+         * @return void
+         * @since 1.2.0
+         * @see    add_contact_fields()
+         *
+         */
+        public function print_fields( $args ) {
+                $name     = "{$args['setting_name']}[{$args['id']}]";
+                $key       = "{$this->plugin_name}_{$args['id']}";
+                $value    =  $this->woo_contifico->settings[ $args['id'] ] ?? '';
+                $required = ( isset($args['required']) && $args['required'] ) ? 'required' : '';
+                $field    = '';
 
 		switch ( $args['type'] ) {
 			case 'hidden':
@@ -387,25 +380,28 @@ class Woo_Contifico_Admin {
 				break;
 		}
 
-		$desc = empty( $args['description'] ) ? '' : "<span>{$args['description']}</span>";
-		echo "{$field}&nbsp;{$desc}";
-	}
+                $desc = empty( $args['description'] ) ? '' : "<span>{$args['description']}</span>";
+                echo "{$field}&nbsp;{$desc}";
+        }
 
-	/**
-	 * Force the plugin to be always active
-	 *
-	 * @since 2.1.0
-	 *
-	 * @return bool
-	 */
-	public function is_active() : bool {
-		unset($this->config_status['errors']['plugin']);
-		$this->update_config_status();
-		return true;
-	}
+        /**
+         * Maintain backward compatibility with the old activation flag.
+         *
+         * @since 2.1.0
+         *
+         * @return bool
+         */
+        public function is_active() : bool {
+                if ( isset( $this->config_status['errors']['plugin'] ) ) {
+                        unset( $this->config_status['errors']['plugin'] );
+                        $this->update_config_status();
+                }
 
-	/**
-	 * Ajax function to fetch and save products
+                return true;
+        }
+
+        /**
+         * Ajax function to fetch and save products
 	 *
 	 * @since 1.3.0
 	 * @see wp_ajax_fetch_products
@@ -851,45 +847,8 @@ class Woo_Contifico_Admin {
 
 	}
 
-	/**
-	 * Deactivate license  (however, this should not be used)
-	 *
-	 * @since   1.4.0
-	 * @see     register_setting()
-	 * @noinspection PhpUnused
-	 *
-	 * @param array $input
-	 * @return ?array
-	 */
-	public function deactivate_license( $input ) : ?array {
-		unset($this->config_status['errors']['plugin']);
-		$this->update_config_status();
-		$plugin_license = [
-			'licencia_plugin' => self::NO_LICENSE,
-		];
-		update_option('woo_contifico_plugin_settings', $plugin_license);
-		return $input;
-	}
-
-	/**
-	 * Force a valid activation (however, this should not be used)
-	 *
-	 * @since   1.4.0
-	 * @see     register_setting()
-	 * @noinspection PhpUnused
-	 *
-	 * @param array $input
-	 * @return  array
-	 *
-	 */
-	public function validate_license( $input ) : array {
-		unset( $this->config_status['errors']['plugin'] );
-		$this->update_config_status();
-		return $input;
-	}
-
-	/**
-	 * Validate sender data before saving
+        /**
+         * Validate sender data before saving
 	 *
 	 * @param array $input
 	 *

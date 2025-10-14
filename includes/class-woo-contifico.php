@@ -154,28 +154,7 @@ class Woo_Contifico
 	    }
 
         $this->settings_fields = [
-	        'woo_contifico_license' => [
-		        'name' => __('Configuración de la licencia', $this->plugin_name),
-		        'description' => __('Tu licencia está activa en este sitio.', $this->plugin_name),
-		        'validation_function' => 'deactivate_license',
-		        'fields' => []
-	        ],
-	        'woo_contifico_plugin' => [
-		        'name' => __('Configuración de la licencia', $this->plugin_name),
-		        'description' => '',
-		        'validation_function' => 'validate_license',
-		        'fields' => [
-			        [
-				        'id' => 'licencia_plugin',
-				        'label' => __('Licencia del producto', $this->plugin_name),
-				        'description' => '',
-				        'required' => true,
-				        'type' => 'text',
-				        'size' => 50
-			        ],
-		        ]
-	        ],
-	        'woo_contifico_woocommerce' => [
+                'woo_contifico_woocommerce' => [
                 'name' => __('Configuración WooCommerce', $this->plugin_name),
                 'description' => __('Opciones utilizadas en WooCommerce para emitir el documento electrónico automáticamente', $this->plugin_name),
                 'validation_function' => 'save_settings',
