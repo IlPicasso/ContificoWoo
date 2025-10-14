@@ -205,12 +205,54 @@ class Woo_Contifico_Admin {
 	 * @see admin_init
 	 *
 	 * @since   1.2.0
-	 */
-	public function admin_init() {
+        */
+       public function admin_init() {
+
+                if (
+                        $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
+                        && $this->woo_contifico->multilocation->is_active()
+                ) {
+                        $warehouse_options = [
+                                '' => __( 'Seleccione una bodega', $this->plugin_name ),
+                        ];
+
+                        try {
+                                $this->contifico->fetch_warehouses();
+                        }
+                        catch ( Exception $exception ) {
+                                add_settings_error(
+                                        'woo_contifico_settings',
+                                        'warehouses_fetch_error',
+                                        sprintf(
+                                                /* translators: %s: error message */
+                                                __( 'No se pudo actualizar la lista de bodegas de Contífico: %s', $this->plugin_name ),
+                                                $exception->getMessage()
+                                        )
+                                );
+                        }
+
+                        $warehouses = (array) get_option( 'woo_contifico_warehouses', [] );
+
+                        foreach ( $warehouses as $warehouse_id => $warehouse_code ) {
+                                $code  = (string) $warehouse_code;
+                                $label = $code;
+                                if ( '' !== (string) $warehouse_id ) {
+                                        $label = sprintf( '%s (%s)', $code, $warehouse_id );
+                                }
+                                $warehouse_options[ $code ] = $label;
+                        }
+
+                        foreach ( $this->woo_contifico->settings_fields['woo_contifico_integration']['fields'] as &$field ) {
+                                if ( isset( $field['multiloca_location_id'] ) ) {
+                                        $field['options'] = $warehouse_options;
+                                }
+                        }
+                        unset( $field );
+                }
 
                 # Register plugin settings
-		foreach ( $this->woo_contifico->settings_fields as $index => $section ) {
-			add_settings_section( $index, $section['name'], [ $this, 'show_settings_section' ], "{$index}_settings" );
+                foreach ( $this->woo_contifico->settings_fields as $index => $section ) {
+                        add_settings_section( $index, $section['name'], [ $this, 'show_settings_section' ], "{$index}_settings" );
 			foreach ( $section['fields'] as $field ) {
 				$field['setting_name'] = "{$index}_settings";
 				if( !isset($field['id'])) {
@@ -337,9 +379,14 @@ class Woo_Contifico_Admin {
          *
          */
         public function print_fields( $args ) {
-                $name     = "{$args['setting_name']}[{$args['id']}]";
+                $name     = $args['custom_name'] ?? "{$args['setting_name']}[{$args['id']}]";
                 $key       = "{$this->plugin_name}_{$args['id']}";
-                $value    =  $this->woo_contifico->settings[ $args['id'] ] ?? '';
+                if ( isset( $args['value_key'] ) ) {
+                        $value = $this->get_setting_value( (array) $args['value_key'] );
+                }
+                else {
+                        $value = $this->woo_contifico->settings[ $args['id'] ] ?? '';
+                }
                 $required = ( isset($args['required']) && $args['required'] ) ? 'required' : '';
                 $field    = '';
 
@@ -382,6 +429,28 @@ class Woo_Contifico_Admin {
 
                 $desc = empty( $args['description'] ) ? '' : "<span>{$args['description']}</span>";
                 echo "{$field}&nbsp;{$desc}";
+        }
+
+        /**
+         * Retrieve a nested setting value.
+         *
+         * @param array $path
+         *
+         * @return mixed
+         */
+        private function get_setting_value( array $path ) {
+                $value = $this->woo_contifico->settings;
+
+                foreach ( $path as $segment ) {
+                        if ( is_array( $value ) && array_key_exists( $segment, $value ) ) {
+                                $value = $value[ $segment ];
+                        }
+                        else {
+                                return '';
+                        }
+                }
+
+                return is_array( $value ) ? '' : $value;
         }
 
         /**
@@ -838,14 +907,42 @@ class Woo_Contifico_Admin {
 		}
 
 		# Remove contifico notice if changed from test to production
-		if( WOO_CONTIFICO_PRODUCTION == $input['ambiente'] ) {
-			$this->remove_notice('woo_contifico_environment');
-		}
+                if( WOO_CONTIFICO_PRODUCTION == $input['ambiente'] ) {
+                        $this->remove_notice('woo_contifico_environment');
+                }
 
-		$this->update_config_status();
-		return $input;
+                if ( isset( $input['multiloca_locations'] ) && is_array( $input['multiloca_locations'] ) ) {
+                        $valid_locations = [];
 
-	}
+                        foreach ( $this->woo_contifico->settings_fields['woo_contifico_integration']['fields'] as $field ) {
+                                if ( isset( $field['multiloca_location_id'] ) ) {
+                                        $valid_locations[] = (string) $field['multiloca_location_id'];
+                                }
+                        }
+
+                        $sanitized_locations = [];
+
+                        foreach ( $input['multiloca_locations'] as $location_id => $warehouse_code ) {
+                                $location_key = (string) $location_id;
+
+                                if ( ! empty( $valid_locations ) && ! in_array( $location_key, $valid_locations, true ) ) {
+                                        continue;
+                                }
+
+                                $code = sanitize_text_field( (string) $warehouse_code );
+
+                                if ( '' !== $code ) {
+                                        $sanitized_locations[ $location_key ] = $code;
+                                }
+                        }
+
+                        $input['multiloca_locations'] = $sanitized_locations;
+                }
+
+                $this->update_config_status();
+                return $input;
+
+        }
 
         /**
          * Validate sender data before saving

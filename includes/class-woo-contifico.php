@@ -77,6 +77,15 @@ class Woo_Contifico
     public $settings_fields;
 
     /**
+     * MultiLoca compatibility handler.
+     *
+     * @since    3.5.0
+     * @access   public
+     * @var      Woo_Contifico_MultiLocation_Compatibility|null
+     */
+    public $multilocation;
+
+    /**
      * Define the core functionality of the plugin.
      *
      * Set the plugin name and the plugin version that can be used throughout the plugin.
@@ -94,6 +103,12 @@ class Woo_Contifico
             $this->version = '1.0.0';
         }
         $this->plugin_name = 'woo-contifico';
+
+        if ( ! class_exists( 'Woo_Contifico_MultiLocation_Compatibility' ) ) {
+            require_once WOO_CONTIFICO_PATH . 'includes/compat/class-woo-contifico-multilocation.php';
+        }
+
+        $this->multilocation = new Woo_Contifico_MultiLocation_Compatibility();
 
         if ( $load ) {
             $this->load_dependencies();
@@ -130,10 +145,14 @@ class Woo_Contifico
         $setting_status[] = [ 'settings_status' => $result ];
         $this->settings = call_user_func_array('array_merge', array_values($setting_status));
 
+        if ( ! isset( $this->settings['multiloca_locations'] ) || ! is_array( $this->settings['multiloca_locations'] ) ) {
+            $this->settings['multiloca_locations'] = [];
+        }
+
         # Back compatibility, use old api configuration
-	    if( isset($this->settings['ambiente']) ) {
-		    $env                                             = ( (int) $this->settings['ambiente'] === WOO_CONTIFICO_TEST ) ? 'test' : 'prod';
-		    $this->settings["{$env}_api_key"]                = $this->settings["{$env}_api_key"] ?? $this->settings['api_key'];
+            if( isset($this->settings['ambiente']) ) {
+                    $env                                             = ( (int) $this->settings['ambiente'] === WOO_CONTIFICO_TEST ) ? 'test' : 'prod';
+                    $this->settings["{$env}_api_key"]                = $this->settings["{$env}_api_key"] ?? $this->settings['api_key'];
 		    $this->settings["{$env}_api_token"]              = $this->settings["{$env}_api_token"] ?? $this->settings['api_token'];
 		    $this->settings["{$env}_establecimiento_punto"]  = $this->settings["{$env}_establecimiento_punto"] ?? $this->settings['establecimiento_punto'];
 		    $this->settings["{$env}_establecimiento_codigo"] = $this->settings["{$env}_establecimiento_codigo"] ?? $this->settings['establecimiento_codigo'];
@@ -490,6 +509,80 @@ class Woo_Contifico
                 ]
             ],
         ];
+
+        if (
+            $this->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
+            && $this->multilocation->is_active()
+        ) {
+            $locations = $this->multilocation->get_locations();
+
+            if ( ! empty( $locations ) ) {
+                $multiloca_fields   = [];
+                $multiloca_fields[] = [
+                    'id'          => 'multiloca_locations_title',
+                    'type'        => 'title',
+                    'label'       => __('<h3>Compatibilidad MultiLoca</h3>', $this->plugin_name),
+                    'description' => __( 'Asigna la bodega de Contífico correspondiente a cada ubicación gestionada por MultiLoca.', $this->plugin_name ),
+                ];
+
+                foreach ( $locations as $location_id => $location ) {
+                    list( $normalized_id, $location_name ) = $this->prepare_multiloca_location_data( $location_id, $location );
+
+                    $multiloca_fields[] = [
+                        'id'                    => sprintf( 'multiloca_location_%s', $normalized_id ),
+                        'label'                 => sprintf(
+                            /* translators: %s: MultiLoca location name */
+                            __( 'Bodega para %s', $this->plugin_name ),
+                            $location_name
+                        ),
+                        'description'           => '',
+                        'required'              => false,
+                        'type'                  => 'select',
+                        'options'               => [],
+                        'custom_name'           => sprintf( 'multiloca_locations[%s]', $normalized_id ),
+                        'value_key'             => [ 'multiloca_locations', $normalized_id ],
+                        'multiloca_location_id' => $normalized_id,
+                    ];
+                }
+
+                $this->settings_fields['woo_contifico_integration']['fields'] = array_merge(
+                    $this->settings_fields['woo_contifico_integration']['fields'],
+                    $multiloca_fields
+                );
+            }
+        }
+    }
+
+    /**
+     * Normalize the MultiLoca location data to a simple array with ID and name.
+     *
+     * @param string|int $location_id Default location identifier.
+     * @param mixed      $location    Location payload from MultiLoca.
+     *
+     * @return array
+     */
+    private function prepare_multiloca_location_data( $location_id, $location ) : array {
+        $id   = $location_id;
+        $name = '';
+
+        if ( is_array( $location ) ) {
+            $id   = $location['id'] ?? $location['location_id'] ?? $location_id;
+            $name = $location['name'] ?? $location['title'] ?? $location['slug'] ?? '';
+        } elseif ( is_object( $location ) ) {
+            $id   = $location->id ?? $location->location_id ?? $location->ID ?? $location_id;
+            $name = $location->name ?? $location->title ?? $location->post_title ?? '';
+        } elseif ( is_string( $location ) ) {
+            $name = $location;
+        }
+
+        $id   = wp_strip_all_tags( (string) $id );
+        $name = wp_strip_all_tags( trim( (string) $name ) );
+
+        if ( '' === $name ) {
+            $name = sprintf( __( 'Ubicación #%s', $this->plugin_name ), $id );
+        }
+
+        return [ $id, $name ];
     }
 
     /**
