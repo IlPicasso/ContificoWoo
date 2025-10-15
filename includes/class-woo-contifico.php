@@ -582,7 +582,10 @@ class Woo_Contifico
                         'required'              => false,
                         'type'                  => 'select',
                         'options'               => [],
-                        'custom_name'           => sprintf( 'multiloca_locations[%s]', $normalized_id ),
+                        'custom_name'           => sprintf(
+                            'woo_contifico_integration_settings[multiloca_locations][%s]',
+                            $normalized_id
+                        ),
                         'value_key'             => [ 'multiloca_locations', $normalized_id ],
                         'multiloca_location_id' => $normalized_id,
                     ];
