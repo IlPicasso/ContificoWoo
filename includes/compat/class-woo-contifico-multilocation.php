@@ -153,7 +153,7 @@ class Woo_Contifico_MultiLocation_Compatibility {
             }
         }
 
-        if ( isset( $this->instance->locations ) && is_object( $this->instance->locations ) ) {
+        if ( is_object( $this->instance ) && isset( $this->instance->locations ) && is_object( $this->instance->locations ) ) {
             $manager = $this->instance->locations;
             if ( is_callable( [ $manager, 'get_locations' ] ) ) {
                 $locations = call_user_func( [ $manager, 'get_locations' ] );
@@ -163,7 +163,7 @@ class Woo_Contifico_MultiLocation_Compatibility {
             }
         }
 
-        if ( method_exists( $this->instance, 'get_locations' ) ) {
+        if ( is_object( $this->instance ) && method_exists( $this->instance, 'get_locations' ) ) {
             $locations = $this->instance->get_locations();
             if ( is_array( $locations ) ) {
                 return $locations;
@@ -379,7 +379,7 @@ class Woo_Contifico_MultiLocation_Compatibility {
             }
         }
 
-        if ( isset( $this->instance->inventory ) && is_object( $this->instance->inventory ) ) {
+        if ( is_object( $this->instance ) && isset( $this->instance->inventory ) && is_object( $this->instance->inventory ) ) {
             $inventory = $this->instance->inventory;
             if ( is_callable( [ $inventory, 'update_stock' ] ) ) {
                 $result = call_user_func( [ $inventory, 'update_stock' ], $product_id, $location_id, $quantity );
@@ -395,7 +395,7 @@ class Woo_Contifico_MultiLocation_Compatibility {
             }
         }
 
-        if ( is_callable( [ $this->instance, 'update_stock' ] ) ) {
+        if ( is_object( $this->instance ) && is_callable( [ $this->instance, 'update_stock' ] ) ) {
             $result = call_user_func( [ $this->instance, 'update_stock' ], $product_id, $location_id, $quantity );
             if ( null !== $result ) {
                 return (bool) $result;
