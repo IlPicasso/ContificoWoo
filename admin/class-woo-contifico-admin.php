@@ -18,6 +18,8 @@ use Pahp\SDK\Contifico;
  */
 class Woo_Contifico_Admin {
 
+        private const SYNC_DEBUG_TRANSIENT_KEY = 'woo_contifico_sync_debug_entries';
+
 	/**
 	 * The ID of this plugin.
 	 *
@@ -75,7 +77,21 @@ class Woo_Contifico_Admin {
 	 * @access private
 	 * @var string
 	 */
-	private $log_path;
+        private $log_path;
+
+        /**
+         * @since 4.1.6
+         * @access private
+         * @var string
+         */
+        private $sync_debug_log_path;
+
+        /**
+         * @since 4.1.6
+         * @access private
+         * @var string
+         */
+        private $sync_debug_log_url;
 
 	/**
 	 * @since 3.1.0
@@ -101,10 +117,12 @@ class Woo_Contifico_Admin {
 		$env = '';
 		if( isset($this->woo_contifico->settings['ambiente']) ) {
 			$env     = ( (int) $this->woo_contifico->settings['ambiente'] === WOO_CONTIFICO_TEST ) ? 'test' : 'prod';
-		}
-		$api_key = $this->woo_contifico->settings["{$env}_api_key"] ?? '';
-		$this->log_path = WOO_CONTIFICO_PATH . 'contifico_log.txt';
-		$this->log_route = WOO_CONTIFICO_URL. 'contifico_log.txt';
+                }
+                $api_key = $this->woo_contifico->settings["{$env}_api_key"] ?? '';
+                $this->log_path = WOO_CONTIFICO_PATH . 'contifico_log.txt';
+                $this->log_route = WOO_CONTIFICO_URL. 'contifico_log.txt';
+                $this->sync_debug_log_path = WOO_CONTIFICO_PATH . 'contifico_sync_debug_log.txt';
+                $this->sync_debug_log_url  = WOO_CONTIFICO_URL . 'contifico_sync_debug_log.txt';
 		$this->contifico = new Contifico(
 			$api_key ,
 			(bool) isset($this->woo_contifico->settings['activar_registro']),
@@ -495,6 +513,8 @@ class Woo_Contifico_Admin {
                         delete_transient( 'woo_contifico_fetch_productos' );
                         delete_transient( 'woo_contifico_full_inventory' );
                         delete_transient( 'woo_sync_result' );
+                        $this->reset_sync_debug_log();
+                        $this->contifico->reset_inventory_cache();
                 }
 
 		try {
@@ -527,6 +547,7 @@ class Woo_Contifico_Admin {
                         delete_transient( 'woo_contifico_fetch_productos' );
                         delete_transient( 'woo_contifico_full_inventory' );
                         delete_transient( 'woo_sync_result' );
+                        $this->reset_sync_debug_log();
                 }
 
 		$result = $this->sync_stock($step, $this->woo_contifico->settings['batch_size']);
@@ -557,10 +578,16 @@ class Woo_Contifico_Admin {
 
                         # Fetch warehouse stock
                         $this->contifico->fetch_warehouses();
-                        $location_stock  = [];
-                        $location_map    = [];
-                        $manage_stock    = wc_string_to_bool( get_option( 'woocommerce_manage_stock' ) );
-                        $id_warehouse    = $this->contifico->get_id_bodega( $this->woo_contifico->settings['bodega'] );
+                        $location_stock    = [];
+                        $location_map      = [];
+                        $manage_stock      = wc_string_to_bool( get_option( 'woocommerce_manage_stock' ) );
+                        $id_warehouse      = $this->contifico->get_id_bodega( $this->woo_contifico->settings['bodega'] );
+                        $warehouses_map    = $this->contifico->get_warehouses_map();
+                        $debug_log_entries = get_transient( self::SYNC_DEBUG_TRANSIENT_KEY );
+
+                        if ( ! is_array( $debug_log_entries ) ) {
+                                $debug_log_entries = [];
+                        }
 
                         if ( $manage_stock ) {
                                 if (
@@ -608,25 +635,17 @@ class Woo_Contifico_Admin {
                                 $contifico_skus = array_values( array_unique( $contifico_skus ) );
                         }
 
-                        if ( $manage_stock && ! empty( $location_map ) && ! empty( $products_by_sku ) ) {
-                                $product_ids_for_batch = array_map( 'strval', array_column( $fetched_products, 'codigo' ) );
-                                $warehouses_stock      = $this->contifico->get_warehouses_stock( array_values( $location_map ), $product_ids_for_batch );
-
-                                foreach ( $location_map as $location_id => $warehouse_code ) {
-                                        $location_id                 = (string) $location_id;
-                                        $warehouse_code              = (string) $warehouse_code;
-                                        $location_stock[ $location_id ] = $warehouses_stock[ $warehouse_code ] ?? [];
-                                }
-                        }
-
                         # Check if the batch processing is finished
-                        if( empty($fetched_products) )
-			{
-				$result = [
-					'step' => 'done'
-				];
-			}
-			else {
+                        if ( empty( $fetched_products ) )
+                        {
+                                $this->write_sync_debug_log( $debug_log_entries );
+                                delete_transient( self::SYNC_DEBUG_TRANSIENT_KEY );
+                                $result = [
+                                        'step'      => 'done',
+                                        'debug_log' => $this->sync_debug_log_url,
+                                ];
+                        }
+                        else {
 
 				# Get result transient
 				$batch_result = (array) get_transient('woo_sync_result');
@@ -678,7 +697,31 @@ class Woo_Contifico_Admin {
                                                 'product'  => $wc_product,
                                         ];
                                 }
-				$result['found'] = $result['found'] + count( $products );
+                                $result['found'] = $result['found'] + count( $products );
+
+                                if ( $manage_stock && ! empty( $location_map ) && ! empty( $products ) ) {
+                                        $product_ids_for_batch = array_map(
+                                                static function ( array $product_entry ) : string {
+                                                        return isset( $product_entry['id'] ) ? (string) $product_entry['id'] : '';
+                                                },
+                                                $products
+                                        );
+
+                                        $product_ids_for_batch = array_values( array_filter( $product_ids_for_batch, 'strlen' ) );
+
+                                        if ( ! empty( $product_ids_for_batch ) ) {
+                                                $warehouses_stock = $this->contifico->get_warehouses_stock(
+                                                        array_values( $location_map ),
+                                                        $product_ids_for_batch
+                                                );
+
+                                                foreach ( $location_map as $location_id => $warehouse_code ) {
+                                                        $location_id                    = (string) $location_id;
+                                                        $warehouse_code                 = (string) $warehouse_code;
+                                                        $location_stock[ $location_id ] = $warehouses_stock[ $warehouse_code ] ?? [];
+                                                }
+                                        }
+                                }
 
                                 # Update new stock and price
                                 $product_stock_cache = [];
@@ -686,26 +729,29 @@ class Woo_Contifico_Admin {
 
                                 foreach ( $products as $product ) {
 
-                                        # Check stock
-                                        $updated_stock = false;
+                                        $updated_stock     = false;
+                                        $product_cache_key = (string) $product['id'];
+
+                                        if ( '' === $product_cache_key ) {
+                                                continue;
+                                        }
+
+                                        if ( ! array_key_exists( $product_cache_key, $product_stock_cache ) ) {
+                                                $product_stock_cache[ $product_cache_key ] = $this->contifico->get_product_stock_by_warehouses( $product_cache_key );
+                                        }
+
+                                        $stock_by_warehouse = (array) $product_stock_cache[ $product_cache_key ];
+
                                         if( $product['product']->get_manage_stock() ) {
                                                 $new_stock = 0;
-
-                                                $product_cache_key = (string) $product['id'];
-
-                                                if ( ! array_key_exists( $product_cache_key, $product_stock_cache ) ) {
-                                                        $product_stock_cache[ $product_cache_key ] = $this->contifico->get_product_stock_by_warehouses( $product_cache_key );
-                                                }
-
-                                                $stock_by_warehouse = (array) $product_stock_cache[ $product_cache_key ];
 
                                                 if ( ! empty( $location_map ) ) {
                                                         $global_quantity = 0;
 
                                                         foreach ( $location_map as $location_id => $warehouse_code ) {
-                                                                $location_id   = (string) $location_id;
+                                                                $location_id    = (string) $location_id;
                                                                 $warehouse_code = (string) $warehouse_code;
-                                                                $quantity      = null;
+                                                                $quantity       = null;
 
                                                                 if ( isset( $location_stock[ $location_id ][ $product_cache_key ] ) ) {
                                                                         $quantity = (int) $location_stock[ $location_id ][ $product_cache_key ];
@@ -746,45 +792,138 @@ class Woo_Contifico_Admin {
                                                 $old_stock = (int) $product['product']->get_stock_quantity();
                                                 if ( $old_stock !== $new_stock ) {  # Update stock
                                                         if ( $new_stock < 1 ) { # Out of stock
-								$product['product']->set_stock_quantity( 0 );
-								$product['product']->set_stock_status( 'outofstock' );
-								$result['outofstock'] ++;
-							} else {  # New stock
-								$product['product']->set_stock_quantity( $new_stock );
-								$product['product']->set_stock_status( 'instock' );
-							}
-							$updated_stock = true;
-						}
-					}
+                                                                $product['product']->set_stock_quantity( 0 );
+                                                                $product['product']->set_stock_status( 'outofstock' );
+                                                                $result['outofstock'] ++;
+                                                        } else {  # New stock
+                                                                $product['product']->set_stock_quantity( $new_stock );
+                                                                $product['product']->set_stock_status( 'instock' );
+                                                        }
+                                                        $updated_stock = true;
+                                                }
+                                        }
 
-					# Check price
-					$updated_price = false;
-					if( $this->woo_contifico->settings['sync_price'] !== 'no' ) {
-						$new_price = (float) $product[$this->woo_contifico->settings['sync_price']];
-						$old_price = (float) $product['product']->get_price();
-						if ( $new_price !== $old_price ) {  # Update price
-							$product['product']->set_regular_price( $new_price );
-							$updated_price = true;
-						}
-					}
+                                        # Check price
+                                        $updated_price = false;
+                                        if( $this->woo_contifico->settings['sync_price'] !== 'no' ) {
+                                                $new_price = (float) $product[$this->woo_contifico->settings['sync_price']];
+                                                $old_price = (float) $product['product']->get_price();
+                                                if ( $new_price !== $old_price ) {  # Update price
+                                                        $product['product']->set_regular_price( $new_price );
+                                                        $updated_price = true;
+                                                }
+                                        }
 
-					# Check if updated
-					if( $updated_stock || $updated_price ) {
-						$result['updated'] ++;
-						$product['product']->save();
-					}
+                                        # Check if updated
+                                        if( $updated_stock || $updated_price ) {
+                                                $result['updated'] ++;
+                                                $product['product']->save();
+                                        }
 
-				}
+                                        $sku = (string) $product['product']->get_sku();
+                                        $warehouse_stock_summary = [];
 
-				# Store results in a transient to get it in the next batch
-				set_transient( 'woo_sync_result', $result, HOUR_IN_SECONDS );
+                                        foreach ( $stock_by_warehouse as $warehouse_id => $quantity ) {
+                                                $warehouse_code = isset( $warehouses_map[ $warehouse_id ] ) ? (string) $warehouses_map[ $warehouse_id ] : (string) $warehouse_id;
+                                                $warehouse_stock_summary[ $warehouse_code ] = (float) $quantity;
+                                        }
+
+                                        $debug_log_entries[ $product_cache_key ] = [
+                                                'id'    => $product_cache_key,
+                                                'sku'   => $sku,
+                                                'stock' => $warehouse_stock_summary,
+                                        ];
+
+                                }
+
+                                # Store results in a transient to get it in the next batch
+                                set_transient( 'woo_sync_result', $result, HOUR_IN_SECONDS );
+                                set_transient( self::SYNC_DEBUG_TRANSIENT_KEY, $debug_log_entries, HOUR_IN_SECONDS );
 			}
 
 		}
 
-		return $result;
+                return $result;
 
-	}
+        }
+
+        /**
+         * Reset synchronization debug log helpers.
+         *
+         * @since 4.1.6
+         *
+         * @return void
+         */
+        private function reset_sync_debug_log() : void {
+
+                delete_transient( self::SYNC_DEBUG_TRANSIENT_KEY );
+
+                if ( ! empty( $this->sync_debug_log_path ) && file_exists( $this->sync_debug_log_path ) ) {
+                        wp_delete_file( $this->sync_debug_log_path );
+                }
+
+        }
+
+        /**
+         * Persist synchronization debug log entries into a text file.
+         *
+         * @since 4.1.6
+         *
+         * @param array $entries
+         *
+         * @return void
+         */
+        private function write_sync_debug_log( array $entries ) : void {
+
+                if ( empty( $this->sync_debug_log_path ) ) {
+                        return;
+                }
+
+                $timestamp = current_time( 'mysql' );
+                $lines     = [
+                        sprintf( 'Registro de sincronización generado el %s', $timestamp ),
+                        'Producto ID, SKU, STOCK POR CADA BODEGA',
+                ];
+
+                if ( empty( $entries ) ) {
+                        $lines[] = 'Sin coincidencias de productos entre Contífico y WooCommerce.';
+                } else {
+                        ksort( $entries );
+
+                        foreach ( $entries as $entry ) {
+                                if ( ! is_array( $entry ) ) {
+                                        continue;
+                                }
+
+                                $product_id = isset( $entry['id'] ) ? (string) $entry['id'] : '';
+                                $sku        = isset( $entry['sku'] ) ? (string) $entry['sku'] : '';
+                                $stock_info = [];
+
+                                if ( isset( $entry['stock'] ) && is_array( $entry['stock'] ) ) {
+                                        foreach ( $entry['stock'] as $warehouse_code => $quantity ) {
+                                                $warehouse_code = (string) $warehouse_code;
+                                                $quantity       = wc_format_decimal( (float) $quantity, 2 );
+                                                $stock_info[]   = sprintf( '%s:%s', $warehouse_code, $quantity );
+                                        }
+                                }
+
+                                if ( empty( $stock_info ) ) {
+                                        $stock_info[] = 'Sin datos de bodega';
+                                }
+
+                                $lines[] = sprintf(
+                                        '%s, %s, %s',
+                                        $product_id,
+                                        $sku,
+                                        implode( ' | ', $stock_info )
+                                );
+                        }
+                }
+
+                wp_mkdir_p( dirname( $this->sync_debug_log_path ) );
+                file_put_contents( $this->sync_debug_log_path, implode( PHP_EOL, $lines ) . PHP_EOL );
+
+        }
 
 	/**
 	 * Get product ids from an array of skus
