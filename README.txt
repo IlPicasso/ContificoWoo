@@ -27,8 +27,14 @@ Para activar esta funcionalidad es necesario:
 
 1. Tener instalado y activo el plugin [MultiLoca Lite](https://wordpress.org/plugins/multiloca-lite/) junto con WooCommerce.
 2. Configurar las ubicaciones que administrará MultiLoca (por ejemplo, cada sucursal o punto de entrega).
-3. Ingresar al menú **WooCommerce → Contífico → Integración** y, en la sección **Compatibilidad MultiLoca**, asignar la bodega de
-   Contífico correspondiente a cada ubicación listada.
+3. Ingresar al menú **WooCommerce → Contífico → Integración**. Si MultiLoca Lite (o la versión premium de MultiLoca) está activo
+   y tiene ubicaciones configuradas, al final del formulario aparecerá la sección **Compatibilidad MultiLoca** para asignar la
+   bodega de Contífico correspondiente a cada ubicación listada.
+   - Si la sección no se muestra, verifica que el plugin MultiLoca esté activo, que tenga al menos una ubicación creada y vuelve
+     a cargar la página de integración.
+   - La integración detecta MultiLoca incluso cuando el plugin no expone una instancia global; si continúas sin ver la sección,
+     confirma que la taxonomía `multiloca_location` exista en tu sitio o contacta al soporte de MultiLoca para asegurarte de que
+     las funciones `multiloca_lite_get_locations`/`multiloca_get_locations` estén disponibles.
 4. Asegurarse de que WooCommerce tenga habilitado el manejo de inventario global (*WooCommerce → Ajustes → Productos → Inventario → Habilitar la gestión de inventario*).
 
 Una vez guardados los cambios, la sincronización de inventario (manual o automática) consultará el stock de cada bodega mapeada en
