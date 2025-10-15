@@ -24,6 +24,20 @@ class Woo_Contifico_MultiLocation_Compatibility {
     protected $is_active = false;
 
     /**
+     * Whether the integration has been manually enabled.
+     *
+     * @var bool
+     */
+    protected $manual_activation = false;
+
+    /**
+     * Locations provided manually from the WooCommerce settings.
+     *
+     * @var array
+     */
+    protected $manual_locations = [];
+
+    /**
      * Constructor.
      */
     public function __construct() {
@@ -41,6 +55,10 @@ class Woo_Contifico_MultiLocation_Compatibility {
      * @return bool
      */
     protected function determine_is_active() : bool {
+        if ( $this->manual_activation ) {
+            return true;
+        }
+
         if ( is_object( $this->instance ) ) {
             return true;
         }
@@ -80,7 +98,35 @@ class Woo_Contifico_MultiLocation_Compatibility {
      * @return bool
      */
     public function is_active() : bool {
+        if ( $this->manual_activation ) {
+            return true;
+        }
+
         return $this->is_active;
+    }
+
+    /**
+     * Allow the WooCommerce settings to force the integration to be active.
+     *
+     * @param bool $enabled
+     */
+    public function set_manual_activation( bool $enabled ) : void {
+        $this->manual_activation = $enabled;
+
+        if ( $enabled ) {
+            $this->is_active = true;
+        } else {
+            $this->is_active = $this->determine_is_active();
+        }
+    }
+
+    /**
+     * Receive the locations that were entered manually in the settings page.
+     *
+     * @param array $locations
+     */
+    public function set_manual_locations( array $locations ) : void {
+        $this->manual_locations = $locations;
     }
 
     /**
@@ -137,6 +183,10 @@ class Woo_Contifico_MultiLocation_Compatibility {
         $locations = $this->get_locations_from_option();
         if ( ! empty( $locations ) ) {
             return $locations;
+        }
+
+        if ( $this->manual_activation && ! empty( $this->manual_locations ) ) {
+            return $this->manual_locations;
         }
 
         return [];

@@ -417,15 +417,21 @@ class Woo_Contifico_Admin {
 					}
 				}
 				break;
-			case 'check':
-				$checked = checked( $value, true, false );
-				$value   = $value ?: 1;
-				$field   = "<input type='checkbox' class='input-check' value='{$value}' name='{$name}' id='{$key}' {$checked} />";
-				break;
-			case 'title':
-				$field = "&nbsp;";
-				break;
-		}
+                        case 'check':
+                                $checked = checked( $value, true, false );
+                                $value   = $value ?: 1;
+                                $field   = "<input type='checkbox' class='input-check' value='{$value}' name='{$name}' id='{$key}' {$checked} />";
+                                break;
+                        case 'textarea':
+                                $rows  = isset( $args['rows'] ) ? (int) $args['rows'] : 5;
+                                $cols  = isset( $args['cols'] ) ? (int) $args['cols'] : 50;
+                                $value = esc_textarea( (string) $value );
+                                $field = "<textarea name='{$name}' id='{$key}' rows='{$rows}' cols='{$cols}' class='textarea'>{$value}</textarea>";
+                                break;
+                        case 'title':
+                                $field = "&nbsp;";
+                                break;
+                }
 
                 $desc = empty( $args['description'] ) ? '' : "<span>{$args['description']}</span>";
                 echo "{$field}&nbsp;{$desc}";
@@ -947,8 +953,16 @@ class Woo_Contifico_Admin {
 			$error = true;
 		}
 
-		# Re Schedule cron
-		try {
+                $input['multiloca_manual_enable'] = isset( $input['multiloca_manual_enable'] );
+
+                if ( isset( $input['multiloca_manual_locations'] ) ) {
+                        $input['multiloca_manual_locations'] = sanitize_textarea_field( (string) $input['multiloca_manual_locations'] );
+                } else {
+                        $input['multiloca_manual_locations'] = '';
+                }
+
+                # Re Schedule cron
+                try {
 			# Check if cron recurrence changed
 			if ( $this->woo_contifico->settings['actualizar_stock'] !== sanitize_text_field( $input['actualizar_stock'] ) ) {
 				as_unschedule_all_actions( 'woo_contifico_sync_stock', [1], $this->plugin_name);
