@@ -25,6 +25,8 @@ class Contifico
 
         private const INVENTORY_MAX_PAGES = 250;
 
+        private const INVENTORY_TOTAL_TRANSIENT_KEY = 'woo_contifico_inventory_total';
+
     /**
      * @since 1.3.0
      * @access private
@@ -37,7 +39,16 @@ class Contifico
 	 * @access private
 	 * @var array $products
 	 */
-	private $products;
+        private $products;
+
+        /**
+         * Stores the amount of products fetched during the current synchronization.
+         *
+         * @since 4.1.5
+         * @access private
+         * @var int
+         */
+        private $inventory_total;
 
         /**
          * @since 1.5.0
@@ -91,6 +102,13 @@ class Contifico
             $this->product_stock_cache = [];
             $this->log_transactions = $log_transactions;
             $this->log_path = $log_path;
+
+            $cached_total = get_transient( self::INVENTORY_TOTAL_TRANSIENT_KEY );
+            if ( false === $cached_total ) {
+                    $cached_total = 0;
+            }
+
+            $this->inventory_total = (int) $cached_total;
     }
 
     /**
@@ -184,42 +202,100 @@ class Contifico
 	 * @return array
 	 * @throws Exception
 	 */
-    public function fetch_products( int $step, int $batch_size ) : array
+        public function fetch_products( int $step, int $batch_size ) : array
     {
         $step       = max( 1, $step );
         $batch_size = max( 1, $batch_size );
 
-        $force_refresh = ( false === get_transient( self::INVENTORY_TRANSIENT_KEY ) );
-
-        $productos = $this->ensure_inventory_loaded( $force_refresh );
-
-        $total  = count( $productos );
-        $offset = ( $step - 1 ) * $batch_size;
-
-        if ( 0 === $total || $offset >= $total ) {
-                set_transient( 'woo_contifico_fetch_productos', 'yes', self::TRANSIENT_TTL );
-
-                return [];
+        if ( 1 === $step ) {
+                $this->inventory_total = 0;
+                delete_transient( self::INVENTORY_TOTAL_TRANSIENT_KEY );
         }
 
-        $batch = array_slice( $productos, $offset, $batch_size );
+        try {
+                $productos = $this->call( "producto/?result_size={$batch_size}&result_page={$step}" );
+        }
+        catch ( Exception $exception ) {
+                $productos = [];
+        }
 
-        if ( $offset + $batch_size >= $total ) {
+        $batch = [];
+
+        if ( is_array( $productos ) ) {
+                foreach ( $productos as $product ) {
+                        if ( ! is_array( $product ) ) {
+                                continue;
+                        }
+
+                        $product_id = isset( $product['id'] ) ? (string) $product['id'] : '';
+                        $sku        = isset( $product['codigo'] ) ? (string) $product['codigo'] : '';
+
+                        if ( '' === $product_id || '' === $sku ) {
+                                continue;
+                        }
+
+                        $batch[] = [
+                                'codigo' => $product_id,
+                                'sku'    => $sku,
+                                'pvp1'   => isset( $product['pvp1'] ) ? (float) $product['pvp1'] : 0.0,
+                                'pvp2'   => isset( $product['pvp2'] ) ? (float) $product['pvp2'] : 0.0,
+                                'pvp3'   => isset( $product['pvp3'] ) ? (float) $product['pvp3'] : 0.0,
+                        ];
+                }
+        }
+
+        $this->products = $batch;
+
+        $batch_count = count( $batch );
+        $processed   = ( ( $step - 1 ) * $batch_size ) + $batch_count;
+
+        if ( $processed > $this->inventory_total ) {
+                $this->inventory_total = $processed;
+                set_transient( self::INVENTORY_TOTAL_TRANSIENT_KEY, $this->inventory_total, self::TRANSIENT_TTL );
+        }
+
+        if ( $batch_count < $batch_size ) {
                 set_transient( 'woo_contifico_fetch_productos', 'yes', self::TRANSIENT_TTL );
         }
 
         return $batch;
     }
 
+        /**
+         * Reset cached inventory information for a fresh synchronization cycle.
+         *
+         * @since 4.1.5
+         *
+         * @return void
+         */
+        public function reset_inventory_cache() : void {
+
+                $this->products        = [];
+                $this->inventory_total = 0;
+
+                delete_transient( self::INVENTORY_TRANSIENT_KEY );
+                delete_transient( self::INVENTORY_TOTAL_TRANSIENT_KEY );
+        }
+
 	/**
 	 * Return the size of the fetched products
 	 *
 	 * @return int
 	 */
-	public function count_fetched_products() {
-        $productos = $this->ensure_inventory_loaded();
+        public function count_fetched_products() {
+                if ( $this->inventory_total > 0 ) {
+                        return $this->inventory_total;
+                }
 
-        return count( $productos );
+                $cached_total = get_transient( self::INVENTORY_TOTAL_TRANSIENT_KEY );
+
+                if ( false === $cached_total ) {
+                        return 0;
+                }
+
+                $this->inventory_total = (int) $cached_total;
+
+                return $this->inventory_total;
     }
 
 	/**
