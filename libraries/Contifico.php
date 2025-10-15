@@ -248,17 +248,58 @@ class Contifico
 	 * @since 2.0.0
 	 *
 	 */
-	public function get_stock(?string $id_warehouse) : array
-	{
-		# Check if stock were already fetched
-		$fetched_stock = get_transient('woo_contifico_fetch_stock');
-		if( false === $fetched_stock && ! empty( $id_warehouse ) ) {
-			$stock = $this->call( "inventario/stock/bodega/{$id_warehouse}/" );
-			$fetched_stock = array_column($stock, 'cantidad_stock', 'producto_id');
-			set_transient('woo_contifico_fetch_stock',$fetched_stock,self::TRANSIENT_TTL);
-		}
-		return (array)$fetched_stock;
-	}
+        public function get_stock(?string $id_warehouse) : array
+        {
+                $transient_suffix = '';
+                if ( ! empty( $id_warehouse ) ) {
+                        $transient_suffix = '_' . sanitize_key( (string) $id_warehouse );
+                }
+
+                # Check if stock were already fetched
+                $fetched_stock = get_transient( "woo_contifico_fetch_stock{$transient_suffix}" );
+                if( false === $fetched_stock && ! empty( $id_warehouse ) ) {
+                        $stock = $this->call( "inventario/stock/bodega/{$id_warehouse}/" );
+                        $fetched_stock = array_column($stock, 'cantidad_stock', 'producto_id');
+                        set_transient("woo_contifico_fetch_stock{$transient_suffix}",$fetched_stock,self::TRANSIENT_TTL);
+                }
+                return (array)$fetched_stock;
+        }
+
+        /**
+         * Fetch stock information for multiple warehouses at once.
+         *
+         * @since 3.5.0
+         *
+         * @param array $warehouse_codes
+         *
+         * @return array<string,array>
+         */
+        public function get_warehouses_stock( array $warehouse_codes ) : array {
+                $stocks = [];
+
+                if ( empty( $warehouse_codes ) ) {
+                        return $stocks;
+                }
+
+                $unique_codes = array_unique( array_map( 'strval', $warehouse_codes ) );
+
+                foreach ( $unique_codes as $warehouse_code ) {
+                        if ( '' === $warehouse_code ) {
+                                continue;
+                        }
+
+                        $warehouse_id = $this->get_id_bodega( $warehouse_code );
+
+                        if ( empty( $warehouse_id ) ) {
+                                $stocks[ $warehouse_code ] = [];
+                                continue;
+                        }
+
+                        $stocks[ $warehouse_code ] = $this->get_stock( $warehouse_id );
+                }
+
+                return $stocks;
+        }
 
 	/**
 	 * Return the Contifico's product id

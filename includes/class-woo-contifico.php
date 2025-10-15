@@ -149,6 +149,34 @@ class Woo_Contifico
             $this->settings['multiloca_locations'] = [];
         }
 
+        if ( ! isset( $this->settings['multiloca_manual_enable'] ) ) {
+            $this->settings['multiloca_manual_enable'] = false;
+        } else {
+            $this->settings['multiloca_manual_enable'] = (bool) $this->settings['multiloca_manual_enable'];
+        }
+
+        if ( ! isset( $this->settings['multiloca_manual_locations'] ) ) {
+            $this->settings['multiloca_manual_locations'] = '';
+        } else {
+            $this->settings['multiloca_manual_locations'] = (string) $this->settings['multiloca_manual_locations'];
+        }
+
+        $manual_locations = [];
+
+        if ( ! empty( $this->settings['multiloca_manual_locations'] ) ) {
+            $manual_locations = $this->parse_manual_multiloca_locations( $this->settings['multiloca_manual_locations'] );
+        }
+
+        if ( $this->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) {
+            if ( method_exists( $this->multilocation, 'set_manual_activation' ) ) {
+                $this->multilocation->set_manual_activation( (bool) $this->settings['multiloca_manual_enable'] );
+            }
+
+            if ( method_exists( $this->multilocation, 'set_manual_locations' ) ) {
+                $this->multilocation->set_manual_locations( $manual_locations );
+            }
+        }
+
         # Back compatibility, use old api configuration
             if( isset($this->settings['ambiente']) ) {
                     $env                                             = ( (int) $this->settings['ambiente'] === WOO_CONTIFICO_TEST ) ? 'test' : 'prod';
@@ -355,14 +383,29 @@ class Woo_Contifico
 		                'type' => 'text',
 		                'size' => 10
 	                ],
-	                [
-		                'id' => 'bodega_facturacion',
-		                'label' => __('Bodega de facturación', $this->plugin_name),
-		                'description' => __('<br><b>Dejar en blanco si no se usarán dos bodegas (Bodega de inventario y bodega de facturación)</b><br>Código de la bodega asociada con el API de Contífico a donde se traslada el producto al realizar un pedido en WooCommerce y desde donde se reduce el inventario al emitir la factura o pre factura', $this->plugin_name),
-		                'required' => false,
-		                'type' => 'text',
-		                'size' => 10
-	                ],
+                        [
+                                'id' => 'bodega_facturacion',
+                                'label' => __('Bodega de facturación', $this->plugin_name),
+                                'description' => __('<br><b>Dejar en blanco si no se usarán dos bodegas (Bodega de inventario y bodega de facturación)</b><br>Código de la bodega asociada con el API de Contífico a donde se traslada el producto al realizar un pedido en WooCommerce y desde donde se reduce el inventario al emitir la factura o pre factura', $this->plugin_name),
+                                'required' => false,
+                                'type' => 'text',
+                                'size' => 10
+                        ],
+                        [
+                                'id' => 'multiloca_manual_enable',
+                                'label' => __('Activar compatibilidad MultiLoca manualmente', $this->plugin_name),
+                                'description' => __('Marca esta casilla para mostrar el mapeo de ubicaciones aunque el plugin no se detecte automáticamente.', $this->plugin_name),
+                                'required' => false,
+                                'type' => 'check',
+                        ],
+                        [
+                                'id' => 'multiloca_manual_locations',
+                                'label' => __('Ubicaciones MultiLoca manuales', $this->plugin_name),
+                                'description' => __('Ingresa un ID por línea o en el formato <code>ID|Nombre</code>. Solo se utiliza cuando la compatibilidad manual está activa.', $this->plugin_name),
+                                'required' => false,
+                                'type' => 'textarea',
+                                'rows' => 5,
+                        ],
 
                 ]
             ],
@@ -549,6 +592,12 @@ class Woo_Contifico
                     $this->settings_fields['woo_contifico_integration']['fields'],
                     $multiloca_fields
                 );
+            } elseif ( $this->settings['multiloca_manual_enable'] ) {
+                $this->settings_fields['woo_contifico_integration']['fields'][] = [
+                    'id'          => 'multiloca_manual_notice',
+                    'type'        => 'title',
+                    'label'       => __('<p><em>Agrega las ubicaciones manuales para habilitar el mapeo con Contífico.</em></p>', $this->plugin_name),
+                ];
             }
         }
     }
@@ -583,6 +632,57 @@ class Woo_Contifico
         }
 
         return [ $id, $name ];
+    }
+
+    /**
+     * Convert the manual locations input into a normalized array.
+     *
+     * @param string $raw_locations
+     *
+     * @return array
+     */
+    private function parse_manual_multiloca_locations( string $raw_locations ) : array {
+        $lines     = preg_split( '/[\r\n]+/', $raw_locations );
+        $locations = [];
+
+        if ( ! is_array( $lines ) ) {
+            return $locations;
+        }
+
+        foreach ( $lines as $line ) {
+            $line = trim( (string) $line );
+
+            if ( '' === $line ) {
+                continue;
+            }
+
+            $id   = $line;
+            $name = '';
+
+            if ( false !== strpos( $line, '|' ) ) {
+                list( $id, $name ) = array_map( 'trim', explode( '|', $line, 2 ) );
+            } elseif ( false !== strpos( $line, ':' ) ) {
+                list( $id, $name ) = array_map( 'trim', explode( ':', $line, 2 ) );
+            }
+
+            $id   = wp_strip_all_tags( (string) $id );
+            $name = wp_strip_all_tags( (string) $name );
+
+            if ( '' === $id ) {
+                continue;
+            }
+
+            if ( '' === $name ) {
+                $name = $id;
+            }
+
+            $locations[ $id ] = [
+                'id'   => $id,
+                'name' => $name,
+            ];
+        }
+
+        return $locations;
     }
 
     /**
