@@ -33,12 +33,21 @@ class Contifico
 	 */
 	private $products;
 
-	/**
-	 * @since 1.5.0
-	 * @access private
-	 * @var array $warehouses
-	 */
-	private $warehouses;
+        /**
+         * @since 1.5.0
+         * @access private
+         * @var array $warehouses
+         */
+        private $warehouses;
+
+        /**
+         * Cache for product stock lookups grouped by warehouse.
+         *
+         * @since 4.1.3
+         * @access private
+         * @var array<string,array>
+         */
+        private $product_stock_cache;
 
 	/**
 	 * @since 3.1.0
@@ -66,7 +75,8 @@ class Contifico
     public function __construct(string $api_secret, bool $log_transactions = false, string $log_path = '') {
         $this->api_secret = $api_secret;
 		$this->products   = get_option('woo_contifico_products');
-	    $this->warehouses = get_option('woo_contifico_warehouses');
+            $this->warehouses = get_option('woo_contifico_warehouses');
+            $this->product_stock_cache = [];
 	    $this->log_transactions = $log_transactions;
 	    $this->log_path = $log_path;
     }
@@ -348,21 +358,84 @@ class Contifico
 	 *
 	 * @return mixed
 	 */
-	public function get_product_stock($codigo_producto, $codigo_bodega) {
+        public function get_product_stock($codigo_producto, $codigo_bodega) {
 
-		try {
-			$producto_stock = $this->call( "producto/{$codigo_producto}/stock/" );
-		}
-		catch (Exception $exception) {
-			$producto_stock = [];
-		}
+                $product_id   = (string) $codigo_producto;
+                $warehouse_id = (string) $codigo_bodega;
+                $product_stock = $this->get_product_stock_by_warehouses( $product_id );
 
-		foreach ( $producto_stock as $bodega ) {
-			if ( $bodega['bodega_id'] === $codigo_bodega ) {
-				return $bodega['cantidad'];
-			}
-		}
-	    return null;
+                if ( isset( $product_stock[ $warehouse_id ] ) ) {
+                        return $product_stock[ $warehouse_id ];
+                }
+
+                return null;
+    }
+
+        /**
+         * Retrieve the stock of a product for all warehouses indexed by Contífico warehouse ID.
+         *
+         * @since 4.1.3
+         *
+         * @param string $codigo_producto Product identifier in Contífico.
+         *
+         * @return array<string,float>
+         */
+        public function get_product_stock_by_warehouses( string $codigo_producto ) : array {
+
+                $product_id = (string) $codigo_producto;
+
+                if ( isset( $this->product_stock_cache[ $product_id ] ) ) {
+                        return $this->product_stock_cache[ $product_id ];
+                }
+
+                $transient_key = 'woo_contifico_product_stock_' . md5( $product_id );
+                $cached_stock  = get_transient( $transient_key );
+
+                if ( is_array( $cached_stock ) ) {
+                        $this->product_stock_cache[ $product_id ] = $cached_stock;
+
+                        return $cached_stock;
+                }
+
+                try {
+                        $producto_stock = $this->call( "producto/{$product_id}/stock/" );
+                }
+                catch ( Exception $exception ) {
+                        $producto_stock = [];
+                }
+
+                $stock_by_warehouse = [];
+
+                if ( is_array( $producto_stock ) ) {
+                        foreach ( $producto_stock as $warehouse_entry ) {
+                                if ( ! is_array( $warehouse_entry ) ) {
+                                        continue;
+                                }
+
+                                $warehouse_id = isset( $warehouse_entry['bodega_id'] ) ? (string) $warehouse_entry['bodega_id'] : '';
+
+                                if ( '' === $warehouse_id ) {
+                                        continue;
+                                }
+
+                                $quantity = 0;
+
+                                if ( isset( $warehouse_entry['cantidad'] ) ) {
+                                        $quantity = $warehouse_entry['cantidad'];
+                                } elseif ( isset( $warehouse_entry['cantidad_stock'] ) ) {
+                                        $quantity = $warehouse_entry['cantidad_stock'];
+                                } elseif ( isset( $warehouse_entry['cantidad_disponible'] ) ) {
+                                        $quantity = $warehouse_entry['cantidad_disponible'];
+                                }
+
+                                $stock_by_warehouse[ $warehouse_id ] = (float) $quantity;
+                        }
+                }
+
+                $this->product_stock_cache[ $product_id ] = $stock_by_warehouse;
+                set_transient( $transient_key, $stock_by_warehouse, self::TRANSIENT_TTL );
+
+                return $stock_by_warehouse;
     }
 
 	/**

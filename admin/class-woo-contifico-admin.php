@@ -637,37 +637,51 @@ class Woo_Contifico_Admin {
 				}
 				$result['found'] = $result['found'] + count( $products );
 
-				# Update new stock and price
-				foreach ( $products as $product ) {
+                                # Update new stock and price
+                                $product_stock_cache = [];
+
+                                foreach ( $products as $product ) {
 
 					# Check stock
 					$updated_stock = false;
                                         if( $product['product']->get_manage_stock() ) {
                                                 $new_stock = 0;
 
-                                                if ( ! empty( $location_stock ) ) {
-                                                        $global_quantity = 0;
+                                                if ( ! empty( $location_map ) ) {
+                                                        $global_quantity       = 0;
+                                                        $product_cache_key     = (string) $product['id'];
+                                                        $stock_by_warehouse    = null;
 
                                                         foreach ( $location_map as $location_id => $warehouse_code ) {
-                                                                $location_id = (string) $location_id;
-                                                                $quantity    = null;
+                                                                $location_id   = (string) $location_id;
+                                                                $warehouse_code = (string) $warehouse_code;
+                                                                $quantity      = null;
 
                                                                 if ( isset( $location_stock[ $location_id ][ $product['id'] ] ) ) {
                                                                         $quantity = (int) $location_stock[ $location_id ][ $product['id'] ];
                                                                 }
 
                                                                 if ( null === $quantity ) {
+                                                                        if ( null === $stock_by_warehouse ) {
+                                                                                if ( ! array_key_exists( $product_cache_key, $product_stock_cache ) ) {
+                                                                                        $product_stock_cache[ $product_cache_key ] = $this->contifico->get_product_stock_by_warehouses( $product_cache_key );
+                                                                                }
+
+                                                                                $stock_by_warehouse = $product_stock_cache[ $product_cache_key ];
+                                                                        }
+
                                                                         $warehouse_id = $this->contifico->get_id_bodega( $warehouse_code );
 
-                                                                        if ( ! empty( $warehouse_id ) ) {
-                                                                                $product_stock = $this->contifico->get_product_stock( $product['id'], $warehouse_id );
-                                                                                $quantity      = (int) ( null === $product_stock ? 0 : $product_stock );
-                                                                                $location_stock[ $location_id ][ $product['id'] ] = $quantity;
-                                                                        } else {
-                                                                                $quantity = 0;
+                                                                        if ( ! empty( $warehouse_id ) && isset( $stock_by_warehouse[ $warehouse_id ] ) ) {
+                                                                                $quantity = (int) $stock_by_warehouse[ $warehouse_id ];
                                                                         }
                                                                 }
 
+                                                                if ( null === $quantity ) {
+                                                                        $quantity = 0;
+                                                                }
+
+                                                                $location_stock[ $location_id ][ $product['id'] ] = $quantity;
                                                                 $global_quantity += $quantity;
 
                                                                 if ( method_exists( $this->woo_contifico->multilocation, 'update_location_stock' ) ) {
