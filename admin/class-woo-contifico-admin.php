@@ -998,6 +998,10 @@ class Woo_Contifico_Admin {
                         $this->remove_notice('woo_contifico_environment');
                 }
 
+                if ( ! isset( $input['multiloca_locations'] ) && isset( $_POST['multiloca_locations'] ) ) {
+                        $input['multiloca_locations'] = (array) wp_unslash( $_POST['multiloca_locations'] );
+                }
+
                 if ( isset( $input['multiloca_locations'] ) && is_array( $input['multiloca_locations'] ) ) {
                         $valid_locations = [];
 
