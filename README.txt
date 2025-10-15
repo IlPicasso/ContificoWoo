@@ -17,6 +17,25 @@ Este plugin está desarrollado para funcionar con la facturación electrónica d
 Este plugin premium se ofrece con actualizaciones y soporte por un año. Para obtener actualizaciones futuras es necesario contratar
 una extensión de la licencia.
 
+=== Sincronización de inventario por ubicaciones (MultiLoca) ===
+
+Desde la versión 3.5.0 se incluye compatibilidad con el plugin **MultiLoca Lite** para sincronizar el stock de Contífico por cada
+ubicación configurada en WooCommerce. Esto permite reflejar el inventario de bodegas independientes en las ubicaciones de MultiLoca
+y mantener actualizado el stock global de la tienda con la suma de todas ellas.
+
+Para activar esta funcionalidad es necesario:
+
+1. Tener instalado y activo el plugin [MultiLoca Lite](https://wordpress.org/plugins/multiloca-lite/) junto con WooCommerce.
+2. Configurar las ubicaciones que administrará MultiLoca (por ejemplo, cada sucursal o punto de entrega).
+3. Ingresar al menú **WooCommerce → Contífico → Integración** y, en la sección **Compatibilidad MultiLoca**, asignar la bodega de
+   Contífico correspondiente a cada ubicación listada.
+4. Asegurarse de que WooCommerce tenga habilitado el manejo de inventario global (*WooCommerce → Ajustes → Productos → Inventario → Habilitar la gestión de inventario*).
+
+Una vez guardados los cambios, la sincronización de inventario (manual o automática) consultará el stock de cada bodega mapeada en
+Contífico, actualizará la cantidad de su respectiva ubicación en MultiLoca y, finalmente, ajustará el stock global del producto en
+WooCommerce con la suma de todas las bodegas configuradas. Si MultiLoca no está activo o no se han configurado ubicaciones, el
+comportamiento vuelve al flujo tradicional de una sola bodega.
+
 == Installation ==
 
 Para instalar este plugin es necesario seguir estos pasos:

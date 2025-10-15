@@ -178,6 +178,27 @@ class Woo_Contifico_MultiLocation_Compatibility {
     }
 
     /**
+     * Update the stock for a WooCommerce product in a specific MultiLoca location.
+     *
+     * @param WC_Product $product     Product instance.
+     * @param string|int $location_id Location identifier.
+     * @param float|int  $quantity    Quantity to set.
+     *
+     * @return bool
+     */
+    public function update_location_stock( $product, $location_id, $quantity ) : bool {
+        if ( ! $this->is_active() ) {
+            return false;
+        }
+
+        if ( ! is_object( $product ) || ! is_a( $product, 'WC_Product' ) ) {
+            return false;
+        }
+
+        return $this->update_stock( $product->get_id(), $location_id, $quantity );
+    }
+
+    /**
      * Try to locate the MultiLoca Lite plugin instance.
      *
      * @return object|null
