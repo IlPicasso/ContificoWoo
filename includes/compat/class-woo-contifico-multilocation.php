@@ -27,8 +27,42 @@ class Woo_Contifico_MultiLocation_Compatibility {
      * Constructor.
      */
     public function __construct() {
-        $this->instance = $this->locate_instance();
-        $this->is_active = is_object( $this->instance );
+        $this->instance  = $this->locate_instance();
+        $this->is_active = $this->determine_is_active();
+    }
+
+    /**
+     * Decide if MultiLoca should be considered active.
+     *
+     * This fallback allows the integration to work even when the plugin
+     * exposes helper functions but does not keep a global instance
+     * accessible.
+     *
+     * @return bool
+     */
+    protected function determine_is_active() : bool {
+        if ( is_object( $this->instance ) ) {
+            return true;
+        }
+
+        $helper_functions = [
+            'multiloca_lite_get_locations',
+            'multiloca_get_locations',
+            'multiloca_lite_update_stock',
+            'multiloca_update_stock',
+        ];
+
+        foreach ( $helper_functions as $function_name ) {
+            if ( function_exists( $function_name ) ) {
+                return true;
+            }
+        }
+
+        if ( taxonomy_exists( 'multiloca_location' ) ) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -50,10 +84,17 @@ class Woo_Contifico_MultiLocation_Compatibility {
             return [];
         }
 
-        if ( function_exists( 'multiloca_lite_get_locations' ) ) {
-            $locations = multiloca_lite_get_locations();
-            if ( is_array( $locations ) ) {
-                return $locations;
+        $function_sources = [
+            'multiloca_lite_get_locations',
+            'multiloca_get_locations',
+        ];
+
+        foreach ( $function_sources as $function_name ) {
+            if ( function_exists( $function_name ) ) {
+                $locations = call_user_func( $function_name );
+                if ( is_array( $locations ) ) {
+                    return $locations;
+                }
             }
         }
 
@@ -70,6 +111,28 @@ class Woo_Contifico_MultiLocation_Compatibility {
         if ( method_exists( $this->instance, 'get_locations' ) ) {
             $locations = $this->instance->get_locations();
             if ( is_array( $locations ) ) {
+                return $locations;
+            }
+        }
+
+        if ( taxonomy_exists( 'multiloca_location' ) ) {
+            $terms = get_terms(
+                [
+                    'taxonomy'   => 'multiloca_location',
+                    'hide_empty' => false,
+                ]
+            );
+
+            if ( ! is_wp_error( $terms ) && ! empty( $terms ) ) {
+                $locations = [];
+
+                foreach ( $terms as $term ) {
+                    $locations[ $term->term_id ] = [
+                        'id'   => $term->term_id,
+                        'name' => $term->name,
+                    ];
+                }
+
                 return $locations;
             }
         }
@@ -178,6 +241,27 @@ class Woo_Contifico_MultiLocation_Compatibility {
     }
 
     /**
+     * Update the stock for a WooCommerce product in a specific MultiLoca location.
+     *
+     * @param WC_Product $product     Product instance.
+     * @param string|int $location_id Location identifier.
+     * @param float|int  $quantity    Quantity to set.
+     *
+     * @return bool
+     */
+    public function update_location_stock( $product, $location_id, $quantity ) : bool {
+        if ( ! $this->is_active() ) {
+            return false;
+        }
+
+        if ( ! is_object( $product ) || ! is_a( $product, 'WC_Product' ) ) {
+            return false;
+        }
+
+        return $this->update_stock( $product->get_id(), $location_id, $quantity );
+    }
+
+    /**
      * Try to locate the MultiLoca Lite plugin instance.
      *
      * @return object|null
@@ -193,7 +277,10 @@ class Woo_Contifico_MultiLocation_Compatibility {
         $possible_classes = [
             '\\MultiLocaLite\\Plugin',
             '\\MultiLocaLite\\MultiLoca',
+            '\\MultiLoca\\Plugin',
+            '\\MultiLoca\\MultiLoca',
             'MultiLoca_Lite',
+            'MultiLoca',
         ];
 
         foreach ( $possible_classes as $class_name ) {
