@@ -30,8 +30,8 @@ Para activar esta funcionalidad es necesario:
 3. Ingresar al menú **WooCommerce → Contífico → Integración**. Si MultiLoca Lite (o la versión premium de MultiLoca) está activo
    y tiene ubicaciones configuradas, al final del formulario aparecerá la sección **Compatibilidad MultiLoca** para asignar la
    bodega de Contífico correspondiente a cada ubicación listada.
-   - Si la sección no se muestra, activa la casilla **Activar compatibilidad MultiLoca manualmente** para forzar la carga de la
-     sección, incluso cuando el plugin no sea detectado automáticamente.
+   - Si la sección no se muestra, activa la casilla **Activar compatibilidad MultiLoca manualmente** (disponible desde la versión
+     4.1.2) para forzar la carga de la sección, incluso cuando el plugin no sea detectado automáticamente.
    - Cuando uses la activación manual, completa el campo **Ubicaciones MultiLoca manuales** con un identificador por línea o en
      el formato `ID|Nombre` (por ejemplo `sucursal-centro|Sucursal Centro`).
    - Si prefieres la detección automática, verifica que el plugin MultiLoca esté activo, que tenga al menos una ubicación creada
@@ -67,6 +67,10 @@ Para usar este plugin se requiere PHP 5.5 o superior, Wordpress 5.2 o superior, 
 No, para poder usar este plugin es necesario que tengas una cuenta de Contífico.
 
 == Changelog ==
+
+= 4.1.2 =
+* Se añade la activación manual de la compatibilidad con MultiLoca y el soporte para definir ubicaciones manuales.
+* Se documenta el flujo de configuración manual para cuando la detección automática no está disponible.
 
 = 4.1.1 =
 * Se corrige error fatal cuando no se consigue el ID de la bodega
