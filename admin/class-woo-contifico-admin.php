@@ -490,11 +490,12 @@ class Woo_Contifico_Admin {
 		# Get sync step
 		$step = isset($_POST['step']) ? (int) sanitize_text_field($_POST['step']) : 1;
 
-		# Reset transients if the process is starting
-		if( $step === 1 ) {
-			delete_transient( 'woo_contifico_fetch_productos' );
-			delete_transient( 'woo_sync_result' );
-		}
+                # Reset transients if the process is starting
+                if( $step === 1 ) {
+                        delete_transient( 'woo_contifico_fetch_productos' );
+                        delete_transient( 'woo_contifico_full_inventory' );
+                        delete_transient( 'woo_sync_result' );
+                }
 
 		try {
 			# Sync Contifico products
@@ -521,11 +522,12 @@ class Woo_Contifico_Admin {
 	 */
 	public function batch_sync_processing(int $step = 1) {
 
-		# Reset transients if the process is starting
-		if( $step === 1 ) {
-			delete_transient( 'woo_contifico_fetch_productos' );
-			delete_transient( 'woo_sync_result' );
-		}
+                # Reset transients if the process is starting
+                if( $step === 1 ) {
+                        delete_transient( 'woo_contifico_fetch_productos' );
+                        delete_transient( 'woo_contifico_full_inventory' );
+                        delete_transient( 'woo_sync_result' );
+                }
 
 		$result = $this->sync_stock($step, $this->woo_contifico->settings['batch_size']);
 
@@ -584,7 +586,29 @@ class Woo_Contifico_Admin {
                         # Get products of this batch
                         $fetched_products = $this->contifico->fetch_products( $step, $batch_size );
 
-                        if ( $manage_stock && ! empty( $location_map ) && ! empty( $fetched_products ) ) {
+                        $products_by_sku = [];
+                        $contifico_skus  = [];
+
+                        foreach ( $fetched_products as $product_data ) {
+                                if ( ! is_array( $product_data ) ) {
+                                        continue;
+                                }
+
+                                $sku = isset( $product_data['sku'] ) ? (string) $product_data['sku'] : '';
+
+                                if ( '' === $sku ) {
+                                        continue;
+                                }
+
+                                $products_by_sku[ $sku ] = $product_data;
+                                $contifico_skus[]         = $sku;
+                        }
+
+                        if ( ! empty( $contifico_skus ) ) {
+                                $contifico_skus = array_values( array_unique( $contifico_skus ) );
+                        }
+
+                        if ( $manage_stock && ! empty( $location_map ) && ! empty( $products_by_sku ) ) {
                                 $product_ids_for_batch = array_map( 'strval', array_column( $fetched_products, 'codigo' ) );
                                 $warehouses_stock      = $this->contifico->get_warehouses_stock( array_values( $location_map ), $product_ids_for_batch );
 
@@ -617,22 +641,43 @@ class Woo_Contifico_Admin {
 				];
 
 				# Get WooCommerce products from this batch
-				$products = [];
-				$products_ids = $this->get_products_ids_by_skus(array_column($fetched_products, 'sku'));
-				foreach ( $products_ids as $product_id ) {
-					$wc_product = wc_get_product($product_id);
-					$key = array_search($wc_product->get_sku(),array_column($fetched_products,'sku'));
-					if ( $key !== false ) {
-						# Keep Contifico product ID and WP product object
-						$products[] = [
-							'id'      => $fetched_products[$key]['codigo'],
-							'pvp1'     => $fetched_products[$key]['pvp1'],
-							'pvp2'     => $fetched_products[$key]['pvp2'],
-							'pvp3'     => $fetched_products[$key]['pvp3'],
-							'product' => $wc_product,
-						];
-					}
-				}
+                                $products = [];
+
+                                if ( ! empty( $contifico_skus ) ) {
+                                        $products_ids = $this->get_products_ids_by_skus( $contifico_skus );
+                                }
+                                else {
+                                        $products_ids = [];
+                                }
+
+                                foreach ( $products_ids as $product_id ) {
+                                        $wc_product = wc_get_product($product_id);
+                                        if ( ! $wc_product ) {
+                                                continue;
+                                        }
+
+                                        $sku = (string) $wc_product->get_sku();
+
+                                        if ( '' === $sku || ! isset( $products_by_sku[ $sku ] ) ) {
+                                                continue;
+                                        }
+
+                                        $contifico_product = $products_by_sku[ $sku ];
+                                        $contifico_id      = isset( $contifico_product['codigo'] ) ? (string) $contifico_product['codigo'] : '';
+
+                                        if ( '' === $contifico_id ) {
+                                                continue;
+                                        }
+
+                                        # Keep Contifico product ID and WP product object
+                                        $products[] = [
+                                                'id'       => $contifico_id,
+                                                'pvp1'     => isset( $contifico_product['pvp1'] ) ? (float) $contifico_product['pvp1'] : 0.0,
+                                                'pvp2'     => isset( $contifico_product['pvp2'] ) ? (float) $contifico_product['pvp2'] : 0.0,
+                                                'pvp3'     => isset( $contifico_product['pvp3'] ) ? (float) $contifico_product['pvp3'] : 0.0,
+                                                'product'  => $wc_product,
+                                        ];
+                                }
 				$result['found'] = $result['found'] + count( $products );
 
                                 # Update new stock and price

@@ -17,7 +17,13 @@ use Exception;
 class Contifico
 {
 
-	private const TRANSIENT_TTL = 15 * MINUTE_IN_SECONDS;
+        private const TRANSIENT_TTL = 15 * MINUTE_IN_SECONDS;
+
+        private const INVENTORY_TRANSIENT_KEY = 'woo_contifico_full_inventory';
+
+        private const INVENTORY_PAGE_SIZE = 200;
+
+        private const INVENTORY_MAX_PAGES = 250;
 
     /**
      * @since 1.3.0
@@ -74,11 +80,17 @@ class Contifico
      */
     public function __construct(string $api_secret, bool $log_transactions = false, string $log_path = '') {
         $this->api_secret = $api_secret;
-		$this->products   = get_option('woo_contifico_products');
+            $this->products   = get_option('woo_contifico_products');
+            if ( ! is_array( $this->products ) ) {
+                    $this->products = [];
+            }
             $this->warehouses = get_option('woo_contifico_warehouses');
+            if ( ! is_array( $this->warehouses ) ) {
+                    $this->warehouses = [];
+            }
             $this->product_stock_cache = [];
-	    $this->log_transactions = $log_transactions;
-	    $this->log_path = $log_path;
+            $this->log_transactions = $log_transactions;
+            $this->log_path = $log_path;
     }
 
     /**
@@ -174,48 +186,29 @@ class Contifico
 	 */
     public function fetch_products( int $step, int $batch_size ) : array
     {
-    	# Check if products were already fetched
-	    $productos = [];
-	    $fetched = get_transient('woo_contifico_fetch_productos');
-	    if( false === $fetched ) {
+        $step       = max( 1, $step );
+        $batch_size = max( 1, $batch_size );
 
-	    	# Fetch the current batch
-		    $fetched_products = $this->call( "producto/?result_size={$batch_size}&result_page={$step}" );
+        $force_refresh = ( false === get_transient( self::INVENTORY_TRANSIENT_KEY ) );
 
-		    # If no more products are get, then the batch has finished. Set the transient to notify that it finished
-		    if(empty($fetched_products) ) {
-			    set_transient('woo_contifico_fetch_productos','yes',self::TRANSIENT_TTL);
-		    }
-		    else {
-			    # If is the first step, clear current products list
-			    if( $step === 1 ) {
-				    $this->products = [];
-			    }
+        $productos = $this->ensure_inventory_loaded( $force_refresh );
 
-			    # Get SKU and PVP info to store
-			    $skus = array_column($fetched_products, 'codigo', 'id');
-			    $pvps1 = array_column($fetched_products, 'pvp1', 'id');
-			    $pvps2 = array_column($fetched_products, 'pvp2', 'id');
-			    $pvps3 = array_column($fetched_products, 'pvp3', 'id');
-			    foreach ($skus as $key => $sku) {
-			    	$productos[] = [
-			    		'codigo' => $key,
-			    		'sku' => $sku,
-					    'pvp1' => $pvps1[$key],
-					    'pvp2' => $pvps2[$key],
-					    'pvp3' => $pvps3[$key],
-				    ];
-			    }
+        $total  = count( $productos );
+        $offset = ( $step - 1 ) * $batch_size;
 
-			    # Update products stored
-			    $this->products = array_merge( $this->products, $productos );
-			    update_option( 'woo_contifico_products', $this->products );
-		    }
-	    }
-	    else {
-	    	$productos = $this->products;
-	    }
-	    return $productos;
+        if ( 0 === $total || $offset >= $total ) {
+                set_transient( 'woo_contifico_fetch_productos', 'yes', self::TRANSIENT_TTL );
+
+                return [];
+        }
+
+        $batch = array_slice( $productos, $offset, $batch_size );
+
+        if ( $offset + $batch_size >= $total ) {
+                set_transient( 'woo_contifico_fetch_productos', 'yes', self::TRANSIENT_TTL );
+        }
+
+        return $batch;
     }
 
 	/**
@@ -224,7 +217,9 @@ class Contifico
 	 * @return int
 	 */
 	public function count_fetched_products() {
-    	return count($this->products);
+        $productos = $this->ensure_inventory_loaded();
+
+        return count( $productos );
     }
 
 	/**
@@ -414,9 +409,116 @@ class Contifico
 	 *
 	 * @return array
 	 */
-	public function get_products() : array {
-		return $this->products;
-	}
+        public function get_products() : array {
+                return $this->ensure_inventory_loaded();
+        }
+
+        /**
+         * Ensure the full Contífico inventory is available locally.
+         *
+         * Downloads every product through the producto/ endpoint when the cache
+         * is missing or a fresh read is required. Results are cached both in
+         * memory and with a transient to share them across requests inside the
+         * current synchronization window.
+         *
+         * @since 4.1.4
+         *
+         * @param bool $force_refresh Whether the API must be queried even when
+         *                            a cached copy is present.
+         *
+         * @return array<int,array<string,mixed>>
+         */
+        private function ensure_inventory_loaded( bool $force_refresh = false ) : array {
+
+                if ( ! $force_refresh && ! empty( $this->products ) ) {
+                        return $this->products;
+                }
+
+                if ( ! $force_refresh ) {
+                        $cached_inventory = get_transient( self::INVENTORY_TRANSIENT_KEY );
+
+                        if ( is_array( $cached_inventory ) ) {
+                                $this->products = $cached_inventory;
+
+                                return $this->products;
+                        }
+                }
+
+                $downloaded_inventory = $this->download_inventory_from_api();
+
+                $this->products = $downloaded_inventory;
+
+                update_option( 'woo_contifico_products', $this->products );
+                set_transient( self::INVENTORY_TRANSIENT_KEY, $this->products, self::TRANSIENT_TTL );
+
+                return $this->products;
+        }
+
+        /**
+         * Download the complete inventory from Contífico via producto/ endpoint.
+         *
+         * @since 4.1.4
+         *
+         * @return array<int,array<string,mixed>>
+         */
+        private function download_inventory_from_api() : array {
+
+                $inventory_by_id = [];
+
+                $page       = 1;
+                $page_size  = self::INVENTORY_PAGE_SIZE;
+                $max_pages  = self::INVENTORY_MAX_PAGES;
+
+                do {
+                        try {
+                                $fetched_products = $this->call( "producto/?result_size={$page_size}&result_page={$page}" );
+                        }
+                        catch ( Exception $exception ) {
+                                break;
+                        }
+
+                        if ( empty( $fetched_products ) || ! is_array( $fetched_products ) ) {
+                                break;
+                        }
+
+                        foreach ( $fetched_products as $product ) {
+                                if ( ! is_array( $product ) ) {
+                                        continue;
+                                }
+
+                                $product_id = isset( $product['id'] ) ? (string) $product['id'] : '';
+                                $sku        = isset( $product['codigo'] ) ? (string) $product['codigo'] : '';
+
+                                if ( '' === $product_id || '' === $sku ) {
+                                        continue;
+                                }
+
+                                $inventory_by_id[ $product_id ] = [
+                                        'codigo' => $product_id,
+                                        'sku'    => $sku,
+                                        'pvp1'   => isset( $product['pvp1'] ) ? (float) $product['pvp1'] : 0.0,
+                                        'pvp2'   => isset( $product['pvp2'] ) ? (float) $product['pvp2'] : 0.0,
+                                        'pvp3'   => isset( $product['pvp3'] ) ? (float) $product['pvp3'] : 0.0,
+                                ];
+                        }
+
+                        if ( count( $fetched_products ) < $page_size ) {
+                                break;
+                        }
+
+                        $page ++;
+
+                        if ( $page > $max_pages ) {
+                                break;
+                        }
+                } while ( true );
+
+                if ( empty( $inventory_by_id ) ) {
+                        return [];
+                }
+
+                return array_values( $inventory_by_id );
+        }
 
 	/**
 	 * Get product stock
