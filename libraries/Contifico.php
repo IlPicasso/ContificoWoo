@@ -306,18 +306,34 @@ class Contifico
 	 * @return int total of warehouses fetched
 	 * @throws Exception
 	 */
-	public function fetch_warehouses() : int
-	{
-		# Check if warehouses were already fetched
-		$fetched = get_transient('woo_contifico_fetch_warehouses');
-		if( false === $fetched ) {
-			$bodegas          = $this->call( 'bodega/' );
-			$this->warehouses = array_column($bodegas, 'codigo', 'id');
-			update_option( 'woo_contifico_warehouses', $this->warehouses );
-			set_transient('woo_contifico_fetch_warehouses','yes',self::TRANSIENT_TTL);
-		}
-		return count($this->warehouses);
-	}
+        public function fetch_warehouses() : int
+        {
+                # Check if warehouses were already fetched
+                $fetched = get_transient('woo_contifico_fetch_warehouses');
+                if( false === $fetched ) {
+                        $bodegas          = $this->call( 'bodega/' );
+                        $this->warehouses = array_column($bodegas, 'codigo', 'id');
+                        update_option( 'woo_contifico_warehouses', $this->warehouses );
+                        set_transient('woo_contifico_fetch_warehouses','yes',self::TRANSIENT_TTL);
+                }
+                return count($this->warehouses);
+        }
+
+        /**
+         * Return the cached warehouses map indexed by Contífico ID.
+         *
+         * @since 4.1.6
+         *
+         * @return array<string,string>
+         */
+        public function get_warehouses_map() : array
+        {
+                if ( ! is_array( $this->warehouses ) ) {
+                        return [];
+                }
+
+                return $this->warehouses;
+        }
 
         /**
          * Fetch stock from Contífico for the register warehouse and save them in the database.
