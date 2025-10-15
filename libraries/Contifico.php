@@ -248,16 +248,19 @@ class Contifico
 		return count($this->warehouses);
 	}
 
-	/**
-	 * Fetch stock from Contífico for the register warehouse and save them in the database
-	 *
-	 * @param string|null $id_warehouse
-	 *
-	 * @return array
-	 * @throws Exception
-	 * @since 2.0.0
-	 *
-	 */
+        /**
+         * Fetch stock from Contífico for the register warehouse and save them in the database.
+         *
+         * Uses product level stock lookups (producto/{producto_id}/stock/) and caches the
+         * filtered results for the requested warehouse in the existing transient.
+         *
+         * @param string|null $id_warehouse
+         *
+         * @return array
+         * @throws Exception
+         * @since 2.0.0
+         *
+         */
         public function get_stock(?string $id_warehouse) : array
         {
                 $transient_suffix = '';
@@ -267,24 +270,52 @@ class Contifico
 
                 # Check if stock were already fetched
                 $fetched_stock = get_transient( "woo_contifico_fetch_stock{$transient_suffix}" );
-                if( false === $fetched_stock && ! empty( $id_warehouse ) ) {
-                        $stock = $this->call( "inventario/stock/bodega/{$id_warehouse}/" );
-                        $fetched_stock = array_column($stock, 'cantidad_stock', 'producto_id');
-                        set_transient("woo_contifico_fetch_stock{$transient_suffix}",$fetched_stock,self::TRANSIENT_TTL);
+
+                if ( false !== $fetched_stock ) {
+                        return (array) $fetched_stock;
                 }
-                return (array)$fetched_stock;
+
+                if ( empty( $id_warehouse ) ) {
+                        return [];
+                }
+
+                $warehouse_id = (string) $id_warehouse;
+                $products     = is_array( $this->products ) ? $this->products : [];
+                $product_ids  = array_unique( array_map( 'strval', array_column( $products, 'codigo' ) ) );
+
+                $stock_by_product = [];
+
+                foreach ( $product_ids as $product_id ) {
+                        if ( '' === $product_id ) {
+                                continue;
+                        }
+
+                        $product_stock = $this->get_product_stock_by_warehouses( $product_id );
+
+                        if ( isset( $product_stock[ $warehouse_id ] ) ) {
+                                $stock_by_product[ $product_id ] = (float) $product_stock[ $warehouse_id ];
+                        }
+                }
+
+                set_transient( "woo_contifico_fetch_stock{$transient_suffix}", $stock_by_product, self::TRANSIENT_TTL );
+
+                return $stock_by_product;
         }
 
         /**
          * Fetch stock information for multiple warehouses at once.
          *
+         * Relies on producto/{producto_id}/stock/ endpoint calls and reuses the per-product cache
+         * created by get_product_stock_by_warehouses().
+         *
          * @since 3.5.0
          *
          * @param array $warehouse_codes
+         * @param array $product_ids
          *
          * @return array<string,array>
          */
-        public function get_warehouses_stock( array $warehouse_codes ) : array {
+        public function get_warehouses_stock( array $warehouse_codes, array $product_ids = [] ) : array {
                 $stocks = [];
 
                 if ( empty( $warehouse_codes ) ) {
@@ -292,6 +323,7 @@ class Contifico
                 }
 
                 $unique_codes = array_unique( array_map( 'strval', $warehouse_codes ) );
+                $warehouse_ids = [];
 
                 foreach ( $unique_codes as $warehouse_code ) {
                         if ( '' === $warehouse_code ) {
@@ -302,10 +334,45 @@ class Contifico
 
                         if ( empty( $warehouse_id ) ) {
                                 $stocks[ $warehouse_code ] = [];
+                                $warehouse_ids[ $warehouse_code ] = '';
                                 continue;
                         }
 
-                        $stocks[ $warehouse_code ] = $this->get_stock( $warehouse_id );
+                        $stocks[ $warehouse_code ]         = [];
+                        $warehouse_ids[ $warehouse_code ] = (string) $warehouse_id;
+                }
+
+                if ( empty( $warehouse_ids ) ) {
+                        return $stocks;
+                }
+
+                if ( empty( $product_ids ) ) {
+                        $products    = is_array( $this->products ) ? $this->products : [];
+                        $product_ids = array_column( $products, 'codigo' );
+                }
+
+                $product_ids = array_unique( array_map( 'strval', $product_ids ) );
+
+                foreach ( $product_ids as $product_id ) {
+                        if ( '' === $product_id ) {
+                                continue;
+                        }
+
+                        $product_stock = $this->get_product_stock_by_warehouses( $product_id );
+
+                        if ( empty( $product_stock ) ) {
+                                continue;
+                        }
+
+                        foreach ( $warehouse_ids as $warehouse_code => $warehouse_id ) {
+                                if ( '' === $warehouse_id ) {
+                                        continue;
+                                }
+
+                                if ( isset( $product_stock[ $warehouse_id ] ) ) {
+                                        $stocks[ $warehouse_code ][ $product_id ] = (float) $product_stock[ $warehouse_id ];
+                                }
+                        }
                 }
 
                 return $stocks;
