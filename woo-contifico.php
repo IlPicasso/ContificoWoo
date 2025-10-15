@@ -9,7 +9,7 @@
  * Plugin Name:       Woocommerce - Facturación Electrónica - Contífico
  * Plugin URI:        https://otakupahp.com/producto/woocommerce-factura-electronica-con-contifico/
  * Description:       Integración simple de facturación electrónica para woocommerce a través del servicio de Contífico. Servicio solo válido en Ecuador
- * Version:           4.1.0
+ * Version:           4.1.2
  * Author:            Pablo Hernández (OtakuPahp)
  * Author URI:        https://otakupahp.com/quien-es-pablo-hernandez-otakupahp
  * License:           GPL-2.0+
@@ -36,7 +36,7 @@ define( 'WOO_CONTIFICO_PATH', plugin_dir_path( __FILE__ ) );
 define( 'WOO_CONTIFICO_URL', plugin_dir_url( __FILE__ ) );
 
 # Currently plugin version
-define( 'WOO_CONTIFICO_VERSION', '4.1.0' );
+define( 'WOO_CONTIFICO_VERSION', '4.1.2' );
 
 # Environment states
 define( 'WOO_CONTIFICO_TEST', 1 );

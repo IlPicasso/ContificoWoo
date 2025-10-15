@@ -417,15 +417,21 @@ class Woo_Contifico_Admin {
 					}
 				}
 				break;
-			case 'check':
-				$checked = checked( $value, true, false );
-				$value   = $value ?: 1;
-				$field   = "<input type='checkbox' class='input-check' value='{$value}' name='{$name}' id='{$key}' {$checked} />";
-				break;
-			case 'title':
-				$field = "&nbsp;";
-				break;
-		}
+                        case 'check':
+                                $checked = checked( $value, true, false );
+                                $value   = $value ?: 1;
+                                $field   = "<input type='checkbox' class='input-check' value='{$value}' name='{$name}' id='{$key}' {$checked} />";
+                                break;
+                        case 'textarea':
+                                $rows  = isset( $args['rows'] ) ? (int) $args['rows'] : 5;
+                                $cols  = isset( $args['cols'] ) ? (int) $args['cols'] : 50;
+                                $value = esc_textarea( (string) $value );
+                                $field = "<textarea name='{$name}' id='{$key}' rows='{$rows}' cols='{$cols}' class='textarea'>{$value}</textarea>";
+                                break;
+                        case 'title':
+                                $field = "&nbsp;";
+                                break;
+                }
 
                 $desc = empty( $args['description'] ) ? '' : "<span>{$args['description']}</span>";
                 echo "{$field}&nbsp;{$desc}";
@@ -547,10 +553,46 @@ class Woo_Contifico_Admin {
 		# Check is plugin is active
 		if ( $this->is_active() === true ) {
 
-			# Fetch warehouse stock
-			$this->contifico->fetch_warehouses();
-			$id_warehouse    = $this->contifico->get_id_bodega( $this->woo_contifico->settings['bodega'] );
-			$warehouse_stock = ( wc_string_to_bool( get_option( 'woocommerce_manage_stock' ) ) ) ? $this->contifico->get_stock( $id_warehouse ) : [];
+                        # Fetch warehouse stock
+                        $this->contifico->fetch_warehouses();
+                        $warehouse_stock = [];
+                        $location_stock  = [];
+                        $location_map    = [];
+                        $manage_stock    = wc_string_to_bool( get_option( 'woocommerce_manage_stock' ) );
+                        $id_warehouse    = $this->contifico->get_id_bodega( $this->woo_contifico->settings['bodega'] );
+
+                        if ( $manage_stock ) {
+                                if (
+                                        $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
+                                        && $this->woo_contifico->multilocation->is_active()
+                                ) {
+                                        $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
+
+                                        if ( is_array( $configured_locations ) ) {
+                                                foreach ( $configured_locations as $location_id => $warehouse_code ) {
+                                                        $code = (string) $warehouse_code;
+
+                                                        if ( '' === $code ) {
+                                                                continue;
+                                                        }
+
+                                                        $location_map[ (string) $location_id ] = $code;
+                                                }
+                                        }
+
+                                        if ( ! empty( $location_map ) ) {
+                                                $warehouses_stock = $this->contifico->get_warehouses_stock( array_values( $location_map ) );
+
+                                                foreach ( $location_map as $location_id => $warehouse_code ) {
+                                                        $location_stock[ $location_id ] = $warehouses_stock[ $warehouse_code ] ?? [];
+                                                }
+                                        }
+                                }
+
+                                if ( empty( $location_stock ) ) {
+                                        $warehouse_stock = $this->contifico->get_stock( $id_warehouse );
+                                }
+                        }
 
 			# Get products of this batch
 			$fetched_products = $this->contifico->fetch_products( $step, $batch_size );
@@ -600,11 +642,48 @@ class Woo_Contifico_Admin {
 
 					# Check stock
 					$updated_stock = false;
-					if( $product['product']->get_manage_stock() ) {
-						$new_stock = isset( $warehouse_stock[ $product['id'] ] ) ? (int) $warehouse_stock[ $product['id'] ] : 0;
-						$old_stock = (int) $product['product']->get_stock_quantity();
-						if ( $old_stock !== $new_stock ) {  # Update stock
-							if ( $new_stock < 1 ) { # Out of stock
+                                        if( $product['product']->get_manage_stock() ) {
+                                                $new_stock = 0;
+
+                                                if ( ! empty( $location_stock ) ) {
+                                                        $global_quantity = 0;
+
+                                                        foreach ( $location_map as $location_id => $warehouse_code ) {
+                                                                $location_id = (string) $location_id;
+                                                                $quantity    = null;
+
+                                                                if ( isset( $location_stock[ $location_id ][ $product['id'] ] ) ) {
+                                                                        $quantity = (int) $location_stock[ $location_id ][ $product['id'] ];
+                                                                }
+
+                                                                if ( null === $quantity ) {
+                                                                        $warehouse_id = $this->contifico->get_id_bodega( $warehouse_code );
+
+                                                                        if ( ! empty( $warehouse_id ) ) {
+                                                                                $product_stock = $this->contifico->get_product_stock( $product['id'], $warehouse_id );
+                                                                                $quantity      = (int) ( null === $product_stock ? 0 : $product_stock );
+                                                                                $location_stock[ $location_id ][ $product['id'] ] = $quantity;
+                                                                        } else {
+                                                                                $quantity = 0;
+                                                                        }
+                                                                }
+
+                                                                $global_quantity += $quantity;
+
+                                                                if ( method_exists( $this->woo_contifico->multilocation, 'update_location_stock' ) ) {
+                                                                        $this->woo_contifico->multilocation->update_location_stock( $product['product'], $location_id, $quantity );
+                                                                }
+                                                        }
+
+                                                        $new_stock = $global_quantity;
+                                                }
+                                                else {
+                                                        $new_stock = isset( $warehouse_stock[ $product['id'] ] ) ? (int) $warehouse_stock[ $product['id'] ] : 0;
+                                                }
+
+                                                $old_stock = (int) $product['product']->get_stock_quantity();
+                                                if ( $old_stock !== $new_stock ) {  # Update stock
+                                                        if ( $new_stock < 1 ) { # Out of stock
 								$product['product']->set_stock_quantity( 0 );
 								$product['product']->set_stock_status( 'outofstock' );
 								$result['outofstock'] ++;
@@ -874,8 +953,16 @@ class Woo_Contifico_Admin {
 			$error = true;
 		}
 
-		# Re Schedule cron
-		try {
+                $input['multiloca_manual_enable'] = isset( $input['multiloca_manual_enable'] );
+
+                if ( isset( $input['multiloca_manual_locations'] ) ) {
+                        $input['multiloca_manual_locations'] = sanitize_textarea_field( (string) $input['multiloca_manual_locations'] );
+                } else {
+                        $input['multiloca_manual_locations'] = '';
+                }
+
+                # Re Schedule cron
+                try {
 			# Check if cron recurrence changed
 			if ( $this->woo_contifico->settings['actualizar_stock'] !== sanitize_text_field( $input['actualizar_stock'] ) ) {
 				as_unschedule_all_actions( 'woo_contifico_sync_stock', [1], $this->plugin_name);
