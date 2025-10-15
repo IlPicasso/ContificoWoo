@@ -495,6 +495,7 @@ class Woo_Contifico_Admin {
                         delete_transient( 'woo_contifico_fetch_productos' );
                         delete_transient( 'woo_contifico_full_inventory' );
                         delete_transient( 'woo_sync_result' );
+                        $this->contifico->reset_inventory_cache();
                 }
 
 		try {
