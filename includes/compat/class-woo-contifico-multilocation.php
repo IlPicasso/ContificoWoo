@@ -62,6 +62,15 @@ class Woo_Contifico_MultiLocation_Compatibility {
             return true;
         }
 
+        if ( post_type_exists( 'multiloca_location' ) ) {
+            return true;
+        }
+
+        $option_locations = get_option( 'multiloca_locations' );
+        if ( is_array( $option_locations ) && ! empty( $option_locations ) ) {
+            return true;
+        }
+
         return false;
     }
 
@@ -115,29 +124,140 @@ class Woo_Contifico_MultiLocation_Compatibility {
             }
         }
 
-        if ( taxonomy_exists( 'multiloca_location' ) ) {
-            $terms = get_terms(
-                [
-                    'taxonomy'   => 'multiloca_location',
-                    'hide_empty' => false,
-                ]
-            );
+        $locations = $this->get_locations_from_taxonomy();
+        if ( ! empty( $locations ) ) {
+            return $locations;
+        }
 
-            if ( ! is_wp_error( $terms ) && ! empty( $terms ) ) {
-                $locations = [];
+        $locations = $this->get_locations_from_posts();
+        if ( ! empty( $locations ) ) {
+            return $locations;
+        }
 
-                foreach ( $terms as $term ) {
-                    $locations[ $term->term_id ] = [
-                        'id'   => $term->term_id,
-                        'name' => $term->name,
-                    ];
-                }
-
-                return $locations;
-            }
+        $locations = $this->get_locations_from_option();
+        if ( ! empty( $locations ) ) {
+            return $locations;
         }
 
         return [];
+    }
+
+    /**
+     * Retrieve locations from the registered taxonomy when available.
+     *
+     * @return array
+     */
+    protected function get_locations_from_taxonomy() : array {
+        if ( ! taxonomy_exists( 'multiloca_location' ) ) {
+            return [];
+        }
+
+        $terms = get_terms(
+            [
+                'taxonomy'   => 'multiloca_location',
+                'hide_empty' => false,
+            ]
+        );
+
+        if ( is_wp_error( $terms ) || empty( $terms ) ) {
+            return [];
+        }
+
+        $locations = [];
+
+        foreach ( $terms as $term ) {
+            $locations[ $term->term_id ] = [
+                'id'   => $term->term_id,
+                'name' => $term->name,
+            ];
+        }
+
+        return $locations;
+    }
+
+    /**
+     * Retrieve locations from a dedicated post type used by some MultiLoca builds.
+     *
+     * @return array
+     */
+    protected function get_locations_from_posts() : array {
+        if ( ! post_type_exists( 'multiloca_location' ) ) {
+            return [];
+        }
+
+        $posts = get_posts(
+            [
+                'post_type'      => 'multiloca_location',
+                'posts_per_page' => -1,
+                'post_status'    => [ 'publish', 'private' ],
+                'fields'         => 'ids',
+            ]
+        );
+
+        if ( empty( $posts ) ) {
+            return [];
+        }
+
+        $locations = [];
+
+        foreach ( $posts as $post_id ) {
+            $name = get_the_title( $post_id );
+            if ( '' === $name ) {
+                $name = get_post_field( 'post_name', $post_id );
+            }
+
+            if ( '' === $name ) {
+                $name = (string) $post_id;
+            }
+
+            $locations[ $post_id ] = [
+                'id'   => $post_id,
+                'name' => $name,
+            ];
+        }
+
+        return $locations;
+    }
+
+    /**
+     * Retrieve locations stored in a serialized option.
+     *
+     * @return array
+     */
+    protected function get_locations_from_option() : array {
+        $stored_locations = get_option( 'multiloca_locations' );
+
+        if ( ! is_array( $stored_locations ) || empty( $stored_locations ) ) {
+            return [];
+        }
+
+        $locations = [];
+
+        foreach ( $stored_locations as $location_id => $location ) {
+            if ( is_string( $location ) ) {
+                $name = $location;
+            } elseif ( is_array( $location ) ) {
+                $name = $location['name'] ?? '';
+                $location_id = $location['id'] ?? $location_id;
+            } elseif ( is_object( $location ) ) {
+                $name        = $location->name ?? '';
+                $location_id = $location->id ?? $location_id;
+            } else {
+                continue;
+            }
+
+            $name = trim( (string) $name );
+            if ( '' === $name ) {
+                $name = (string) $location_id;
+            }
+
+            $locations[ $location_id ] = [
+                'id'   => $location_id,
+                'name' => $name,
+            ];
+        }
+
+        return $locations;
     }
 
     /**

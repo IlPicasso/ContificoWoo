@@ -33,8 +33,9 @@ Para activar esta funcionalidad es necesario:
    - Si la sección no se muestra, verifica que el plugin MultiLoca esté activo, que tenga al menos una ubicación creada y vuelve
      a cargar la página de integración.
    - La integración detecta MultiLoca incluso cuando el plugin no expone una instancia global; si continúas sin ver la sección,
-     confirma que la taxonomía `multiloca_location` exista en tu sitio o contacta al soporte de MultiLoca para asegurarte de que
-     las funciones `multiloca_lite_get_locations`/`multiloca_get_locations` estén disponibles.
+     confirma que la taxonomía o el tipo de contenido `multiloca_location` existan en tu sitio o que la opción
+     `multiloca_locations` contenga ubicaciones guardadas. En ausencia de estos indicadores, contacta al soporte de MultiLoca
+     para asegurarte de que las funciones `multiloca_lite_get_locations`/`multiloca_get_locations` estén disponibles.
 4. Asegurarse de que WooCommerce tenga habilitado el manejo de inventario global (*WooCommerce → Ajustes → Productos → Inventario → Habilitar la gestión de inventario*).
 
 Una vez guardados los cambios, la sincronización de inventario (manual o automática) consultará el stock de cada bodega mapeada en
