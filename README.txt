@@ -40,6 +40,9 @@ Para activar esta funcionalidad es necesario:
      confirma que la taxonomía o el tipo de contenido `multiloca_location` existan en tu sitio o que la opción
      `multiloca_locations` contenga ubicaciones guardadas. En ausencia de estos indicadores, contacta al soporte de MultiLoca
      para asegurarte de que las funciones `multiloca_lite_get_locations`/`multiloca_get_locations` estén disponibles.
+   - Las variantes recientes de MultiLoca Lite distribuidas por Techspawn pueden registrar la taxonomía `locations-lite` y
+     gestionar el inventario mediante metadatos `wcmlim_stock_at_{ID}`. Esta integración reconoce automáticamente ese esquema y
+     actualizará el stock escribiendo en dichos metadatos cuando no haya funciones públicas disponibles.
 4. Asegurarse de que WooCommerce tenga habilitado el manejo de inventario global (*WooCommerce → Ajustes → Productos → Inventario → Habilitar la gestión de inventario*).
 
 Una vez guardados los cambios, la sincronización de inventario (manual o automática) consultará el stock de cada bodega mapeada en
