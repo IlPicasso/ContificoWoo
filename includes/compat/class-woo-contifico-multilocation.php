@@ -38,6 +38,13 @@ class Woo_Contifico_MultiLocation_Compatibility {
     protected $manual_locations = [];
 
     /**
+     * Cache of the resolved locations list.
+     *
+     * @var array|null
+     */
+    protected $locations_cache = null;
+
+    /**
      * Constructor.
      */
     public function __construct() {
@@ -45,6 +52,12 @@ class Woo_Contifico_MultiLocation_Compatibility {
             $this->bootstrap();
         } else {
             add_action( 'plugins_loaded', [ $this, 'bootstrap' ], 20 );
+        }
+
+        if ( did_action( 'init' ) ) {
+            $this->refresh_after_init();
+        } else {
+            add_action( 'init', [ $this, 'refresh_after_init' ], 50 );
         }
     }
 
@@ -56,6 +69,20 @@ class Woo_Contifico_MultiLocation_Compatibility {
     public function bootstrap() : void {
         $this->instance  = $this->locate_instance();
         $this->is_active = $this->determine_is_active();
+    }
+
+    /**
+     * Re-evaluate the integration once WordPress finished running `init`.
+     *
+     * This ensures MultiLoca taxonomies and helpers that are registered on
+     * `init` are taken into account when determining availability.
+     *
+     * @return void
+     */
+    public function refresh_after_init() : void {
+        $this->instance        = $this->locate_instance();
+        $this->is_active       = $this->determine_is_active();
+        $this->locations_cache = null;
     }
 
     /**
@@ -177,6 +204,8 @@ class Woo_Contifico_MultiLocation_Compatibility {
         } else {
             $this->is_active = $this->determine_is_active();
         }
+
+        $this->locations_cache = null;
     }
 
     /**
@@ -186,6 +215,7 @@ class Woo_Contifico_MultiLocation_Compatibility {
      */
     public function set_manual_locations( array $locations ) : void {
         $this->manual_locations = $locations;
+        $this->locations_cache  = null;
     }
 
     /**
@@ -198,6 +228,10 @@ class Woo_Contifico_MultiLocation_Compatibility {
             return [];
         }
 
+        if ( is_array( $this->locations_cache ) ) {
+            return $this->locations_cache;
+        }
+
         $function_sources = [
             'multiloca_lite_get_locations',
             'multiloca_get_locations',
@@ -207,7 +241,7 @@ class Woo_Contifico_MultiLocation_Compatibility {
             if ( function_exists( $function_name ) ) {
                 $locations = call_user_func( $function_name );
                 if ( is_array( $locations ) ) {
-                    return $locations;
+                    return $this->locations_cache = $locations;
                 }
             }
         }
@@ -217,7 +251,7 @@ class Woo_Contifico_MultiLocation_Compatibility {
             if ( is_callable( [ $manager, 'get_locations' ] ) ) {
                 $locations = call_user_func( [ $manager, 'get_locations' ] );
                 if ( is_array( $locations ) ) {
-                    return $locations;
+                    return $this->locations_cache = $locations;
                 }
             }
         }
@@ -225,30 +259,39 @@ class Woo_Contifico_MultiLocation_Compatibility {
         if ( is_object( $this->instance ) && method_exists( $this->instance, 'get_locations' ) ) {
             $locations = $this->instance->get_locations();
             if ( is_array( $locations ) ) {
-                return $locations;
+                return $this->locations_cache = $locations;
+            }
+        }
+
+        if ( ! did_action( 'init' ) ) {
+            $locations = $this->get_locations_from_database();
+            if ( ! empty( $locations ) ) {
+                return $this->locations_cache = $locations;
             }
         }
 
         $locations = $this->get_locations_from_taxonomy();
         if ( ! empty( $locations ) ) {
-            return $locations;
+            return $this->locations_cache = $locations;
         }
 
         $locations = $this->get_locations_from_posts();
         if ( ! empty( $locations ) ) {
-            return $locations;
+            return $this->locations_cache = $locations;
         }
 
         $locations = $this->get_locations_from_option();
         if ( ! empty( $locations ) ) {
-            return $locations;
+            return $this->locations_cache = $locations;
         }
 
         if ( $this->manual_activation && ! empty( $this->manual_locations ) ) {
-            return $this->manual_locations;
+            return $this->locations_cache = $this->manual_locations;
         }
 
-        return [];
+        $this->locations_cache = [];
+
+        return $this->locations_cache;
     }
 
     /**
@@ -369,6 +412,67 @@ class Woo_Contifico_MultiLocation_Compatibility {
 
             $locations[ $location_id ] = [
                 'id'   => $location_id,
+                'name' => $name,
+            ];
+        }
+
+        return $locations;
+    }
+
+    /**
+     * Retrieve locations directly from the terms tables when the taxonomy isn't registered yet.
+     *
+     * @return array
+     */
+    protected function get_locations_from_database() : array {
+        global $wpdb;
+
+        if ( ! isset( $wpdb ) ) {
+            return [];
+        }
+
+        $taxonomies = array_filter( $this->get_supported_taxonomies() );
+
+        if ( empty( $taxonomies ) ) {
+            return [];
+        }
+
+        $placeholders = implode( ',', array_fill( 0, count( $taxonomies ), '%s' ) );
+
+        $query = sprintf(
+            'SELECT t.term_id, t.name FROM %1$s AS t INNER JOIN %2$s AS tt ON t.term_id = tt.term_id WHERE tt.taxonomy IN (%3$s)',
+            $wpdb->terms,
+            $wpdb->term_taxonomy,
+            $placeholders
+        );
+
+        $prepared = $wpdb->prepare( $query, ...$taxonomies );
+
+        if ( false === $prepared ) {
+            return [];
+        }
+
+        $results = $wpdb->get_results( $prepared );
+
+        if ( empty( $results ) ) {
+            return [];
+        }
+
+        $locations = [];
+
+        foreach ( $results as $row ) {
+            $term_id = isset( $row->term_id ) ? (int) $row->term_id : 0;
+            if ( $term_id <= 0 ) {
+                continue;
+            }
+
+            $name = isset( $row->name ) ? trim( (string) $row->name ) : '';
+            if ( '' === $name ) {
+                $name = (string) $term_id;
+            }
+
+            $locations[ $term_id ] = [
+                'id'   => $term_id,
                 'name' => $name,
             ];
         }
