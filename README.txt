@@ -35,7 +35,10 @@ Para activar esta funcionalidad es necesario:
    - Cuando uses la activación manual, completa el campo **Ubicaciones MultiLoca manuales** con un identificador por línea o en
      el formato `ID|Nombre` (por ejemplo `sucursal-centro|Sucursal Centro`).
    - Si prefieres la detección automática, verifica que el plugin MultiLoca esté activo, que tenga al menos una ubicación creada
-     y vuelve a cargar la página de integración.
+     y vuelve a cargar la página de integración. Cuando MultiLoca y Woo Contífico se inicializan al mismo tiempo (por ejemplo,
+     al cargar el panel de administración tras activar ambos plugins), la compatibilidad espera a que WordPress termine de
+     ejecutar todos los callbacks de `init` antes de evaluar la disponibilidad para asegurar que las taxonomías como
+     `locations-lite` ya estén registradas.
    - La integración detecta MultiLoca incluso cuando el plugin no expone una instancia global y espera a que WordPress cargue todos los plugins activos antes de evaluarla. Además, si la página de ajustes se renderiza antes de que MultiLoca registre sus taxonomías en `init`, la compatibilidad consulta directamente la base de datos para listar las ubicaciones existentes, evitando que la sección aparezca vacía por cargar la página demasiado pronto. Si continúas sin ver la sección,
      confirma que la taxonomía o el tipo de contenido `multiloca_location` existan en tu sitio o que la opción
      `multiloca_locations` contenga ubicaciones guardadas. En ausencia de estos indicadores, contacta al soporte de MultiLoca

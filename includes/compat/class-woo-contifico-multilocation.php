@@ -56,6 +56,10 @@ class Woo_Contifico_MultiLocation_Compatibility {
 
         if ( did_action( 'init' ) ) {
             $this->refresh_after_init();
+
+            if ( doing_action( 'init' ) ) {
+                add_action( 'init', [ $this, 'refresh_after_init' ], PHP_INT_MAX );
+            }
         } else {
             add_action( 'init', [ $this, 'refresh_after_init' ], 50 );
         }
