@@ -36,7 +36,7 @@ Para activar esta funcionalidad es necesario:
      el formato `ID|Nombre` (por ejemplo `sucursal-centro|Sucursal Centro`).
    - Si prefieres la detección automática, verifica que el plugin MultiLoca esté activo, que tenga al menos una ubicación creada
      y vuelve a cargar la página de integración.
-   - La integración detecta MultiLoca incluso cuando el plugin no expone una instancia global; si continúas sin ver la sección,
+   - La integración detecta MultiLoca incluso cuando el plugin no expone una instancia global y espera a que WordPress cargue todos los plugins activos antes de evaluarla; si continúas sin ver la sección,
      confirma que la taxonomía o el tipo de contenido `multiloca_location` existan en tu sitio o que la opción
      `multiloca_locations` contenga ubicaciones guardadas. En ausencia de estos indicadores, contacta al soporte de MultiLoca
      para asegurarte de que las funciones `multiloca_lite_get_locations`/`multiloca_get_locations` estén disponibles.

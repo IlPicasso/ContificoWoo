@@ -41,6 +41,19 @@ class Woo_Contifico_MultiLocation_Compatibility {
      * Constructor.
      */
     public function __construct() {
+        if ( did_action( 'plugins_loaded' ) ) {
+            $this->bootstrap();
+        } else {
+            add_action( 'plugins_loaded', [ $this, 'bootstrap' ], 20 );
+        }
+    }
+
+    /**
+     * Perform the runtime initialization once plugins are loaded.
+     *
+     * @return void
+     */
+    public function bootstrap() : void {
         $this->instance  = $this->locate_instance();
         $this->is_active = $this->determine_is_active();
     }
@@ -57,6 +70,10 @@ class Woo_Contifico_MultiLocation_Compatibility {
     protected function determine_is_active() : bool {
         if ( $this->manual_activation ) {
             return true;
+        }
+
+        if ( ! is_object( $this->instance ) ) {
+            $this->instance = $this->locate_instance();
         }
 
         if ( is_object( $this->instance ) ) {
@@ -87,6 +104,27 @@ class Woo_Contifico_MultiLocation_Compatibility {
         }
 
         if ( taxonomy_exists( 'locations-lite' ) ) {
+            return true;
+        }
+
+        $detected_classes = [
+            '\\MultiLocaLite\\Plugin',
+            '\\MultiLocaLite\\MultiLoca',
+            '\\MultiLoca\\Plugin',
+            '\\MultiLoca\\MultiLoca',
+            'Multiloca_Lite_Plugin',
+            'Multiloca_Lite',
+            'MultiLoca_Lite',
+            'MultiLoca',
+        ];
+
+        foreach ( $detected_classes as $class_name ) {
+            if ( class_exists( $class_name ) ) {
+                return true;
+            }
+        }
+
+        if ( defined( 'MULTILOCA_LITE_VERSION' ) || defined( 'MULTILOCA_VERSION' ) ) {
             return true;
         }
 
