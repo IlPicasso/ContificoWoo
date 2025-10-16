@@ -38,11 +38,63 @@ class Woo_Contifico_MultiLocation_Compatibility {
     protected $manual_locations = [];
 
     /**
+     * Cache of the resolved locations list.
+     *
+     * @var array|null
+     */
+    protected $locations_cache = null;
+
+    /**
+     * Cache for resolved location identifiers used in stock meta keys.
+     *
+     * @var array
+     */
+    protected $location_meta_id_cache = [];
+
+    /**
      * Constructor.
      */
     public function __construct() {
+        if ( did_action( 'plugins_loaded' ) ) {
+            $this->bootstrap();
+        } else {
+            add_action( 'plugins_loaded', [ $this, 'bootstrap' ], 20 );
+        }
+
+        if ( did_action( 'init' ) ) {
+            $this->refresh_after_init();
+
+            if ( doing_action( 'init' ) ) {
+                add_action( 'init', [ $this, 'refresh_after_init' ], PHP_INT_MAX );
+            }
+        } else {
+            add_action( 'init', [ $this, 'refresh_after_init' ], 50 );
+        }
+    }
+
+    /**
+     * Perform the runtime initialization once plugins are loaded.
+     *
+     * @return void
+     */
+    public function bootstrap() : void {
         $this->instance  = $this->locate_instance();
         $this->is_active = $this->determine_is_active();
+    }
+
+    /**
+     * Re-evaluate the integration once WordPress finished running `init`.
+     *
+     * This ensures MultiLoca taxonomies and helpers that are registered on
+     * `init` are taken into account when determining availability.
+     *
+     * @return void
+     */
+    public function refresh_after_init() : void {
+        $this->instance        = $this->locate_instance();
+        $this->is_active       = $this->determine_is_active();
+        $this->locations_cache = null;
+        $this->location_meta_id_cache = [];
     }
 
     /**
@@ -57,6 +109,10 @@ class Woo_Contifico_MultiLocation_Compatibility {
     protected function determine_is_active() : bool {
         if ( $this->manual_activation ) {
             return true;
+        }
+
+        if ( ! is_object( $this->instance ) ) {
+            $this->instance = $this->locate_instance();
         }
 
         if ( is_object( $this->instance ) ) {
@@ -76,8 +132,45 @@ class Woo_Contifico_MultiLocation_Compatibility {
             }
         }
 
+        foreach ( $this->get_supported_taxonomies() as $taxonomy ) {
+            if ( taxonomy_exists( $taxonomy ) ) {
+                return true;
+            }
+        }
+
         if ( taxonomy_exists( 'multiloca_location' ) ) {
             return true;
+        }
+
+        if ( taxonomy_exists( 'locations-lite' ) ) {
+            return true;
+        }
+
+        $detected_classes = [
+            '\\MultiLocaLite\\Plugin',
+            '\\MultiLocaLite\\MultiLoca',
+            '\\MultiLoca\\Plugin',
+            '\\MultiLoca\\MultiLoca',
+            'Multiloca_Lite_Plugin',
+            'Multiloca_Lite',
+            'MultiLoca_Lite',
+            'MultiLoca',
+        ];
+
+        foreach ( $detected_classes as $class_name ) {
+            if ( class_exists( $class_name ) ) {
+                return true;
+            }
+        }
+
+        if ( defined( 'MULTILOCA_LITE_VERSION' ) || defined( 'MULTILOCA_VERSION' ) ) {
+            return true;
+        }
+
+        foreach ( $this->get_supported_post_types() as $post_type ) {
+            if ( post_type_exists( $post_type ) ) {
+                return true;
+            }
         }
 
         if ( post_type_exists( 'multiloca_location' ) ) {
@@ -86,6 +179,11 @@ class Woo_Contifico_MultiLocation_Compatibility {
 
         $option_locations = get_option( 'multiloca_locations' );
         if ( is_array( $option_locations ) && ! empty( $option_locations ) ) {
+            return true;
+        }
+
+        $alternative_locations = get_option( 'wcmlim_locations' );
+        if ( is_array( $alternative_locations ) && ! empty( $alternative_locations ) ) {
             return true;
         }
 
@@ -118,6 +216,9 @@ class Woo_Contifico_MultiLocation_Compatibility {
         } else {
             $this->is_active = $this->determine_is_active();
         }
+
+        $this->locations_cache = null;
+        $this->location_meta_id_cache = [];
     }
 
     /**
@@ -127,6 +228,8 @@ class Woo_Contifico_MultiLocation_Compatibility {
      */
     public function set_manual_locations( array $locations ) : void {
         $this->manual_locations = $locations;
+        $this->locations_cache        = null;
+        $this->location_meta_id_cache = [];
     }
 
     /**
@@ -139,6 +242,10 @@ class Woo_Contifico_MultiLocation_Compatibility {
             return [];
         }
 
+        if ( is_array( $this->locations_cache ) ) {
+            return $this->locations_cache;
+        }
+
         $function_sources = [
             'multiloca_lite_get_locations',
             'multiloca_get_locations',
@@ -148,7 +255,7 @@ class Woo_Contifico_MultiLocation_Compatibility {
             if ( function_exists( $function_name ) ) {
                 $locations = call_user_func( $function_name );
                 if ( is_array( $locations ) ) {
-                    return $locations;
+                    return $this->locations_cache = $locations;
                 }
             }
         }
@@ -158,7 +265,7 @@ class Woo_Contifico_MultiLocation_Compatibility {
             if ( is_callable( [ $manager, 'get_locations' ] ) ) {
                 $locations = call_user_func( [ $manager, 'get_locations' ] );
                 if ( is_array( $locations ) ) {
-                    return $locations;
+                    return $this->locations_cache = $locations;
                 }
             }
         }
@@ -166,30 +273,39 @@ class Woo_Contifico_MultiLocation_Compatibility {
         if ( is_object( $this->instance ) && method_exists( $this->instance, 'get_locations' ) ) {
             $locations = $this->instance->get_locations();
             if ( is_array( $locations ) ) {
-                return $locations;
+                return $this->locations_cache = $locations;
+            }
+        }
+
+        if ( ! did_action( 'init' ) ) {
+            $locations = $this->get_locations_from_database();
+            if ( ! empty( $locations ) ) {
+                return $this->locations_cache = $locations;
             }
         }
 
         $locations = $this->get_locations_from_taxonomy();
         if ( ! empty( $locations ) ) {
-            return $locations;
+            return $this->locations_cache = $locations;
         }
 
         $locations = $this->get_locations_from_posts();
         if ( ! empty( $locations ) ) {
-            return $locations;
+            return $this->locations_cache = $locations;
         }
 
         $locations = $this->get_locations_from_option();
         if ( ! empty( $locations ) ) {
-            return $locations;
+            return $this->locations_cache = $locations;
         }
 
         if ( $this->manual_activation && ! empty( $this->manual_locations ) ) {
-            return $this->manual_locations;
+            return $this->locations_cache = $this->manual_locations;
         }
 
-        return [];
+        $this->locations_cache = [];
+
+        return $this->locations_cache;
     }
 
     /**
@@ -198,28 +314,31 @@ class Woo_Contifico_MultiLocation_Compatibility {
      * @return array
      */
     protected function get_locations_from_taxonomy() : array {
-        if ( ! taxonomy_exists( 'multiloca_location' ) ) {
-            return [];
-        }
-
-        $terms = get_terms(
-            [
-                'taxonomy'   => 'multiloca_location',
-                'hide_empty' => false,
-            ]
-        );
-
-        if ( is_wp_error( $terms ) || empty( $terms ) ) {
-            return [];
-        }
-
         $locations = [];
 
-        foreach ( $terms as $term ) {
-            $locations[ $term->term_id ] = [
-                'id'   => $term->term_id,
-                'name' => $term->name,
-            ];
+        foreach ( $this->get_supported_taxonomies() as $taxonomy ) {
+            if ( ! taxonomy_exists( $taxonomy ) ) {
+                continue;
+            }
+
+            $terms = get_terms(
+                [
+                    'taxonomy'   => $taxonomy,
+                    'hide_empty' => false,
+                ]
+            );
+
+            if ( is_wp_error( $terms ) || empty( $terms ) ) {
+                continue;
+            }
+
+            foreach ( $terms as $term ) {
+                $term_id = $term->term_id;
+                $locations[ $term_id ] = [
+                    'id'   => $term_id,
+                    'name' => $term->name,
+                ];
+            }
         }
 
         return $locations;
@@ -278,7 +397,11 @@ class Woo_Contifico_MultiLocation_Compatibility {
         $stored_locations = get_option( 'multiloca_locations' );
 
         if ( ! is_array( $stored_locations ) || empty( $stored_locations ) ) {
-            return [];
+            $stored_locations = get_option( 'wcmlim_locations' );
+
+            if ( ! is_array( $stored_locations ) || empty( $stored_locations ) ) {
+                return [];
+            }
         }
 
         $locations = [];
@@ -308,6 +431,207 @@ class Woo_Contifico_MultiLocation_Compatibility {
         }
 
         return $locations;
+    }
+
+    /**
+     * Retrieve locations directly from the terms tables when the taxonomy isn't registered yet.
+     *
+     * @return array
+     */
+    protected function get_locations_from_database() : array {
+        global $wpdb;
+
+        if ( ! isset( $wpdb ) ) {
+            return [];
+        }
+
+        $taxonomies = array_filter( $this->get_supported_taxonomies() );
+
+        if ( empty( $taxonomies ) ) {
+            return [];
+        }
+
+        $placeholders = implode( ',', array_fill( 0, count( $taxonomies ), '%s' ) );
+
+        $query = sprintf(
+            'SELECT t.term_id, t.name FROM %1$s AS t INNER JOIN %2$s AS tt ON t.term_id = tt.term_id WHERE tt.taxonomy IN (%3$s)',
+            $wpdb->terms,
+            $wpdb->term_taxonomy,
+            $placeholders
+        );
+
+        $prepared = $wpdb->prepare( $query, ...$taxonomies );
+
+        if ( false === $prepared ) {
+            return [];
+        }
+
+        $results = $wpdb->get_results( $prepared );
+
+        if ( empty( $results ) ) {
+            return [];
+        }
+
+        $locations = [];
+
+        foreach ( $results as $row ) {
+            $term_id = isset( $row->term_id ) ? (int) $row->term_id : 0;
+            if ( $term_id <= 0 ) {
+                continue;
+            }
+
+            $name = isset( $row->name ) ? trim( (string) $row->name ) : '';
+            if ( '' === $name ) {
+                $name = (string) $term_id;
+            }
+
+            $locations[ $term_id ] = [
+                'id'   => $term_id,
+                'name' => $name,
+            ];
+        }
+
+        return $locations;
+    }
+
+    /**
+     * Retrieve a list of taxonomies used by MultiLoca variants.
+     *
+     * @return array
+     */
+    protected function get_supported_taxonomies() : array {
+        return [
+            'multiloca_location',
+            'locations-lite',
+        ];
+    }
+
+    /**
+     * Retrieve a list of post types used by MultiLoca variants.
+     *
+     * @return array
+     */
+    protected function get_supported_post_types() : array {
+        return [
+            'multiloca_location',
+        ];
+    }
+
+    /**
+     * Update stock information directly through product meta when no helper is available.
+     *
+     * @param int        $product_id  Product identifier.
+     * @param string|int $location_id Location identifier.
+     * @param float      $quantity    Quantity to set.
+     *
+     * @return bool
+     */
+    protected function update_stock_via_post_meta( int $product_id, $location_id, float $quantity ) : bool {
+        $meta_location_id = $this->normalize_location_meta_id( $location_id );
+
+        if ( '' === $meta_location_id ) {
+            return false;
+        }
+
+        if ( ! function_exists( 'wc_get_product' ) ) {
+            return false;
+        }
+
+        $product = wc_get_product( $product_id );
+
+        if ( ! $product ) {
+            return false;
+        }
+
+        if ( function_exists( 'wc_stock_amount' ) ) {
+            $quantity = wc_stock_amount( $quantity );
+        } else {
+            $quantity = (float) $quantity;
+        }
+
+        $meta_key = sprintf( 'wcmlim_stock_at_%s', $meta_location_id );
+
+        update_post_meta( $product_id, $meta_key, $quantity );
+
+        return true;
+    }
+
+    /**
+     * Normalize a location identifier to be used with stock meta keys.
+     *
+     * @param mixed $location_id Raw location identifier.
+     *
+     * @return string
+     */
+    protected function normalize_location_meta_id( $location_id ) : string {
+        if ( is_object( $location_id ) ) {
+            if ( isset( $location_id->term_id ) ) {
+                $location_id = $location_id->term_id;
+            } elseif ( isset( $location_id->id ) ) {
+                $location_id = $location_id->id;
+            } elseif ( isset( $location_id->ID ) ) {
+                $location_id = $location_id->ID;
+            }
+        }
+
+        $location_id = trim( (string) $location_id );
+
+        if ( '' === $location_id ) {
+            return '';
+        }
+
+        if ( isset( $this->location_meta_id_cache[ $location_id ] ) ) {
+            return $this->location_meta_id_cache[ $location_id ];
+        }
+
+        $numeric = preg_replace( '/[^0-9]/', '', $location_id );
+
+        if ( '' !== $numeric ) {
+            return $this->location_meta_id_cache[ $location_id ] = $numeric;
+        }
+
+        $resolved = $this->resolve_location_meta_id_from_taxonomies( $location_id );
+
+        if ( '' !== $resolved ) {
+            return $this->location_meta_id_cache[ $location_id ] = $resolved;
+        }
+
+        $normalized = preg_replace( '/[^A-Za-z0-9_-]/', '', $location_id );
+
+        return $this->location_meta_id_cache[ $location_id ] = $normalized;
+    }
+
+    /**
+     * Attempt to resolve a location identifier to an existing taxonomy term ID.
+     *
+     * @param string $location_identifier Location identifier from the mapping table.
+     *
+     * @return string
+     */
+    protected function resolve_location_meta_id_from_taxonomies( string $location_identifier ) : string {
+        $slug = sanitize_title( $location_identifier );
+
+        foreach ( $this->get_supported_taxonomies() as $taxonomy ) {
+            if ( ! taxonomy_exists( $taxonomy ) ) {
+                continue;
+            }
+
+            if ( '' !== $slug ) {
+                $term = get_term_by( 'slug', $slug, $taxonomy );
+
+                if ( $term && ! is_wp_error( $term ) && isset( $term->term_id ) ) {
+                    return (string) $term->term_id;
+                }
+            }
+
+            $term = get_term_by( 'name', $location_identifier, $taxonomy );
+
+            if ( $term && ! is_wp_error( $term ) && isset( $term->term_id ) ) {
+                return (string) $term->term_id;
+            }
+        }
+
+        return '';
     }
 
     /**
@@ -402,6 +726,10 @@ class Woo_Contifico_MultiLocation_Compatibility {
             }
         }
 
+        if ( $this->update_stock_via_post_meta( $product_id, $location_id, $quantity ) ) {
+            return true;
+        }
+
         /**
          * Allow third-parties to handle the stock update.
          */
@@ -451,6 +779,7 @@ class Woo_Contifico_MultiLocation_Compatibility {
             '\\MultiLoca\\MultiLoca',
             'MultiLoca_Lite',
             'MultiLoca',
+            'Multiloca_Lite_Plugin',
         ];
 
         foreach ( $possible_classes as $class_name ) {

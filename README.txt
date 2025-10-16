@@ -33,13 +33,21 @@ Para activar esta funcionalidad es necesario:
    - Si la sección no se muestra, activa la casilla **Activar compatibilidad MultiLoca manualmente** (disponible desde la versión
      4.1.2) para forzar la carga de la sección, incluso cuando el plugin no sea detectado automáticamente.
    - Cuando uses la activación manual, completa el campo **Ubicaciones MultiLoca manuales** con un identificador por línea o en
-     el formato `ID|Nombre` (por ejemplo `sucursal-centro|Sucursal Centro`).
+     el formato `ID|Nombre` (por ejemplo `sucursal-centro|Sucursal Centro`). También puedes ingresar el *slug* o el nombre exacto
+     de la ubicación que aparece en MultiLoca; Woo Contífico resolverá el identificador numérico correcto durante la
+     sincronización para actualizar el inventario.
    - Si prefieres la detección automática, verifica que el plugin MultiLoca esté activo, que tenga al menos una ubicación creada
-     y vuelve a cargar la página de integración.
-   - La integración detecta MultiLoca incluso cuando el plugin no expone una instancia global; si continúas sin ver la sección,
+     y vuelve a cargar la página de integración. Cuando MultiLoca y Woo Contífico se inicializan al mismo tiempo (por ejemplo,
+     al cargar el panel de administración tras activar ambos plugins), la compatibilidad espera a que WordPress termine de
+     ejecutar todos los callbacks de `init` antes de evaluar la disponibilidad para asegurar que las taxonomías como
+     `locations-lite` ya estén registradas.
+   - La integración detecta MultiLoca incluso cuando el plugin no expone una instancia global y espera a que WordPress cargue todos los plugins activos antes de evaluarla. Además, si la página de ajustes se renderiza antes de que MultiLoca registre sus taxonomías en `init`, la compatibilidad consulta directamente la base de datos para listar las ubicaciones existentes, evitando que la sección aparezca vacía por cargar la página demasiado pronto. Si continúas sin ver la sección,
      confirma que la taxonomía o el tipo de contenido `multiloca_location` existan en tu sitio o que la opción
      `multiloca_locations` contenga ubicaciones guardadas. En ausencia de estos indicadores, contacta al soporte de MultiLoca
      para asegurarte de que las funciones `multiloca_lite_get_locations`/`multiloca_get_locations` estén disponibles.
+   - Las variantes recientes de MultiLoca Lite distribuidas por Techspawn pueden registrar la taxonomía `locations-lite` y
+     gestionar el inventario mediante metadatos `wcmlim_stock_at_{ID}`. Esta integración reconoce automáticamente ese esquema y
+     actualizará el stock escribiendo en dichos metadatos cuando no haya funciones públicas disponibles.
 4. Asegurarse de que WooCommerce tenga habilitado el manejo de inventario global (*WooCommerce → Ajustes → Productos → Inventario → Habilitar la gestión de inventario*).
 
 Una vez guardados los cambios, la sincronización de inventario (manual o automática) consultará el stock de cada bodega mapeada en
