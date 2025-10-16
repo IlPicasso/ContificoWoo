@@ -38,6 +38,12 @@ define( 'WOO_CONTIFICO_URL', plugin_dir_url( __FILE__ ) );
 # Currently plugin version
 define( 'WOO_CONTIFICO_VERSION', '4.1.2' );
 
+# GitHub repository metadata for auto-updates
+define( 'WOO_CONTIFICO_REPO_OWNER', apply_filters( 'woo_contifico_repo_owner', 'otakupahp' ) );
+define( 'WOO_CONTIFICO_REPO_NAME', apply_filters( 'woo_contifico_repo_name', 'ContificoWoo' ) );
+define( 'WOO_CONTIFICO_REPO_BRANCH', apply_filters( 'woo_contifico_repo_branch', 'main' ) );
+define( 'WOO_CONTIFICO_REPO_ACCESS_TOKEN', apply_filters( 'woo_contifico_repo_access_token', '' ) );
+
 # Environment states
 define( 'WOO_CONTIFICO_TEST', 1 );
 define( 'WOO_CONTIFICO_PRODUCTION', 2 );
@@ -68,6 +74,7 @@ register_deactivation_hook( WOO_CONTIFICO_FILE, 'deactivate_woo_contifico' );
  * admin-specific hooks, and public-facing site hooks.
  */
 require WOO_CONTIFICO_PATH . 'includes/class-woo-contifico.php';
+require_once WOO_CONTIFICO_PATH . 'includes/class-woo-contifico-updater.php';
 
 add_action( 'before_woocommerce_init', static function() {
         if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
@@ -91,3 +98,23 @@ function run_woo_contifico() {
 
 }
 add_action( 'init', 'run_woo_contifico', 0 );
+
+/**
+ * Bootstraps the GitHub-based plugin updater.
+ */
+function woo_contifico_bootstrap_updater() {
+        if ( ! is_admin() ) {
+                return;
+        }
+
+        $updater = new Woo_Contifico_Updater(
+                WOO_CONTIFICO_FILE,
+                WOO_CONTIFICO_REPO_OWNER,
+                WOO_CONTIFICO_REPO_NAME,
+                WOO_CONTIFICO_REPO_BRANCH,
+                WOO_CONTIFICO_REPO_ACCESS_TOKEN
+        );
+
+        $updater->init();
+}
+add_action( 'admin_init', 'woo_contifico_bootstrap_updater' );
