@@ -1,17 +1,17 @@
 <?php
 /**
  *
- * @link              https://otakupahp.com/quien-es-pablo-hernandez-otakupahp
+ * @link              https://github.com/IlPicasso/ContificoWoo
  * @since             1.0.0
  * @package           Woo_Contifico
  *
  * @wordpress-plugin
  * Plugin Name:       Woocommerce - Facturación Electrónica - Contífico
- * Plugin URI:        https://otakupahp.com/producto/woocommerce-factura-electronica-con-contifico/
+ * Plugin URI:        https://github.com/IlPicasso/ContificoWoo
  * Description:       Integración simple de facturación electrónica para woocommerce a través del servicio de Contífico. Servicio solo válido en Ecuador
- * Version:           4.1.2
- * Author:            Pablo Hernández (OtakuPahp)
- * Author URI:        https://otakupahp.com/quien-es-pablo-hernandez-otakupahp
+ * Version:           4.1.3
+ * Author:            IlPicasso
+ * Author URI:        https://github.com/IlPicasso
  * License:           GPL-2.0+
  * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
  * Text Domain:       woo-contifico
@@ -36,7 +36,13 @@ define( 'WOO_CONTIFICO_PATH', plugin_dir_path( __FILE__ ) );
 define( 'WOO_CONTIFICO_URL', plugin_dir_url( __FILE__ ) );
 
 # Currently plugin version
-define( 'WOO_CONTIFICO_VERSION', '4.1.2' );
+define( 'WOO_CONTIFICO_VERSION', '4.1.3' );
+
+# GitHub repository metadata for auto-updates
+define( 'WOO_CONTIFICO_REPO_OWNER', apply_filters( 'woo_contifico_repo_owner', 'IlPicasso' ) );
+define( 'WOO_CONTIFICO_REPO_NAME', apply_filters( 'woo_contifico_repo_name', 'ContificoWoo' ) );
+define( 'WOO_CONTIFICO_REPO_BRANCH', apply_filters( 'woo_contifico_repo_branch', 'main' ) );
+define( 'WOO_CONTIFICO_REPO_ACCESS_TOKEN', apply_filters( 'woo_contifico_repo_access_token', '' ) );
 
 # Environment states
 define( 'WOO_CONTIFICO_TEST', 1 );
@@ -68,6 +74,7 @@ register_deactivation_hook( WOO_CONTIFICO_FILE, 'deactivate_woo_contifico' );
  * admin-specific hooks, and public-facing site hooks.
  */
 require WOO_CONTIFICO_PATH . 'includes/class-woo-contifico.php';
+require_once WOO_CONTIFICO_PATH . 'includes/class-woo-contifico-updater.php';
 
 add_action( 'before_woocommerce_init', static function() {
         if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
@@ -91,3 +98,23 @@ function run_woo_contifico() {
 
 }
 add_action( 'init', 'run_woo_contifico', 0 );
+
+/**
+ * Bootstraps the GitHub-based plugin updater.
+ */
+function woo_contifico_bootstrap_updater() {
+        if ( ! is_admin() ) {
+                return;
+        }
+
+        $updater = new Woo_Contifico_Updater(
+                WOO_CONTIFICO_FILE,
+                WOO_CONTIFICO_REPO_OWNER,
+                WOO_CONTIFICO_REPO_NAME,
+                WOO_CONTIFICO_REPO_BRANCH,
+                WOO_CONTIFICO_REPO_ACCESS_TOKEN
+        );
+
+        $updater->init();
+}
+add_action( 'admin_init', 'woo_contifico_bootstrap_updater' );

@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.3 =
+* Se actualiza la información del plugin para reflejar a IlPicasso como autor y se apunta el auto-actualizador al nuevo repositorio público.
+
 = 4.1.2 =
 * Se añade la activación manual de la compatibilidad con MultiLoca y el soporte para definir ubicaciones manuales.
 * Se documenta el flujo de configuración manual para cuando la detección automática no está disponible.
