@@ -48,6 +48,13 @@ Para activar esta funcionalidad es necesario:
    - Las variantes recientes de MultiLoca Lite distribuidas por Techspawn pueden registrar la taxonomía `locations-lite` y
      gestionar el inventario mediante metadatos `wcmlim_stock_at_{ID}`. Esta integración reconoce automáticamente ese esquema y
      actualizará el stock escribiendo en dichos metadatos cuando no haya funciones públicas disponibles.
+   - Si sincronizas productos variables, Woo Contífico sumará automáticamente el stock de cada variación por ubicación y lo
+     guardará en el producto padre para que los listados y widgets de MultiLoca muestren la disponibilidad correcta sin pasos
+     manuales.
+   - Cuando Contífico usa el formato `CODIGOMADRE/TALLA` u otras variantes con `/` para identificar tallas o atributos, el
+     sincronizador buscará automáticamente la variación correspondiente en WooCommerce (ya sea que el SKU local use guiones,
+     guiones bajos o no incluya separadores) y actualizará sus bodegas, incluso si solo las variaciones tienen activada la
+     gestión de inventario.
 4. Asegurarse de que WooCommerce tenga habilitado el manejo de inventario global (*WooCommerce → Ajustes → Productos → Inventario → Habilitar la gestión de inventario*).
 
 Una vez guardados los cambios, la sincronización de inventario (manual o automática) consultará el stock de cada bodega mapeada en

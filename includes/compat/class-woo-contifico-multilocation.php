@@ -756,7 +756,92 @@ class Woo_Contifico_MultiLocation_Compatibility {
             return false;
         }
 
-        return $this->update_stock( $product->get_id(), $location_id, $quantity );
+        $updated = $this->update_stock( $product->get_id(), $location_id, $quantity );
+
+        if ( ! $updated ) {
+            return false;
+        }
+
+        if ( $product->is_type( 'variation' ) ) {
+            $this->sync_parent_location_stock( $product, $location_id );
+        }
+
+        return true;
+    }
+
+    /**
+     * Recalculate and persist the aggregate stock for the variable parent when a variation changes.
+     *
+     * @param WC_Product $variation    Variation product instance.
+     * @param mixed      $location_id  Raw location identifier.
+     *
+     * @return void
+     */
+    protected function sync_parent_location_stock( $variation, $location_id ) : void {
+        if ( ! is_object( $variation ) || ! is_a( $variation, 'WC_Product' ) ) {
+            return;
+        }
+
+        if ( ! $variation->is_type( 'variation' ) ) {
+            return;
+        }
+
+        $parent_id = $variation->get_parent_id();
+
+        if ( $parent_id <= 0 ) {
+            return;
+        }
+
+        $meta_location_id = $this->normalize_location_meta_id( $location_id );
+
+        if ( '' === $meta_location_id ) {
+            return;
+        }
+
+        if ( ! function_exists( 'wc_get_product' ) ) {
+            return;
+        }
+
+        $parent = wc_get_product( $parent_id );
+
+        if ( ! $parent || ! $parent->is_type( 'variable' ) ) {
+            return;
+        }
+
+        $meta_key = sprintf( 'wcmlim_stock_at_%s', $meta_location_id );
+        $total    = 0.0;
+
+        foreach ( (array) $parent->get_children() as $child_id ) {
+            $child_stock = get_post_meta( $child_id, $meta_key, true );
+
+            if ( '' === $child_stock ) {
+                continue;
+            }
+
+            $total += (float) $child_stock;
+        }
+
+        if ( function_exists( 'wc_stock_amount' ) ) {
+            $total = wc_stock_amount( $total );
+        }
+
+        $current = get_post_meta( $parent_id, $meta_key, true );
+
+        if ( '' === $current ) {
+            $current = null;
+        } else {
+            $current = (float) $current;
+
+            if ( function_exists( 'wc_stock_amount' ) ) {
+                $current = wc_stock_amount( $current );
+            }
+        }
+
+        if ( null !== $current && (float) $current === (float) $total ) {
+            return;
+        }
+
+        update_post_meta( $parent_id, $meta_key, $total );
     }
 
     /**
