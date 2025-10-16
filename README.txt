@@ -33,7 +33,9 @@ Para activar esta funcionalidad es necesario:
    - Si la sección no se muestra, activa la casilla **Activar compatibilidad MultiLoca manualmente** (disponible desde la versión
      4.1.2) para forzar la carga de la sección, incluso cuando el plugin no sea detectado automáticamente.
    - Cuando uses la activación manual, completa el campo **Ubicaciones MultiLoca manuales** con un identificador por línea o en
-     el formato `ID|Nombre` (por ejemplo `sucursal-centro|Sucursal Centro`).
+     el formato `ID|Nombre` (por ejemplo `sucursal-centro|Sucursal Centro`). También puedes ingresar el *slug* o el nombre exacto
+     de la ubicación que aparece en MultiLoca; Woo Contífico resolverá el identificador numérico correcto durante la
+     sincronización para actualizar el inventario.
    - Si prefieres la detección automática, verifica que el plugin MultiLoca esté activo, que tenga al menos una ubicación creada
      y vuelve a cargar la página de integración. Cuando MultiLoca y Woo Contífico se inicializan al mismo tiempo (por ejemplo,
      al cargar el panel de administración tras activar ambos plugins), la compatibilidad espera a que WordPress termine de

@@ -45,6 +45,13 @@ class Woo_Contifico_MultiLocation_Compatibility {
     protected $locations_cache = null;
 
     /**
+     * Cache for resolved location identifiers used in stock meta keys.
+     *
+     * @var array
+     */
+    protected $location_meta_id_cache = [];
+
+    /**
      * Constructor.
      */
     public function __construct() {
@@ -87,6 +94,7 @@ class Woo_Contifico_MultiLocation_Compatibility {
         $this->instance        = $this->locate_instance();
         $this->is_active       = $this->determine_is_active();
         $this->locations_cache = null;
+        $this->location_meta_id_cache = [];
     }
 
     /**
@@ -210,6 +218,7 @@ class Woo_Contifico_MultiLocation_Compatibility {
         }
 
         $this->locations_cache = null;
+        $this->location_meta_id_cache = [];
     }
 
     /**
@@ -219,7 +228,8 @@ class Woo_Contifico_MultiLocation_Compatibility {
      */
     public function set_manual_locations( array $locations ) : void {
         $this->manual_locations = $locations;
-        $this->locations_cache  = null;
+        $this->locations_cache        = null;
+        $this->location_meta_id_cache = [];
     }
 
     /**
@@ -570,13 +580,58 @@ class Woo_Contifico_MultiLocation_Compatibility {
             return '';
         }
 
+        if ( isset( $this->location_meta_id_cache[ $location_id ] ) ) {
+            return $this->location_meta_id_cache[ $location_id ];
+        }
+
         $numeric = preg_replace( '/[^0-9]/', '', $location_id );
 
         if ( '' !== $numeric ) {
-            return $numeric;
+            return $this->location_meta_id_cache[ $location_id ] = $numeric;
         }
 
-        return preg_replace( '/[^A-Za-z0-9_-]/', '', $location_id );
+        $resolved = $this->resolve_location_meta_id_from_taxonomies( $location_id );
+
+        if ( '' !== $resolved ) {
+            return $this->location_meta_id_cache[ $location_id ] = $resolved;
+        }
+
+        $normalized = preg_replace( '/[^A-Za-z0-9_-]/', '', $location_id );
+
+        return $this->location_meta_id_cache[ $location_id ] = $normalized;
+    }
+
+    /**
+     * Attempt to resolve a location identifier to an existing taxonomy term ID.
+     *
+     * @param string $location_identifier Location identifier from the mapping table.
+     *
+     * @return string
+     */
+    protected function resolve_location_meta_id_from_taxonomies( string $location_identifier ) : string {
+        $slug = sanitize_title( $location_identifier );
+
+        foreach ( $this->get_supported_taxonomies() as $taxonomy ) {
+            if ( ! taxonomy_exists( $taxonomy ) ) {
+                continue;
+            }
+
+            if ( '' !== $slug ) {
+                $term = get_term_by( 'slug', $slug, $taxonomy );
+
+                if ( $term && ! is_wp_error( $term ) && isset( $term->term_id ) ) {
+                    return (string) $term->term_id;
+                }
+            }
+
+            $term = get_term_by( 'name', $location_identifier, $taxonomy );
+
+            if ( $term && ! is_wp_error( $term ) && isset( $term->term_id ) ) {
+                return (string) $term->term_id;
+            }
+        }
+
+        return '';
     }
 
     /**
