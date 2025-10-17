@@ -799,13 +799,28 @@ class Woo_Contifico
         $this->loader->add_action('admin_menu', $plugin_admin, 'register_menu');
         $this->loader->add_action('admin_notices', $plugin_admin, 'admin_init_notice');
 
+        # Display Contífico identifiers in WooCommerce product editors
+        $this->loader->add_action(
+                'woocommerce_product_options_general_product_data',
+                $plugin_admin,
+                'display_contifico_product_identifier'
+        );
+        $this->loader->add_action(
+                'woocommerce_product_after_variable_attributes',
+                $plugin_admin,
+                'display_contifico_variation_identifier',
+                10,
+                3
+        );
+
         # Stock manage hooks
 	    $this->loader->add_action('woocommerce_reduce_order_stock', $plugin_admin, 'transfer_contifico_stock');
 	    $this->loader->add_action('woocommerce_restore_order_stock', $plugin_admin, 'restore_contifico_stock');
 	    $this->loader->add_action('woocommerce_order_refunded', $plugin_admin, 'restore_contifico_stock', 10, 2);
 
         # Register Ajax hooks
-	    $this->loader->add_action('wp_ajax_fetch_products', $plugin_admin, 'fetch_products');
+            $this->loader->add_action('wp_ajax_fetch_products', $plugin_admin, 'fetch_products');
+            $this->loader->add_action('wp_ajax_woo_contifico_sync_single_product', $plugin_admin, 'sync_single_product');
 
 	    # Add plugin crons
 	    $this->loader->add_action('woo_contifico_sync_stock', $plugin_admin, 'batch_sync_processing', 10, 1);
