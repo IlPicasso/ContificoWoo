@@ -330,133 +330,139 @@
                         } );
                 } );
 
-                $( '.woo-contifico-product-id-field' ).each( function () {
-                        const $field            = $( this );
-                        const $button           = $field.find( '.woo-contifico-sync-product-button' );
+                function updateProductIdentifierDisplay( $field, contificoId, missingIdentifier ) {
+                        const $value   = $field.find( '.woo-contifico-product-id-value' );
+                        const $missing = $field.find( '.woo-contifico-product-id-missing' );
+
+                        if ( contificoId ) {
+                                const $newNode = $( '<span />', {
+                                        'class': 'woo-contifico-product-id-value',
+                                        text:   contificoId
+                                } );
+
+                                if ( $value.length ) {
+                                        $value.replaceWith( $newNode );
+                                } else if ( $missing.length ) {
+                                        $missing.replaceWith( $newNode );
+                                } else {
+                                        $field.find( '.form-field' ).append( $newNode );
+                                }
+
+                                return;
+                        }
+
+                        if ( ! missingIdentifier ) {
+                                return;
+                        }
+
+                        if ( $value.length ) {
+                                $value.replaceWith( $( '<span />', {
+                                        'class': 'woo-contifico-product-id-missing',
+                                        text:   missingIdentifier
+                                } ) );
+                        } else if ( ! $missing.length ) {
+                                $field.find( '.form-field' ).append( $( '<span />', {
+                                        'class': 'woo-contifico-product-id-missing',
+                                        text:   missingIdentifier
+                                } ) );
+                        }
+                }
+
+                $( document ).on( 'click', '.woo-contifico-sync-product-button', function ( event ) {
+                        event.preventDefault();
+
+                        const $button  = $( this );
+                        const $field   = $button.closest( '.woo-contifico-product-id-field' );
+
+                        if ( ! $field.length ) {
+                                return;
+                        }
+
                         const $spinner          = $field.find( '.woo-contifico-sync-spinner' );
                         const $result           = $field.find( '.woo-contifico-sync-result' );
                         const genericError      = $field.data( 'generic-error' ) || '';
                         const missingIdentifier = $field.data( 'missing-identifier' ) || '';
-                        const productId         = parseInt( $field.data( 'product-id' ), 10 ) || 0;
+                        const productId         = parseInt( $field.attr( 'data-product-id' ) || '0', 10 ) || 0;
+                        const $skuInput         = $( '#_sku' );
+                        const skuFromAttr       = $.trim( $field.attr( 'data-product-sku' ) || '' );
+                        const skuFromInput      = $skuInput.length ? $.trim( $skuInput.val() ) : '';
+                        const sku               = skuFromAttr || skuFromInput;
 
-                        if ( ! $button.length ) {
+                        $result.removeClass( 'error success' ).empty();
+
+                        if ( syncingMessage ) {
+                                $result.text( syncingMessage ).show();
+                        } else {
+                                $result.hide();
+                        }
+
+                        if ( ! ajaxEndpoint ) {
+                                if ( genericError ) {
+                                        $result.addClass( 'error' ).text( genericError ).show();
+                                }
+
                                 return;
                         }
 
-                        $button.on( 'click', function ( event ) {
-                                event.preventDefault();
+                        $button.prop( 'disabled', true );
+                        $spinner.addClass( 'is-active' );
 
-                                const $skuInput    = $( '#_sku' );
-                                const skuFromAttr  = $.trim( $field.data( 'product-sku' ) || '' );
-                                const skuFromInput = $skuInput.length ? $.trim( $skuInput.val() ) : '';
-                                const sku          = skuFromAttr || skuFromInput;
+                        const requestData = {
+                                action:   'woo_contifico_sync_single_product',
+                                security: pluginGlobals.woo_nonce
+                        };
 
-                                $result.removeClass( 'error success' ).empty();
+                        if ( sku ) {
+                                requestData.sku = sku;
+                        }
 
-                                if ( syncingMessage ) {
-                                        $result.text( syncingMessage ).show();
+                        if ( productId > 0 ) {
+                                requestData.product_id = productId;
+                        }
+
+                        $.ajax( {
+                                type: 'post',
+                                url: ajaxEndpoint,
+                                data: requestData
+                        } ).done( function ( response ) {
+                                if ( response && response.success && response.data ) {
+                                        const data = response.data;
+
+                                        renderSingleSyncResult( $result, data );
+
+                                        if ( data.woocommerce_sku ) {
+                                                $field.attr( 'data-product-sku', data.woocommerce_sku );
+                                                $field.data( 'product-sku', data.woocommerce_sku );
+
+                                                if ( $skuInput.length && $.trim( $skuInput.val() || '' ) === '' ) {
+                                                        $skuInput.val( data.woocommerce_sku );
+                                                }
+                                        }
+
+                                        updateProductIdentifierDisplay( $field, data.contifico_id || '', missingIdentifier );
                                 } else {
-                                        $result.hide();
-                                }
-
-                                if ( ! ajaxEndpoint ) {
-                                        if ( genericError ) {
-                                                $result.addClass( 'error' ).text( genericError ).show();
-                                        }
-
-                                        return;
-                                }
-
-                                $button.prop( 'disabled', true );
-                                $spinner.addClass( 'is-active' );
-
-                                const requestData = {
-                                        action:   'woo_contifico_sync_single_product',
-                                        security: pluginGlobals.woo_nonce
-                                };
-
-                                if ( sku ) {
-                                        requestData.sku = sku;
-                                }
-
-                                if ( productId > 0 ) {
-                                        requestData.product_id = productId;
-                                }
-
-                                $.ajax( {
-                                        type: 'post',
-                                        url: ajaxEndpoint,
-                                        data: requestData
-                                } ).done( function ( response ) {
-                                        if ( response && response.success && response.data ) {
-                                                const data = response.data;
-
-                                                renderSingleSyncResult( $result, data );
-
-                                                if ( data.woocommerce_sku ) {
-                                                        $field.attr( 'data-product-sku', data.woocommerce_sku );
-                                                        $field.data( 'product-sku', data.woocommerce_sku );
-
-                                                        if ( $skuInput.length && $.trim( $skuInput.val() || '' ) === '' ) {
-                                                                $skuInput.val( data.woocommerce_sku );
-                                                        }
-                                                }
-
-                                                if ( data.contifico_id ) {
-                                                        const $value   = $field.find( '.woo-contifico-product-id-value' );
-                                                        const $missing = $field.find( '.woo-contifico-product-id-missing' );
-                                                        const $newNode = $( '<span />', {
-                                                                'class': 'woo-contifico-product-id-value',
-                                                                text:    data.contifico_id
-                                                        } );
-
-                                                        if ( $value.length ) {
-                                                                $value.replaceWith( $newNode );
-                                                        } else if ( $missing.length ) {
-                                                                $missing.replaceWith( $newNode );
-                                                        } else {
-                                                                $field.find( '.form-field' ).append( $newNode );
-                                                        }
-                                                } else if ( missingIdentifier ) {
-                                                        const $value   = $field.find( '.woo-contifico-product-id-value' );
-                                                        const $missing = $field.find( '.woo-contifico-product-id-missing' );
-
-                                                        if ( $value.length ) {
-                                                                $value.replaceWith( $( '<span />', {
-                                                                        'class': 'woo-contifico-product-id-missing',
-                                                                        text:   missingIdentifier
-                                                                } ) );
-                                                        } else if ( ! $missing.length ) {
-                                                                $field.find( '.form-field' ).append( $( '<span />', {
-                                                                        'class': 'woo-contifico-product-id-missing',
-                                                                        text:   missingIdentifier
-                                                                } ) );
-                                                        }
-                                                }
-                                        } else {
-                                                const message = ( response && response.data && response.data.message ) ? response.data.message : genericError;
-
-                                                if ( message ) {
-                                                        $result.addClass( 'error' ).text( message ).show();
-                                                }
-                                        }
-                                } ).fail( function ( xhr ) {
-                                        let message = genericError;
-
-                                        if ( xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message ) {
-                                                message = xhr.responseJSON.data.message;
-                                        }
-                                        else if ( xhr.responseText ) {
-                                                message = xhr.responseText;
-                                        }
+                                        const message = ( response && response.data && response.data.message ) ? response.data.message : genericError;
 
                                         if ( message ) {
                                                 $result.addClass( 'error' ).text( message ).show();
                                         }
-                                } ).always( function () {
-                                        $button.prop( 'disabled', false );
-                                        $spinner.removeClass( 'is-active' );
-                                } );
+                                }
+                        } ).fail( function ( xhr ) {
+                                let message = genericError;
+
+                                if ( xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message ) {
+                                        message = xhr.responseJSON.data.message;
+                                }
+                                else if ( xhr.responseText ) {
+                                        message = xhr.responseText;
+                                }
+
+                                if ( message ) {
+                                        $result.addClass( 'error' ).text( message ).show();
+                                }
+                        } ).always( function () {
+                                $button.prop( 'disabled', false );
+                                $spinner.removeClass( 'is-active' );
                         } );
                 } );
 
