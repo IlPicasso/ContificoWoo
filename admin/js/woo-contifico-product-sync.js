@@ -10,6 +10,7 @@
                         || ( typeof window.ajaxurl !== 'undefined' ? window.ajaxurl : '' );
                 const nonce         = pluginGlobals.woo_nonce || ( namespace.pluginGlobals ? namespace.pluginGlobals.woo_nonce : '' );
                 const messages      = $.extend( {}, namespace.messages || {}, pluginGlobals.messages || {} );
+                const reloadState   = namespace.productSyncReloadState = namespace.productSyncReloadState || { timerId: null };
 
                 const syncingMessage         = messages.syncing || '';
                 const genericErrorMessage    = messages.genericError || '';
@@ -87,7 +88,7 @@
                         const reloadDelay       = Number.isNaN( reloadDelayAttr ) || reloadDelayAttr < 0 ? defaultReloadDelay : reloadDelayAttr;
                         const reloadMessageAttr = $field.attr( 'data-reload-message' );
                         const reloadMessage     = reloadMessageAttr ? String( reloadMessageAttr ) : ( messages.pageReloadPending || '' );
-                        const reloadOnSuccess   = [ '1', 'true', 'yes', 'on' ].indexOf( reloadAttribute ) !== -1;
+                        const reloadOnSuccess   = reloadAttribute === '' ? true : [ '1', 'true', 'yes', 'on' ].indexOf( reloadAttribute ) !== -1;
                         const missingIdentifier = $field.data( 'missing-identifier' )
                                 || $field.attr( 'data-missing-identifier' )
                                 || fallbackMissingId;
@@ -161,6 +162,12 @@
                                         updateIdentifierDisplay( $field, data.contifico_id || '', missingIdentifier );
 
                                         if ( reloadOnSuccess ) {
+                                                if ( reloadState && reloadState.timerId ) {
+                                                        window.clearTimeout( reloadState.timerId );
+                                                }
+
+                                                $result.find( '.woo-contifico-sync-result-reloading' ).remove();
+
                                                 if ( reloadMessage ) {
                                                         $result.append( $( '<p />' )
                                                                 .addClass( 'woo-contifico-sync-result-reloading' )
@@ -168,7 +175,7 @@
                                                         );
                                                 }
 
-                                                window.setTimeout( function() {
+                                                reloadState.timerId = window.setTimeout( function() {
                                                         window.location.reload();
                                                 }, reloadDelay );
                                         }

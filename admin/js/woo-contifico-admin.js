@@ -208,6 +208,137 @@
 
                 namespace.renderSingleSyncResult = renderSingleSyncResult;
 
+                function renderGlobalSyncUpdates( updates ) {
+                        const $section = $( '#' + pluginGlobals.plugin_name + '-settings-page .fetch-products' );
+
+                        if ( ! $section.length ) {
+                                return;
+                        }
+
+                        const $summary       = $section.find( '.sync-summary' );
+                        const $heading       = $summary.find( '.sync-summary-heading' );
+                        const $emptyMessage  = $summary.find( '.sync-summary-empty' );
+                        const $updatesList   = $summary.find( '.sync-summary-list' );
+                        const headingText    = messages.globalSyncHeading || ( $heading.length ? $heading.text() : '' ) || 'Resumen de actualizaciones';
+                        const emptyStateText = messages.globalSyncEmpty || ( $emptyMessage.length ? $emptyMessage.text() : '' ) || 'No se registraron cambios durante la sincronización.';
+
+                        if ( $heading.length ) {
+                                $heading.text( headingText );
+                        }
+
+                        if ( ! Array.isArray( updates ) || updates.length === 0 ) {
+                                if ( $updatesList.length ) {
+                                        $updatesList.empty().hide();
+                                }
+
+                                if ( $emptyMessage.length ) {
+                                        $emptyMessage.text( emptyStateText ).show();
+                                }
+
+                                if ( $summary.length ) {
+                                        $summary.attr( 'hidden', 'hidden' );
+                                }
+
+                                return;
+                        }
+
+                        if ( $summary.length ) {
+                                $summary.removeAttr( 'hidden' );
+                        }
+
+                        if ( $emptyMessage.length ) {
+                                $emptyMessage.hide();
+                        }
+
+                        if ( ! $updatesList.length ) {
+                                return;
+                        }
+
+                        const separator      = messages.changeSeparator || '→';
+                        const noValue        = messages.noValue || 'N/D';
+                        const noIdentifier   = messages.noIdentifier || 'Sin identificador registrado.';
+                        const stockLabel     = messages.stockChangeLabel || 'Inventario sincronizado';
+                        const priceLabel     = messages.priceChangeLabel || 'Precio sincronizado';
+                        const identifierLabel = messages.identifierLabel || 'Identificador de Contífico';
+                        const metaJoiner     = messages.changeDetailJoiner || ' · ';
+                        const wooSkuLabel    = messages.wooSkuLabel || 'SKU en WooCommerce:';
+                        const contificoIdLabel = messages.contificoIdLabel || 'ID de Contífico:';
+
+                        $updatesList.empty().show();
+
+                        updates.forEach( function ( entry ) {
+                                const productName = entry && entry.product_name ? String( entry.product_name ) : '';
+                                const sku = entry && entry.sku ? String( entry.sku ) : '';
+                                const contificoId = entry && entry.contifico_id ? String( entry.contifico_id ) : '';
+                                const changes = entry && entry.changes ? entry.changes : {};
+                                const changeLines = [];
+                                const metaParts = [];
+
+                                if ( changes && changes.stock ) {
+                                        const stockChange      = changes.stock;
+                                        const previousStock    = ( typeof stockChange.previous === 'number' ) ? stockChange.previous : null;
+                                        const newStock         = ( typeof stockChange.current === 'number' ) ? stockChange.current : null;
+                                        const stockDescription = formatChangeValue( previousStock, newStock, separator, noValue );
+
+                                        changeLines.push( stockLabel + ': ' + stockDescription );
+
+                                        if ( stockChange.outofstock ) {
+                                                changeLines.push( messages.outOfStock || 'Producto sin stock.' );
+                                        }
+                                }
+
+                                if ( changes && changes.price ) {
+                                        const priceChange      = changes.price;
+                                        const previousPrice    = ( typeof priceChange.previous === 'number' ) ? priceChange.previous : null;
+                                        const newPrice         = ( typeof priceChange.current === 'number' ) ? priceChange.current : null;
+                                        const priceDescription = formatChangeValue( previousPrice, newPrice, separator, noValue );
+
+                                        changeLines.push( priceLabel + ': ' + priceDescription );
+                                }
+
+                                if ( changes && changes.identifier ) {
+                                        const identifierChange   = changes.identifier;
+                                        const previousIdentifier = identifierChange.previous ? String( identifierChange.previous ) : '';
+                                        const newIdentifier      = identifierChange.current ? String( identifierChange.current ) : '';
+                                        const identifierText     = formatIdentifierValue( previousIdentifier, newIdentifier, separator, noIdentifier );
+
+                                        changeLines.push( identifierLabel + ': ' + identifierText );
+                                }
+
+                                const $item = $( '<li />' ).addClass( 'sync-summary-item' );
+
+                                if ( productName ) {
+                                        $item.append( $( '<span />' ).addClass( 'sync-summary-title' ).text( productName ) );
+                                } else if ( sku || contificoId ) {
+                                        $item.append( $( '<span />' ).addClass( 'sync-summary-title' ).text( sku || contificoId ) );
+                                }
+
+                                if ( sku ) {
+                                        metaParts.push( wooSkuLabel + ' ' + sku );
+                                }
+
+                                if ( contificoId ) {
+                                        metaParts.push( contificoIdLabel + ' ' + contificoId );
+                                }
+
+                                if ( metaParts.length > 0 ) {
+                                        $item.append( $( '<p />' ).addClass( 'sync-summary-meta' ).text( metaParts.join( metaJoiner ) ) );
+                                }
+
+                                if ( changeLines.length > 0 ) {
+                                        const $changeList = $( '<ul />' ).addClass( 'sync-summary-change-list' );
+
+                                        changeLines.forEach( function ( line ) {
+                                                $changeList.append( $( '<li />' ).text( line ) );
+                                        } );
+
+                                        $item.append( $changeList );
+                                }
+
+                                $updatesList.append( $item );
+                        } );
+                }
+
 		// Fetch products manually in settings page
 		/** @param {{plugin_name, woo_nonce}} woo_contifico_globals */
 		$( '#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .button').on('click', function(){
@@ -218,13 +349,14 @@
 			$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products img').fadeIn();
 			$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .fetched').html(0);
 			$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .found').html(0);
-			$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .updated').html(0);
-			$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .outofstock').html(0);
-			$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result').fadeIn();
+                        $('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .updated').html(0);
+                        $('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .outofstock').html(0);
+                        $('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result').fadeIn();
+                        renderGlobalSyncUpdates( [] );
 
-			// Start batch
-			batch_processing(1);
-		});
+                        // Start batch
+                        batch_processing(1);
+                });
 
 		// Batch processing
                 function batch_processing(step) {
@@ -243,27 +375,44 @@
                                 type: 'post',
                                 url: ajaxEndpoint,
                                 data: data,
-				success: function (response) {
+                                success: function (response) {
 
-					/** @param {{step, fetched, found, outofstock}} response */
-					if( 'done' === response.step ) {
-						$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products img').fadeOut();
-					}
-					else {
-						$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .fetched').html(response.fetched);
-						$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .found').html(response.found);
-						$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .updated').html(response.updated);
-						$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .outofstock').html(response.outofstock);
+                                        const $section = $( '#' + pluginGlobals.plugin_name + '-settings-page .fetch-products' );
 
-						// Call recursively
-						batch_processing(response.step);
-					}
+                                        if ( response && typeof response === 'object' ) {
+                                                const updates = Array.isArray( response.updates ) ? response.updates : [];
 
-				},
-				error: function (response) {
-					$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result').html(response.responseText);
-				}
-			});
+                                                renderGlobalSyncUpdates( updates );
+
+                                                if ( typeof response.fetched !== 'undefined' ) {
+                                                        $section.find( '.result .fetched' ).html( response.fetched );
+                                                }
+
+                                                if ( typeof response.found !== 'undefined' ) {
+                                                        $section.find( '.result .found' ).html( response.found );
+                                                }
+
+                                                if ( typeof response.updated !== 'undefined' ) {
+                                                        $section.find( '.result .updated' ).html( response.updated );
+                                                }
+
+                                                if ( typeof response.outofstock !== 'undefined' ) {
+                                                        $section.find( '.result .outofstock' ).html( response.outofstock );
+                                                }
+                                        }
+
+                                        if ( response && response.step && response.step !== 'done' ) {
+                                                batch_processing( response.step );
+                                                return;
+                                        }
+
+                                        $section.find( 'img' ).fadeOut();
+                                },
+                                error: function (response) {
+                                        $( '#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result' ).html( response.responseText );
+                                        renderGlobalSyncUpdates( [] );
+                                }
+                        });
 
                 }
 

@@ -75,6 +75,11 @@
                         <li><?php _e('Productos con inventario actualizado: ', $this->plugin_name) ?><span class="updated"></span></li>
                         <li><?php _e('Productos sin inventario: ', $this->plugin_name) ?><span class="outofstock"></span></li>
                     </ul>
+                    <div class="sync-summary" hidden aria-live="polite">
+                        <h4 class="sync-summary-heading"><?php esc_html_e( 'Resumen de actualizaciones', 'woo-contifico' ); ?></h4>
+                        <p class="sync-summary-empty"><?php esc_html_e( 'No se registraron cambios durante la sincronización.', 'woo-contifico' ); ?></p>
+                        <ul class="sync-summary-list"></ul>
+                    </div>
                 </div>
                 <div class="fetch-single-product" data-empty-message="<?php echo esc_attr__( 'Ingresa un SKU para sincronizar el producto.', 'woo-contifico' ); ?>" data-generic-error="<?php echo esc_attr__( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' ); ?>">
                     <h4><?php esc_html_e( 'Sincronizar un producto específico', 'woo-contifico' ); ?></h4>

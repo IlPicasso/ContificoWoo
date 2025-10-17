@@ -22,8 +22,9 @@ if ( ! class_exists( 'Woo_Contifico_Diagnostics_Table' ) ) {
  */
 class Woo_Contifico_Admin {
 
-        private const SYNC_DEBUG_TRANSIENT_KEY = 'woo_contifico_sync_debug_entries';
-        private const PRODUCT_ID_META_KEY      = '_woo_contifico_product_id';
+        private const SYNC_DEBUG_TRANSIENT_KEY   = 'woo_contifico_sync_debug_entries';
+        private const SYNC_RESULT_TRANSIENT_KEY  = 'woo_sync_result';
+        private const PRODUCT_ID_META_KEY        = '_woo_contifico_product_id';
 
 	/**
 	 * The ID of this plugin.
@@ -242,6 +243,8 @@ class Woo_Contifico_Admin {
                                 'missingSku'         => __( 'Debes proporcionar un SKU para iniciar la sincronización.', 'woo-contifico' ),
                                 'missingIdentifier'  => __( 'No hay identificador de Contífico guardado.', 'woo-contifico' ),
                                 'pageReloadPending'  => __( 'Actualizando la página para reflejar los cambios…', 'woo-contifico' ),
+                                'globalSyncHeading'  => __( 'Resumen de actualizaciones', 'woo-contifico' ),
+                                'globalSyncEmpty'    => __( 'No se registraron cambios durante la sincronización.', 'woo-contifico' ),
                         ],
                 ];
                 wp_localize_script( $this->plugin_name, 'woo_contifico_globals', $params );
@@ -758,7 +761,7 @@ class Woo_Contifico_Admin {
                 if( $step === 1 ) {
                         delete_transient( 'woo_contifico_fetch_productos' );
                         delete_transient( 'woo_contifico_full_inventory' );
-                        delete_transient( 'woo_sync_result' );
+                        delete_transient( self::SYNC_RESULT_TRANSIENT_KEY );
                         $this->reset_sync_debug_log();
                         $this->contifico->reset_inventory_cache();
                 }
@@ -832,7 +835,7 @@ class Woo_Contifico_Admin {
                 if( $step === 1 ) {
                         delete_transient( 'woo_contifico_fetch_productos' );
                         delete_transient( 'woo_contifico_full_inventory' );
-                        delete_transient( 'woo_sync_result' );
+                        delete_transient( self::SYNC_RESULT_TRANSIENT_KEY );
                         $this->reset_sync_debug_log();
                 }
 
@@ -934,24 +937,36 @@ class Woo_Contifico_Admin {
                         {
                                 $this->write_sync_debug_log( $debug_log_entries );
                                 delete_transient( self::SYNC_DEBUG_TRANSIENT_KEY );
+
+                                $batch_result = (array) get_transient( self::SYNC_RESULT_TRANSIENT_KEY );
+                                $updates_map  = isset( $batch_result['updates'] ) && is_array( $batch_result['updates'] ) ? $batch_result['updates'] : [];
+
                                 $result = [
-                                        'step'      => 'done',
-                                        'debug_log' => $this->sync_debug_log_url,
+                                        'step'       => 'done',
+                                        'debug_log'  => $this->sync_debug_log_url,
+                                        'fetched'    => $batch_result['fetched'] ?? 0,
+                                        'found'      => $batch_result['found'] ?? 0,
+                                        'updated'    => $batch_result['updated'] ?? 0,
+                                        'outofstock' => $batch_result['outofstock'] ?? 0,
+                                        'updates'    => array_values( $updates_map ),
                                 ];
+
+                                delete_transient( self::SYNC_RESULT_TRANSIENT_KEY );
                         }
                         else {
 
-				# Get result transient
-				$batch_result = (array) get_transient('woo_sync_result');
+                                # Get result transient
+                                $batch_result = (array) get_transient( self::SYNC_RESULT_TRANSIENT_KEY );
+                                $updates_map  = isset( $batch_result['updates'] ) && is_array( $batch_result['updates'] ) ? $batch_result['updates'] : [];
 
-				# Results of the synchronization
-				$result = [
-					'fetched'    => $this->contifico->count_fetched_products(),
-					'found'      => $batch_result['found'] ?? 0,
-					'updated'    => $batch_result['updated'] ?? 0,
-					'outofstock' => $batch_result['outofstock'] ?? 0,
-					'step'       => $step+1,
-				];
+                                # Results of the synchronization
+                                $result = [
+                                        'fetched'    => $this->contifico->count_fetched_products(),
+                                        'found'      => $batch_result['found'] ?? 0,
+                                        'updated'    => $batch_result['updated'] ?? 0,
+                                        'outofstock' => $batch_result['outofstock'] ?? 0,
+                                        'step'       => $step + 1,
+                                ];
 
 				# Get WooCommerce products from this batch
                                 $products                 = [];
@@ -1079,7 +1094,7 @@ class Woo_Contifico_Admin {
 
                                 foreach ( $products as $product ) {
 
-                                        $this->update_product_from_contifico_data(
+                                        $changes = $this->update_product_from_contifico_data(
                                                 $product,
                                                 $result,
                                                 $debug_log_entries,
@@ -1091,14 +1106,26 @@ class Woo_Contifico_Admin {
                                                 (string) $id_warehouse
                                         );
 
+                                        $summary_entry = $this->build_batch_sync_summary_entry( $product, $changes );
+
+                                        if ( null !== $summary_entry ) {
+                                                $summary_key                  = $this->generate_batch_sync_summary_key( $summary_entry );
+                                                $updates_map[ $summary_key ] = $summary_entry;
+                                        }
+
                                 }
 
-                                # Store results in a transient to get it in the next batch
-                                set_transient( 'woo_sync_result', $result, HOUR_IN_SECONDS );
-                                set_transient( self::SYNC_DEBUG_TRANSIENT_KEY, $debug_log_entries, HOUR_IN_SECONDS );
-			}
+                                $result['updates'] = $updates_map;
 
-		}
+                                # Store results in a transient to get it in the next batch
+                                set_transient( self::SYNC_RESULT_TRANSIENT_KEY, $result, HOUR_IN_SECONDS );
+
+                                $result['updates'] = array_values( $updates_map );
+
+                                set_transient( self::SYNC_DEBUG_TRANSIENT_KEY, $debug_log_entries, HOUR_IN_SECONDS );
+                        }
+
+                }
 
                 return $result;
 
@@ -1597,6 +1624,99 @@ class Woo_Contifico_Admin {
                 ];
 
                 return $changes;
+        }
+
+        /**
+         * Build a summary entry for products updated during batch synchronization.
+         *
+         * @since 4.2.0
+         *
+         * @param array $product_entry
+         * @param array $changes
+         *
+         * @return array|null
+         */
+        private function build_batch_sync_summary_entry( array $product_entry, array $changes ) : ?array {
+
+                if ( empty( $changes ) ) {
+                        return null;
+                }
+
+                if ( ! isset( $product_entry['product'] ) || ! is_a( $product_entry['product'], 'WC_Product' ) ) {
+                        return null;
+                }
+
+                if ( empty( $changes['stock_updated'] ) && empty( $changes['price_updated'] ) && empty( $changes['meta_updated'] ) && empty( $changes['outofstock'] ) ) {
+                        return null;
+                }
+
+                $product       = $product_entry['product'];
+                $contifico_id  = isset( $product_entry['id'] ) ? (string) $product_entry['id'] : '';
+                $summary_changes = [];
+
+                if ( ! empty( $changes['stock_updated'] ) || ! empty( $changes['outofstock'] ) ) {
+                        $summary_changes['stock'] = [
+                                'previous'   => $changes['previous_stock'] ?? null,
+                                'current'    => $changes['new_stock'] ?? null,
+                                'outofstock' => ! empty( $changes['outofstock'] ),
+                        ];
+                }
+
+                if ( ! empty( $changes['price_updated'] ) ) {
+                        $summary_changes['price'] = [
+                                'previous' => $changes['previous_price'] ?? null,
+                                'current'  => $changes['new_price'] ?? null,
+                        ];
+                }
+
+                if ( ! empty( $changes['meta_updated'] ) ) {
+                        $summary_changes['identifier'] = [
+                                'previous' => $changes['previous_identifier'] ?? null,
+                                'current'  => $changes['new_identifier'] ?? null,
+                        ];
+                }
+
+                if ( empty( $summary_changes ) ) {
+                        return null;
+                }
+
+                return [
+                        'product_id'   => (int) $product->get_id(),
+                        'product_name' => $product->get_name(),
+                        'sku'          => (string) $product->get_sku(),
+                        'contifico_id' => $contifico_id,
+                        'changes'      => $summary_changes,
+                ];
+        }
+
+        /**
+         * Generate a consistent key for summary entries to avoid duplicates during aggregation.
+         *
+         * @since 4.2.0
+         *
+         * @param array $summary_entry
+         *
+         * @return string
+         */
+        private function generate_batch_sync_summary_key( array $summary_entry ) : string {
+
+                if ( ! empty( $summary_entry['contifico_id'] ) ) {
+                        return 'contifico:' . $summary_entry['contifico_id'];
+                }
+
+                if ( ! empty( $summary_entry['product_id'] ) ) {
+                        return 'product:' . (string) $summary_entry['product_id'];
+                }
+
+                if ( ! empty( $summary_entry['sku'] ) ) {
+                        return 'sku:' . (string) $summary_entry['sku'];
+                }
+
+                if ( function_exists( 'wp_generate_uuid4' ) ) {
+                        return 'item:' . wp_generate_uuid4();
+                }
+
+                return 'item:' . uniqid( 'summary_', true );
         }
 
         /**
