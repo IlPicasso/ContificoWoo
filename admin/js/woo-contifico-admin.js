@@ -7,9 +7,60 @@
                 const pluginGlobals = ( typeof woo_contifico_globals !== 'undefined' ) ? woo_contifico_globals : {};
                 const messages      = pluginGlobals.messages || {};
 
+                function formatChangeValue( previous, next, separator, fallback ) {
+                        const hasPrevious = typeof previous === 'number';
+                        const hasNext     = typeof next === 'number';
+
+                        if ( hasPrevious && hasNext ) {
+                                if ( previous === next ) {
+                                        return String( next );
+                                }
+
+                                return previous + ' ' + separator + ' ' + next;
+                        }
+
+                        if ( hasNext ) {
+                                return String( next );
+                        }
+
+                        if ( hasPrevious ) {
+                                return String( previous );
+                        }
+
+                        return fallback;
+                }
+
+                function formatIdentifierValue( previous, next, separator, fallback ) {
+                        const safePrevious = previous || '';
+                        const safeNext     = next || '';
+
+                        if ( safePrevious && safeNext ) {
+                                if ( safePrevious === safeNext ) {
+                                        return safeNext;
+                                }
+
+                                return safePrevious + ' ' + separator + ' ' + safeNext;
+                        }
+
+                        if ( safeNext ) {
+                                return safeNext;
+                        }
+
+                        if ( safePrevious ) {
+                                return safePrevious + ' ' + separator + ' ' + fallback;
+                        }
+
+                        return fallback;
+                }
+
                 function renderSingleSyncResult( $container, data ) {
                         const changes        = data.changes || {};
                         const changeMessages = [];
+                        const separator      = messages.changeSeparator || '→';
+                        const noValue        = messages.noValue || 'N/D';
+                        const noIdentifier   = messages.noIdentifier || 'Sin identificador registrado.';
+
+                        $container.removeClass( 'error success' ).empty();
 
                         if ( changes.stock_updated ) {
                                 changeMessages.push( messages.stockUpdated || 'Inventario actualizado.' );
@@ -31,35 +82,110 @@
                                 changeMessages.push( messages.noChanges || 'Sin cambios en inventario ni precio.' );
                         }
 
-                        const $list = $( '<ul />' );
+                        if ( data.message ) {
+                                $container.append( $( '<p />' ).addClass( 'woo-contifico-sync-result-message' ).text( data.message ) );
+                        }
+
+                        $container.append(
+                                $( '<p />' )
+                                        .addClass( 'woo-contifico-sync-result-summary' )
+                                        .text( ( messages.changesLabel || 'Cambios detectados:' ) + ' ' + changeMessages.join( ' ' ) )
+                        );
+
+                        const generalDetails = [];
 
                         if ( data.woocommerce_sku ) {
-                                $list.append( $( '<li />' ).text( ( messages.wooSkuLabel || 'SKU en WooCommerce:' ) + ' ' + data.woocommerce_sku ) );
+                                generalDetails.push( { label: messages.wooSkuLabel || 'SKU en WooCommerce:', value: data.woocommerce_sku } );
                         }
 
                         if ( data.contifico_sku ) {
-                                $list.append( $( '<li />' ).text( ( messages.contificoSkuLabel || 'SKU en Contífico:' ) + ' ' + data.contifico_sku ) );
+                                generalDetails.push( { label: messages.contificoSkuLabel || 'SKU en Contífico:', value: data.contifico_sku } );
                         }
 
                         if ( data.contifico_id ) {
-                                $list.append( $( '<li />' ).text( ( messages.contificoIdLabel || 'ID de Contífico:' ) + ' ' + data.contifico_id ) );
+                                generalDetails.push( { label: messages.contificoIdLabel || 'ID de Contífico:', value: data.contifico_id } );
+                        } else {
+                                generalDetails.push( { label: messages.contificoIdLabel || 'ID de Contífico:', value: messages.noIdentifier || 'Sin identificador registrado.' } );
                         }
 
                         if ( typeof data.stock_quantity === 'number' ) {
-                                $list.append( $( '<li />' ).text( ( messages.stockLabel || 'Inventario disponible:' ) + ' ' + data.stock_quantity ) );
+                                generalDetails.push( { label: messages.stockLabel || 'Inventario disponible:', value: data.stock_quantity } );
                         }
 
                         if ( typeof data.price === 'number' ) {
-                                $list.append( $( '<li />' ).text( ( messages.priceLabel || 'Precio actual:' ) + ' ' + data.price ) );
+                                generalDetails.push( { label: messages.priceLabel || 'Precio actual:', value: data.price } );
                         }
 
-                        $list.append( $( '<li />' ).text( ( messages.changesLabel || 'Cambios detectados:' ) + ' ' + changeMessages.join( ' ' ) ) );
+                        if ( generalDetails.length > 0 ) {
+                                const $detailsList = $( '<ul />' ).addClass( 'woo-contifico-sync-result-list' );
 
-                        if ( data.message ) {
-                                $container.append( $( '<p />' ).text( data.message ) );
+                                generalDetails.forEach( function ( detail ) {
+                                        const $item = $( '<li />' );
+                                        $item.append( $( '<span />' ).addClass( 'woo-contifico-sync-detail-label' ).text( detail.label + ' ' ) );
+                                        $item.append( document.createTextNode( detail.value ) );
+                                        $detailsList.append( $item );
+                                } );
+
+                                $container.append( $detailsList );
                         }
 
-                        $container.append( $list );
+                        const changeDetails = [];
+                        const previousStock = ( typeof changes.previous_stock === 'number' ) ? changes.previous_stock : null;
+                        const newStock      = ( typeof changes.new_stock === 'number' ) ? changes.new_stock : null;
+
+                        if ( previousStock !== null || newStock !== null ) {
+                                changeDetails.push( {
+                                        label:   messages.stockChangeLabel || 'Inventario sincronizado',
+                                        value:   formatChangeValue( previousStock, newStock, separator, noValue ),
+                                        changed: previousStock !== null && newStock !== null && previousStock !== newStock
+                                } );
+                        }
+
+                        const previousPrice = ( typeof changes.previous_price === 'number' ) ? changes.previous_price : null;
+                        const newPrice      = ( typeof changes.new_price === 'number' ) ? changes.new_price : null;
+
+                        if ( previousPrice !== null || newPrice !== null ) {
+                                changeDetails.push( {
+                                        label:   messages.priceChangeLabel || 'Precio sincronizado',
+                                        value:   formatChangeValue( previousPrice, newPrice, separator, noValue ),
+                                        changed: previousPrice !== null && newPrice !== null && previousPrice !== newPrice
+                                } );
+                        }
+
+                        const previousIdentifier = changes.previous_identifier ? String( changes.previous_identifier ) : '';
+                        const newIdentifier      = changes.new_identifier ? String( changes.new_identifier ) : '';
+
+                        if ( typeof changes.meta_updated !== 'undefined' ) {
+                                changeDetails.push( {
+                                        label:   messages.identifierLabel || 'Identificador de Contífico',
+                                        value:   formatIdentifierValue( previousIdentifier, newIdentifier, separator, noIdentifier ),
+                                        changed: previousIdentifier !== newIdentifier
+                                } );
+                        }
+
+                        if ( changeDetails.length > 0 ) {
+                                $container.append(
+                                        $( '<p />' )
+                                                .addClass( 'woo-contifico-sync-result-heading' )
+                                                .text( messages.changesHeading || 'Detalle de cambios' )
+                                );
+
+                                const $changeList = $( '<ul />' ).addClass( 'woo-contifico-sync-changes-list' );
+
+                                changeDetails.forEach( function ( detail ) {
+                                        const $item = $( '<li />' );
+                                        if ( detail.changed ) {
+                                                $item.addClass( 'woo-contifico-sync-change-updated' );
+                                        }
+
+                                        $item.append( $( '<span />' ).addClass( 'woo-contifico-sync-detail-label' ).text( detail.label + ': ' ) );
+                                        $item.append( document.createTextNode( detail.value ) );
+                                        $changeList.append( $item );
+                                } );
+
+                                $container.append( $changeList );
+                        }
+
                         $container.addClass( 'success' ).show();
                 }
 

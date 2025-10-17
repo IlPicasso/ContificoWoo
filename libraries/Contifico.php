@@ -513,7 +513,7 @@ class Contifico
          * @param string $product_id
          * @return array<string,mixed>
          */
-        public function get_product_by_id( string $product_id ) : array {
+        public function get_product_by_id( string $product_id, bool $force_refresh = false ) : array {
 
                 $product_id = trim( $product_id );
 
@@ -521,32 +521,50 @@ class Contifico
                         return [];
                 }
 
-                if ( isset( $this->product_cache_by_id[ $product_id ] ) ) {
-                        return $this->product_cache_by_id[ $product_id ];
-                }
-
-                foreach ( $this->products as $product_entry ) {
-                        if ( ! is_array( $product_entry ) ) {
-                                continue;
-                        }
-
-                        if (
-                                ( isset( $product_entry['codigo'] ) && (string) $product_entry['codigo'] === $product_id )
-                        ) {
-                                $this->product_cache_by_id[ $product_id ] = $product_entry;
-
-                                return $product_entry;
-                        }
-                }
-
                 $transient_key = 'woo_contifico_product_' . md5( $product_id );
-                $cached_product = get_transient( $transient_key );
+                $cached_product = [];
 
-                if ( is_array( $cached_product ) && isset( $cached_product['codigo'] ) ) {
-                        $this->product_cache_by_id[ $product_id ] = $cached_product;
-                        $this->cache_single_product_entry( $cached_product );
+                if ( isset( $this->product_cache_by_id[ $product_id ] ) ) {
+                        $cached_product = $this->product_cache_by_id[ $product_id ];
 
-                        return $cached_product;
+                        if ( ! $force_refresh ) {
+                                return $cached_product;
+                        }
+                }
+
+                if ( ! $force_refresh ) {
+                        foreach ( $this->products as $product_entry ) {
+                                if ( ! is_array( $product_entry ) ) {
+                                        continue;
+                                }
+
+                                if (
+                                        ( isset( $product_entry['codigo'] ) && (string) $product_entry['codigo'] === $product_id )
+                                ) {
+                                        $this->product_cache_by_id[ $product_id ] = $product_entry;
+
+                                        return $product_entry;
+                                }
+                        }
+                }
+
+                $transient_product = get_transient( $transient_key );
+
+                if ( is_array( $transient_product ) && isset( $transient_product['codigo'] ) ) {
+                        if ( ! $force_refresh ) {
+                                $this->product_cache_by_id[ $product_id ] = $transient_product;
+                                $this->cache_single_product_entry( $transient_product );
+
+                                return $transient_product;
+                        }
+
+                        if ( empty( $cached_product ) ) {
+                                $cached_product = $transient_product;
+                        }
+                }
+
+                if ( $force_refresh ) {
+                        delete_transient( $transient_key );
                 }
 
                 try {
@@ -560,13 +578,33 @@ class Contifico
                         $product = $product[0];
                 }
 
-                if ( ! is_array( $product ) ) {
+                if ( ! is_array( $product ) || empty( $product ) ) {
+                        if ( $force_refresh && ! empty( $cached_product ) ) {
+                                return $cached_product;
+                        }
+
+                        $inventory = $this->get_products();
+
+                        if ( is_array( $inventory ) ) {
+                                $product = $this->locate_product_in_inventory_by_id( $inventory, $product_id );
+
+                                if ( is_array( $product ) && ! empty( $product ) ) {
+                                        $this->product_cache_by_id[ $product_id ] = $product;
+
+                                        return $product;
+                                }
+                        }
+
                         return [];
                 }
 
                 $normalized = $this->normalize_product_entry( $product );
 
                 if ( empty( $normalized ) ) {
+                        if ( $force_refresh && ! empty( $cached_product ) ) {
+                                return $cached_product;
+                        }
+
                         return [];
                 }
 
@@ -818,21 +856,30 @@ class Contifico
          *
          * @return array<string,float>
          */
-        public function get_product_stock_by_warehouses( string $codigo_producto ) : array {
+        public function get_product_stock_by_warehouses( string $codigo_producto, bool $force_refresh = false ) : array {
 
                 $product_id = (string) $codigo_producto;
 
                 if ( isset( $this->product_stock_cache[ $product_id ] ) ) {
-                        return $this->product_stock_cache[ $product_id ];
+                        if ( ! $force_refresh ) {
+                                return $this->product_stock_cache[ $product_id ];
+                        }
                 }
 
                 $transient_key = 'woo_contifico_product_stock_' . md5( $product_id );
                 $cached_stock  = get_transient( $transient_key );
 
                 if ( is_array( $cached_stock ) ) {
-                        $this->product_stock_cache[ $product_id ] = $cached_stock;
+                        if ( ! $force_refresh ) {
+                                $this->product_stock_cache[ $product_id ] = $cached_stock;
 
-                        return $cached_stock;
+                                return $cached_stock;
+                        }
+                }
+
+                if ( $force_refresh ) {
+                        delete_transient( $transient_key );
+                        unset( $this->product_stock_cache[ $product_id ] );
                 }
 
                 try {
@@ -870,8 +917,15 @@ class Contifico
                         }
                 }
 
+                if ( empty( $stock_by_warehouse ) && is_array( $cached_stock ) && $force_refresh ) {
+                        $stock_by_warehouse = $cached_stock;
+                }
+
                 $this->product_stock_cache[ $product_id ] = $stock_by_warehouse;
-                set_transient( $transient_key, $stock_by_warehouse, self::TRANSIENT_TTL );
+
+                if ( ! empty( $stock_by_warehouse ) ) {
+                        set_transient( $transient_key, $stock_by_warehouse, self::TRANSIENT_TTL );
+                }
 
                 return $stock_by_warehouse;
     }

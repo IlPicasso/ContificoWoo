@@ -101,11 +101,40 @@
 }
 
 .woo-contifico-sync-result.success {
-    color: #007cba;
+    color: #1d2327;
 }
 
 .woo-contifico-sync-result.error {
     color: #d63638;
+}
+
+.woo-contifico-sync-result-message {
+    margin: 0;
+    font-weight: 600;
+}
+
+.woo-contifico-sync-result-summary {
+    margin: 0.25em 0 0;
+}
+
+.woo-contifico-sync-result-list,
+.woo-contifico-sync-changes-list {
+    margin: 0.5em 0 0;
+    padding-left: 1.5em;
+}
+
+.woo-contifico-sync-result-heading {
+    margin: 0.75em 0 0;
+    font-weight: 600;
+}
+
+.woo-contifico-sync-detail-label {
+    font-weight: 600;
+}
+
+.woo-contifico-sync-change-updated {
+    font-weight: 600;
+    color: #007cba;
 }
 
 .woo-contifico-variation-id {
