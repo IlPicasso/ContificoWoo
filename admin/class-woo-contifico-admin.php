@@ -205,6 +205,7 @@ class Woo_Contifico_Admin {
                 $params = [
                         'plugin_name' => $this->plugin_name,
                         'woo_nonce'   => wp_create_nonce( 'woo_ajax_nonce' ),
+                        'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
                         'messages'    => [
                                 'stockUpdated'       => __( 'Inventario actualizado.', 'woo-contifico' ),
                                 'priceUpdated'       => __( 'Precio actualizado.', 'woo-contifico' ),
@@ -224,6 +225,7 @@ class Woo_Contifico_Admin {
                                 'noValue'            => __( 'N/D', 'woo-contifico' ),
                                 'changeSeparator'    => __( '→', 'woo-contifico' ),
                                 'changesHeading'     => __( 'Detalle de cambios', 'woo-contifico' ),
+                                'syncing'            => __( 'Sincronizando producto…', 'woo-contifico' ),
                         ],
                 ];
                 wp_localize_script( $this->plugin_name, 'woo_contifico_globals', $params );
