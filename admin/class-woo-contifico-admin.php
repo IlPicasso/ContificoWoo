@@ -198,6 +198,16 @@ class Woo_Contifico_Admin {
 
                 wp_enqueue_script( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/js/woo-contifico-admin.js', [ 'jquery' ], $this->version, false );
 
+                if ( $is_product_editor ) {
+                        wp_enqueue_script(
+                                "{$this->plugin_name}-product-sync",
+                                WOO_CONTIFICO_URL . 'admin/js/woo-contifico-product-sync.js',
+                                [ 'jquery', $this->plugin_name ],
+                                $this->version,
+                                true
+                        );
+                }
+
                 if ( $hook_suffix === "woocommerce_page_{$this->plugin_name}" ) {
                         wp_enqueue_script( "{$this->plugin_name}-diagnostics", WOO_CONTIFICO_URL . 'admin/js/woo-contifico-diagnostics.js', [ 'jquery' ], $this->version, true );
                 }
@@ -218,6 +228,8 @@ class Woo_Contifico_Admin {
                                 'stockLabel'         => __( 'Inventario disponible:', 'woo-contifico' ),
                                 'priceLabel'         => __( 'Precio actual:', 'woo-contifico' ),
                                 'changesLabel'       => __( 'Cambios detectados:', 'woo-contifico' ),
+                                'changeDetailSummary' => __( 'Detalle sincronizado:', 'woo-contifico' ),
+                                'changeDetailJoiner'  => __( ' · ', 'woo-contifico' ),
                                 'stockChangeLabel'   => __( 'Inventario sincronizado', 'woo-contifico' ),
                                 'priceChangeLabel'   => __( 'Precio sincronizado', 'woo-contifico' ),
                                 'identifierLabel'    => __( 'Identificador de Contífico', 'woo-contifico' ),
@@ -226,6 +238,10 @@ class Woo_Contifico_Admin {
                                 'changeSeparator'    => __( '→', 'woo-contifico' ),
                                 'changesHeading'     => __( 'Detalle de cambios', 'woo-contifico' ),
                                 'syncing'            => __( 'Sincronizando producto…', 'woo-contifico' ),
+                                'genericError'       => __( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' ),
+                                'missingSku'         => __( 'Debes proporcionar un SKU para iniciar la sincronización.', 'woo-contifico' ),
+                                'missingIdentifier'  => __( 'No hay identificador de Contífico guardado.', 'woo-contifico' ),
+                                'pageReloadPending'  => __( 'Actualizando la página para reflejar los cambios…', 'woo-contifico' ),
                         ],
                 ];
                 wp_localize_script( $this->plugin_name, 'woo_contifico_globals', $params );
@@ -316,17 +332,22 @@ class Woo_Contifico_Admin {
                         return;
                 }
 
-                $contifico_id       = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
-                $product_sku        = (string) $product->get_sku();
-                $generic_error      = __( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' );
-                $missing_identifier = __( 'No hay identificador de Contífico guardado.', 'woo-contifico' );
-                $sync_button_label  = __( 'Sincronizar con Contífico', 'woo-contifico' );
+                $contifico_id         = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
+                $product_sku          = (string) $product->get_sku();
+                $generic_error        = __( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' );
+                $missing_identifier   = __( 'No hay identificador de Contífico guardado.', 'woo-contifico' );
+                $sync_button_label    = __( 'Sincronizar con Contífico', 'woo-contifico' );
+                $page_reload_message  = __( 'Actualizando la página para reflejar los cambios…', 'woo-contifico' );
+                $page_reload_delay_ms = 2000;
 
                 echo '<div class="options_group woo-contifico-product-id-field"';
                 echo ' data-product-id="' . esc_attr( (string) $product->get_id() ) . '"';
                 echo ' data-product-sku="' . esc_attr( $product_sku ) . '"';
                 echo ' data-generic-error="' . esc_attr( $generic_error ) . '"';
                 echo ' data-missing-identifier="' . esc_attr( $missing_identifier ) . '"';
+                echo ' data-reload-on-success="1"';
+                echo ' data-reload-delay="' . esc_attr( (string) $page_reload_delay_ms ) . '"';
+                echo ' data-reload-message="' . esc_attr( $page_reload_message ) . '"';
                 echo '>';
                 echo '<p class="form-field">';
                 echo '<label>' . esc_html__( 'ID de Contífico', 'woo-contifico' ) . '</label>';
@@ -1189,6 +1210,8 @@ class Woo_Contifico_Admin {
                         $lookup_sku = (string) $resolved_product->get_sku();
                 }
 
+                $woocommerce_sku = (string) $resolved_product->get_sku();
+
                 $contifico_id  = $this->resolve_contifico_product_identifier( $resolved_product );
                 $contifico_product = [];
 
@@ -1225,6 +1248,23 @@ class Woo_Contifico_Admin {
 
                 $contifico_id  = isset( $contifico_product['codigo'] ) ? (string) $contifico_product['codigo'] : $contifico_id;
                 $contifico_sku = isset( $contifico_product['sku'] ) ? (string) $contifico_product['sku'] : $lookup_sku;
+
+                if (
+                        '' !== $contifico_id
+                        && '' !== $contifico_sku
+                        && '' !== $woocommerce_sku
+                        && $contifico_sku !== $woocommerce_sku
+                ) {
+                        throw new Exception(
+                                sprintf(
+                                        /* translators: 1: Contífico product identifier, 2: Contífico SKU, 3: WooCommerce SKU */
+                                        __( 'El ID de Contífico "%1$s" está asociado al SKU "%2$s" en Contífico, pero este producto de WooCommerce usa el SKU "%3$s". Actualiza el SKU en WooCommerce para que coincida antes de sincronizar.', 'woo-contifico' ),
+                                        $contifico_id,
+                                        $contifico_sku,
+                                        $woocommerce_sku
+                                )
+                        );
+                }
 
                 if ( '' === $contifico_id ) {
                         throw new Exception( __( 'El producto de Contífico no tiene un identificador válido.', 'woo-contifico' ) );
@@ -1290,7 +1330,7 @@ class Woo_Contifico_Admin {
                         'message'             => $message,
                         'contifico_id'        => $contifico_id,
                         'contifico_sku'       => $contifico_sku,
-                        'woocommerce_sku'     => (string) $resolved_product->get_sku(),
+                        'woocommerce_sku'     => $woocommerce_sku,
                         'woocommerce_product' => $resolved_product->get_id(),
                         'changes'             => $changes,
                         'result'              => $result,

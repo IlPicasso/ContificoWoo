@@ -8,6 +8,10 @@
                 const messages       = pluginGlobals.messages || {};
                 const ajaxEndpoint   = pluginGlobals.ajaxUrl || ( typeof window.ajaxurl !== 'undefined' ? window.ajaxurl : '' );
                 const syncingMessage = messages.syncing || '';
+                const namespace      = window.wooContificoAdmin = window.wooContificoAdmin || {};
+
+                namespace.pluginGlobals = pluginGlobals;
+                namespace.messages       = messages;
 
                 function formatChangeValue( previous, next, separator, fallback ) {
                         const hasPrevious = typeof previous === 'number';
@@ -56,11 +60,44 @@
                 }
 
                 function renderSingleSyncResult( $container, data ) {
-                        const changes        = data.changes || {};
-                        const changeMessages = [];
-                        const separator      = messages.changeSeparator || '→';
-                        const noValue        = messages.noValue || 'N/D';
-                        const noIdentifier   = messages.noIdentifier || 'Sin identificador registrado.';
+                        const changes             = data.changes || {};
+                        const changeMessages      = [];
+                        const separator           = messages.changeSeparator || '→';
+                        const noValue             = messages.noValue || 'N/D';
+                        const noIdentifier        = messages.noIdentifier || 'Sin identificador registrado.';
+                        const detailSummaryLabel  = messages.changeDetailSummary || 'Detalle sincronizado:';
+                        const detailJoiner        = messages.changeDetailJoiner || ' · ';
+                        const changeDetails       = [];
+                        const previousStock       = ( typeof changes.previous_stock === 'number' ) ? changes.previous_stock : null;
+                        const newStock            = ( typeof changes.new_stock === 'number' ) ? changes.new_stock : null;
+                        const previousPrice       = ( typeof changes.previous_price === 'number' ) ? changes.previous_price : null;
+                        const newPrice            = ( typeof changes.new_price === 'number' ) ? changes.new_price : null;
+                        const previousIdentifier  = changes.previous_identifier ? String( changes.previous_identifier ) : '';
+                        const newIdentifier       = changes.new_identifier ? String( changes.new_identifier ) : '';
+
+                        if ( previousStock !== null || newStock !== null ) {
+                                changeDetails.push( {
+                                        label:   messages.stockChangeLabel || 'Inventario sincronizado',
+                                        value:   formatChangeValue( previousStock, newStock, separator, noValue ),
+                                        changed: previousStock !== null && newStock !== null && previousStock !== newStock
+                                } );
+                        }
+
+                        if ( previousPrice !== null || newPrice !== null ) {
+                                changeDetails.push( {
+                                        label:   messages.priceChangeLabel || 'Precio sincronizado',
+                                        value:   formatChangeValue( previousPrice, newPrice, separator, noValue ),
+                                        changed: previousPrice !== null && newPrice !== null && previousPrice !== newPrice
+                                } );
+                        }
+
+                        if ( typeof changes.meta_updated !== 'undefined' ) {
+                                changeDetails.push( {
+                                        label:   messages.identifierLabel || 'Identificador de Contífico',
+                                        value:   formatIdentifierValue( previousIdentifier, newIdentifier, separator, noIdentifier ),
+                                        changed: previousIdentifier !== newIdentifier
+                                } );
+                        }
 
                         $container.removeClass( 'error success' ).empty();
 
@@ -93,6 +130,18 @@
                                         .addClass( 'woo-contifico-sync-result-summary' )
                                         .text( ( messages.changesLabel || 'Cambios detectados:' ) + ' ' + changeMessages.join( ' ' ) )
                         );
+
+                        if ( changeDetails.length > 0 ) {
+                                const changeSummaryText = changeDetails.map( function ( detail ) {
+                                        return detail.label + ': ' + detail.value;
+                                } ).join( detailJoiner );
+
+                                $container.append(
+                                        $( '<p />' )
+                                                .addClass( 'woo-contifico-sync-result-detail-summary' )
+                                                .text( detailSummaryLabel + ' ' + changeSummaryText )
+                                );
+                        }
 
                         const generalDetails = [];
 
@@ -131,40 +180,6 @@
                                 $container.append( $detailsList );
                         }
 
-                        const changeDetails = [];
-                        const previousStock = ( typeof changes.previous_stock === 'number' ) ? changes.previous_stock : null;
-                        const newStock      = ( typeof changes.new_stock === 'number' ) ? changes.new_stock : null;
-
-                        if ( previousStock !== null || newStock !== null ) {
-                                changeDetails.push( {
-                                        label:   messages.stockChangeLabel || 'Inventario sincronizado',
-                                        value:   formatChangeValue( previousStock, newStock, separator, noValue ),
-                                        changed: previousStock !== null && newStock !== null && previousStock !== newStock
-                                } );
-                        }
-
-                        const previousPrice = ( typeof changes.previous_price === 'number' ) ? changes.previous_price : null;
-                        const newPrice      = ( typeof changes.new_price === 'number' ) ? changes.new_price : null;
-
-                        if ( previousPrice !== null || newPrice !== null ) {
-                                changeDetails.push( {
-                                        label:   messages.priceChangeLabel || 'Precio sincronizado',
-                                        value:   formatChangeValue( previousPrice, newPrice, separator, noValue ),
-                                        changed: previousPrice !== null && newPrice !== null && previousPrice !== newPrice
-                                } );
-                        }
-
-                        const previousIdentifier = changes.previous_identifier ? String( changes.previous_identifier ) : '';
-                        const newIdentifier      = changes.new_identifier ? String( changes.new_identifier ) : '';
-
-                        if ( typeof changes.meta_updated !== 'undefined' ) {
-                                changeDetails.push( {
-                                        label:   messages.identifierLabel || 'Identificador de Contífico',
-                                        value:   formatIdentifierValue( previousIdentifier, newIdentifier, separator, noIdentifier ),
-                                        changed: previousIdentifier !== newIdentifier
-                                } );
-                        }
-
                         if ( changeDetails.length > 0 ) {
                                 $container.append(
                                         $( '<p />' )
@@ -190,6 +205,8 @@
 
                         $container.addClass( 'success' ).show();
                 }
+
+                namespace.renderSingleSyncResult = renderSingleSyncResult;
 
 		// Fetch products manually in settings page
 		/** @param {{plugin_name, woo_nonce}} woo_contifico_globals */
@@ -368,103 +385,7 @@
                         }
                 }
 
-                $( document ).on( 'click', '.woo-contifico-sync-product-button', function ( event ) {
-                        event.preventDefault();
-
-                        const $button  = $( this );
-                        const $field   = $button.closest( '.woo-contifico-product-id-field' );
-
-                        if ( ! $field.length ) {
-                                return;
-                        }
-
-                        const $spinner          = $field.find( '.woo-contifico-sync-spinner' );
-                        const $result           = $field.find( '.woo-contifico-sync-result' );
-                        const genericError      = $field.data( 'generic-error' ) || '';
-                        const missingIdentifier = $field.data( 'missing-identifier' ) || '';
-                        const productId         = parseInt( $field.attr( 'data-product-id' ) || '0', 10 ) || 0;
-                        const $skuInput         = $( '#_sku' );
-                        const skuFromAttr       = $.trim( $field.attr( 'data-product-sku' ) || '' );
-                        const skuFromInput      = $skuInput.length ? $.trim( $skuInput.val() ) : '';
-                        const sku               = skuFromAttr || skuFromInput;
-
-                        $result.removeClass( 'error success' ).empty();
-
-                        if ( syncingMessage ) {
-                                $result.text( syncingMessage ).show();
-                        } else {
-                                $result.hide();
-                        }
-
-                        if ( ! ajaxEndpoint ) {
-                                if ( genericError ) {
-                                        $result.addClass( 'error' ).text( genericError ).show();
-                                }
-
-                                return;
-                        }
-
-                        $button.prop( 'disabled', true );
-                        $spinner.addClass( 'is-active' );
-
-                        const requestData = {
-                                action:   'woo_contifico_sync_single_product',
-                                security: pluginGlobals.woo_nonce
-                        };
-
-                        if ( sku ) {
-                                requestData.sku = sku;
-                        }
-
-                        if ( productId > 0 ) {
-                                requestData.product_id = productId;
-                        }
-
-                        $.ajax( {
-                                type: 'post',
-                                url: ajaxEndpoint,
-                                data: requestData
-                        } ).done( function ( response ) {
-                                if ( response && response.success && response.data ) {
-                                        const data = response.data;
-
-                                        renderSingleSyncResult( $result, data );
-
-                                        if ( data.woocommerce_sku ) {
-                                                $field.attr( 'data-product-sku', data.woocommerce_sku );
-                                                $field.data( 'product-sku', data.woocommerce_sku );
-
-                                                if ( $skuInput.length && $.trim( $skuInput.val() || '' ) === '' ) {
-                                                        $skuInput.val( data.woocommerce_sku );
-                                                }
-                                        }
-
-                                        updateProductIdentifierDisplay( $field, data.contifico_id || '', missingIdentifier );
-                                } else {
-                                        const message = ( response && response.data && response.data.message ) ? response.data.message : genericError;
-
-                                        if ( message ) {
-                                                $result.addClass( 'error' ).text( message ).show();
-                                        }
-                                }
-                        } ).fail( function ( xhr ) {
-                                let message = genericError;
-
-                                if ( xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message ) {
-                                        message = xhr.responseJSON.data.message;
-                                }
-                                else if ( xhr.responseText ) {
-                                        message = xhr.responseText;
-                                }
-
-                                if ( message ) {
-                                        $result.addClass( 'error' ).text( message ).show();
-                                }
-                        } ).always( function () {
-                                $button.prop( 'disabled', false );
-                                $spinner.removeClass( 'is-active' );
-                        } );
-                } );
+                namespace.updateProductIdentifierDisplay = updateProductIdentifierDisplay;
 
                 // Load tax info when looking for customer in order backend
                 $('#order_data .wc-customer-user select.wc-customer-search').change(function(){
