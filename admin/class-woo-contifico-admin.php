@@ -1189,30 +1189,41 @@ class Woo_Contifico_Admin {
                         $lookup_sku = (string) $resolved_product->get_sku();
                 }
 
-                $contifico_product = $this->get_contifico_product_data_for_product( $resolved_product, $lookup_sku, true );
+                $contifico_id  = $this->resolve_contifico_product_identifier( $resolved_product );
+                $contifico_product = [];
 
-                if ( empty( $contifico_product ) || ! is_array( $contifico_product ) ) {
-                        $contifico_meta_id = (string) $resolved_product->get_meta( self::PRODUCT_ID_META_KEY, true );
-
-                        if ( '' !== $contifico_meta_id ) {
-                                throw new Exception(
-                                        sprintf(
-                                                __( 'No se encontró el producto con el identificador de Contífico "%s" en Contífico.', 'woo-contifico' ),
-                                                $contifico_meta_id
-                                        )
-                                );
-                        }
-
-                        if ( '' !== $lookup_sku ) {
-                                throw new Exception(
-                                        sprintf( __( 'No se encontró el producto con el SKU "%s" en Contífico.', 'woo-contifico' ), $lookup_sku )
-                                );
-                        }
-
-                        throw new Exception( __( 'No se encontró el producto en Contífico.', 'woo-contifico' ) );
+                if ( '' !== $contifico_id ) {
+                        $contifico_product = $this->contifico->get_product_by_id( $contifico_id, true );
                 }
 
-                $contifico_id  = isset( $contifico_product['codigo'] ) ? (string) $contifico_product['codigo'] : '';
+                if ( empty( $contifico_product ) || ! is_array( $contifico_product ) ) {
+                        $contifico_product = $this->get_contifico_product_data_for_product( $resolved_product, $lookup_sku, true );
+
+                        if ( empty( $contifico_product ) || ! is_array( $contifico_product ) ) {
+                                if ( '' !== $contifico_id ) {
+                                        throw new Exception(
+                                                sprintf(
+                                                        __( 'No se encontró el producto con el identificador de Contífico "%s" en Contífico.', 'woo-contifico' ),
+                                                        $contifico_id
+                                                )
+                                        );
+                                }
+
+                                if ( '' !== $lookup_sku ) {
+                                        throw new Exception(
+                                                sprintf( __( 'No se encontró el producto con el SKU "%s" en Contífico.', 'woo-contifico' ), $lookup_sku )
+                                        );
+                                }
+
+                                throw new Exception( __( 'No se encontró el producto en Contífico.', 'woo-contifico' ) );
+                        }
+
+                        if ( isset( $contifico_product['codigo'] ) && '' === $contifico_id ) {
+                                $contifico_id = (string) $contifico_product['codigo'];
+                        }
+                }
+
+                $contifico_id  = isset( $contifico_product['codigo'] ) ? (string) $contifico_product['codigo'] : $contifico_id;
                 $contifico_sku = isset( $contifico_product['sku'] ) ? (string) $contifico_product['sku'] : $lookup_sku;
 
                 if ( '' === $contifico_id ) {
@@ -1560,23 +1571,7 @@ class Woo_Contifico_Admin {
          */
         private function get_contifico_product_data_for_product( $product, string $sku, bool $force_refresh = false ) {
 
-                $contifico_id = '';
-
-                if ( $product && is_a( $product, 'WC_Product' ) ) {
-                        $contifico_id = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
-
-                        if ( '' === $contifico_id && $product->is_type( 'variation' ) ) {
-                                $parent_id = $product->get_parent_id();
-
-                                if ( $parent_id ) {
-                                        $parent_product = wc_get_product( $parent_id );
-
-                                        if ( $parent_product ) {
-                                                $contifico_id = (string) $parent_product->get_meta( self::PRODUCT_ID_META_KEY, true );
-                                        }
-                                }
-                        }
-                }
+                $contifico_id = $this->resolve_contifico_product_identifier( $product );
 
                 if ( '' !== $contifico_id ) {
                         $product_data = $this->get_contifico_product_data_by_id( $contifico_id, $force_refresh );
@@ -1587,6 +1582,48 @@ class Woo_Contifico_Admin {
                 }
 
                 return $this->get_contifico_product_data_by_sku( $sku, $force_refresh );
+        }
+
+        /**
+         * Retrieve the Contífico identifier stored on a WooCommerce product entry.
+         *
+         * Uses the variation parent identifier if the variation does not store its own value.
+         *
+         * @since 4.2.1
+         *
+         * @param WC_Product|mixed $product
+         *
+         * @return string
+         */
+        private function resolve_contifico_product_identifier( $product ) : string {
+
+                if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+                        return '';
+                }
+
+                $contifico_id = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
+
+                if ( '' !== $contifico_id ) {
+                        return $contifico_id;
+                }
+
+                if ( ! $product->is_type( 'variation' ) ) {
+                        return '';
+                }
+
+                $parent_id = $product->get_parent_id();
+
+                if ( ! $parent_id ) {
+                        return '';
+                }
+
+                $parent_product = wc_get_product( $parent_id );
+
+                if ( ! $parent_product || ! is_a( $parent_product, 'WC_Product' ) ) {
+                        return '';
+                }
+
+                return (string) $parent_product->get_meta( self::PRODUCT_ID_META_KEY, true );
         }
 
         /**

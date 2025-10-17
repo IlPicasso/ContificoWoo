@@ -568,7 +568,8 @@ class Contifico
                 }
 
                 try {
-                        $product = $this->call( "producto/{$product_id}" );
+                        $encoded_id = rawurlencode( $product_id );
+                        $product    = $this->call( "producto/{$encoded_id}/" );
                 }
                 catch ( Exception $exception ) {
                         $product = [];
@@ -883,7 +884,8 @@ class Contifico
                 }
 
                 try {
-                        $producto_stock = $this->call( "producto/{$product_id}/stock/" );
+                        $encoded_id    = rawurlencode( $product_id );
+                        $producto_stock = $this->call( "producto/{$encoded_id}/stock/" );
                 }
                 catch ( Exception $exception ) {
                         $producto_stock = [];
