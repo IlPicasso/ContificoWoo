@@ -24,7 +24,7 @@
 		});
 
 		// Batch processing
-		function batch_processing(step) {
+                function batch_processing(step) {
 
 			let data = {
 				'action': 'fetch_products',
@@ -58,10 +58,134 @@
 				}
 			});
 
-		}
+                }
 
-		// Load tax info when looking for customer in order backend
-		$('#order_data .wc-customer-user select.wc-customer-search').change(function(){
+                // Synchronize a single product by SKU
+                $( '#' + woo_contifico_globals.plugin_name + '-settings-page .fetch-single-product' ).each( function () {
+                        const $container     = $( this );
+                        const $button        = $container.find( '.button' );
+                        const $skuInput      = $container.find( 'input[name="woo_contifico_single_sku"]' );
+                        const $spinner       = $container.find( 'img' );
+                        const $result        = $container.find( '.result' );
+                        const emptyMessage   = $container.data( 'empty-message' ) || '';
+                        const genericError   = $container.data( 'generic-error' ) || '';
+                        const messages       = woo_contifico_globals.messages || {};
+
+                        $button.on( 'click', function ( event ) {
+                                event.preventDefault();
+
+                                const sku = $.trim( $skuInput.val() );
+
+                                $result.removeClass( 'error success' ).empty();
+
+                                if ( '' === sku ) {
+                                        if ( emptyMessage ) {
+                                                $result.addClass( 'error' ).text( emptyMessage ).show();
+                                        }
+
+                                        return;
+                                }
+
+                                $button.prop( 'disabled', true );
+                                $spinner.fadeIn();
+
+                                $.ajax( {
+                                        type: 'post',
+                                        url: ajaxurl,
+                                        data: {
+                                                action:   'woo_contifico_sync_single_product',
+                                                security: woo_contifico_globals.woo_nonce,
+                                                sku:      sku
+                                        }
+                                } ).done( function ( response ) {
+                                        $spinner.fadeOut();
+                                        $button.prop( 'disabled', false );
+
+                                        if ( response && response.success && response.data ) {
+                                                const data = response.data;
+                                                const changes = data.changes || {};
+                                                const changeMessages = [];
+
+                                                if ( changes.stock_updated ) {
+                                                        changeMessages.push( messages.stockUpdated || 'Inventario actualizado.' );
+                                                }
+
+                                                if ( changes.price_updated ) {
+                                                        changeMessages.push( messages.priceUpdated || 'Precio actualizado.' );
+                                                }
+
+                                                if ( changes.meta_updated ) {
+                                                        changeMessages.push( messages.metaUpdated || 'Identificador actualizado.' );
+                                                }
+
+                                                if ( changes.outofstock ) {
+                                                        changeMessages.push( messages.outOfStock || 'Producto sin stock.' );
+                                                }
+
+                                                if ( changeMessages.length === 0 ) {
+                                                        changeMessages.push( messages.noChanges || 'Sin cambios en inventario ni precio.' );
+                                                }
+
+                                                const $list = $( '<ul />' );
+
+                                                if ( data.woocommerce_sku ) {
+                                                        $list.append( $( '<li />' ).text( ( messages.wooSkuLabel || 'SKU en WooCommerce:' ) + ' ' + data.woocommerce_sku ) );
+                                                }
+
+                                                if ( data.contifico_sku ) {
+                                                        $list.append( $( '<li />' ).text( ( messages.contificoSkuLabel || 'SKU en Contífico:' ) + ' ' + data.contifico_sku ) );
+                                                }
+
+                                                if ( data.contifico_id ) {
+                                                        $list.append( $( '<li />' ).text( ( messages.contificoIdLabel || 'ID de Contífico:' ) + ' ' + data.contifico_id ) );
+                                                }
+
+                                                if ( typeof data.stock_quantity === 'number' ) {
+                                                        $list.append( $( '<li />' ).text( ( messages.stockLabel || 'Inventario disponible:' ) + ' ' + data.stock_quantity ) );
+                                                }
+
+                                                if ( typeof data.price === 'number' ) {
+                                                        $list.append( $( '<li />' ).text( ( messages.priceLabel || 'Precio actual:' ) + ' ' + data.price ) );
+                                                }
+
+                                                $list.append( $( '<li />' ).text( ( messages.changesLabel || 'Cambios detectados:' ) + ' ' + changeMessages.join( ' ' ) ) );
+
+                                                if ( data.message ) {
+                                                        $result.append( $( '<p />' ).text( data.message ) );
+                                                }
+
+                                                $result.append( $list );
+                                                $result.addClass( 'success' ).show();
+                                        }
+                                        else {
+                                                const message = ( response && response.data && response.data.message ) ? response.data.message : genericError;
+
+                                                if ( message ) {
+                                                        $result.addClass( 'error' ).text( message ).show();
+                                                }
+                                        }
+                                } ).fail( function ( xhr ) {
+                                        $spinner.fadeOut();
+                                        $button.prop( 'disabled', false );
+
+                                        let message = genericError;
+
+                                        if ( xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message ) {
+                                                message = xhr.responseJSON.data.message;
+                                        }
+                                        else if ( xhr.responseText ) {
+                                                message = xhr.responseText;
+                                        }
+
+                                        if ( message ) {
+                                                $result.addClass( 'error' ).text( message ).show();
+                                        }
+                                } );
+                        } );
+                } );
+
+                // Load tax info when looking for customer in order backend
+                $('#order_data .wc-customer-user select.wc-customer-search').change(function(){
 
 			//Call Ajax
 			/** @param {{get_customer_details_nonce}} woocommerce_admin_meta_boxes */

@@ -805,7 +805,8 @@ class Woo_Contifico
 	    $this->loader->add_action('woocommerce_order_refunded', $plugin_admin, 'restore_contifico_stock', 10, 2);
 
         # Register Ajax hooks
-	    $this->loader->add_action('wp_ajax_fetch_products', $plugin_admin, 'fetch_products');
+            $this->loader->add_action('wp_ajax_fetch_products', $plugin_admin, 'fetch_products');
+            $this->loader->add_action('wp_ajax_woo_contifico_sync_single_product', $plugin_admin, 'sync_single_product');
 
 	    # Add plugin crons
 	    $this->loader->add_action('woo_contifico_sync_stock', $plugin_admin, 'batch_sync_processing', 10, 1);
