@@ -39,16 +39,21 @@ define( 'WOO_CONTIFICO_URL', plugin_dir_url( __FILE__ ) );
 define( 'WOO_CONTIFICO_VERSION', '4.1.3' );
 
 # GitHub repository metadata for auto-updates
-define( 'WOO_CONTIFICO_REPO_OWNER', apply_filters( 'woo_contifico_repo_owner', 'IlPicasso' ) );
-define( 'WOO_CONTIFICO_REPO_NAME', apply_filters( 'woo_contifico_repo_name', 'ContificoWoo' ) );
-define( 'WOO_CONTIFICO_REPO_BRANCH', apply_filters( 'woo_contifico_repo_branch', 'main' ) );
-define( 'WOO_CONTIFICO_REPO_ACCESS_TOKEN', apply_filters( 'woo_contifico_repo_access_token', '' ) );
+if ( ! defined( 'WOO_CONTIFICO_REPO_OWNER' ) ) {
+        define( 'WOO_CONTIFICO_REPO_OWNER', apply_filters( 'woo_contifico_repo_owner', 'otakupahp' ) );
+}
 
-# GitHub repository metadata for auto-updates
-define( 'WOO_CONTIFICO_REPO_OWNER', apply_filters( 'woo_contifico_repo_owner', 'otakupahp' ) );
-define( 'WOO_CONTIFICO_REPO_NAME', apply_filters( 'woo_contifico_repo_name', 'ContificoWoo' ) );
-define( 'WOO_CONTIFICO_REPO_BRANCH', apply_filters( 'woo_contifico_repo_branch', 'main' ) );
-define( 'WOO_CONTIFICO_REPO_ACCESS_TOKEN', apply_filters( 'woo_contifico_repo_access_token', '' ) );
+if ( ! defined( 'WOO_CONTIFICO_REPO_NAME' ) ) {
+        define( 'WOO_CONTIFICO_REPO_NAME', apply_filters( 'woo_contifico_repo_name', 'ContificoWoo' ) );
+}
+
+if ( ! defined( 'WOO_CONTIFICO_REPO_BRANCH' ) ) {
+        define( 'WOO_CONTIFICO_REPO_BRANCH', apply_filters( 'woo_contifico_repo_branch', 'main' ) );
+}
+
+if ( ! defined( 'WOO_CONTIFICO_REPO_ACCESS_TOKEN' ) ) {
+        define( 'WOO_CONTIFICO_REPO_ACCESS_TOKEN', apply_filters( 'woo_contifico_repo_access_token', '' ) );
+}
 
 # Environment states
 define( 'WOO_CONTIFICO_TEST', 1 );

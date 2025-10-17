@@ -1386,58 +1386,6 @@ class Woo_Contifico_Admin {
                         }
                 }
 
-                return [
-                        'manage_stock'         => $manage_stock,
-                        'default_warehouse_id' => is_scalar( $id_warehouse ) ? (string) $id_warehouse : '',
-                        'warehouses_map'       => is_array( $warehouses_map ) ? $warehouses_map : [],
-                        'location_map'         => $location_map,
-                ];
-        }
-
-        /**
-         * Execute the synchronization for a resolved WooCommerce product.
-         *
-         * @since 4.2.0
-         *
-         * @param WC_Product $resolved_product
-         * @param array      $environment
-         * @param string     $lookup_sku
-         *
-         * @return array
-         * @throws Exception
-         */
-        private function execute_single_product_sync( $resolved_product, array $environment, string $lookup_sku = '' ) : array {
-
-                if ( ! $resolved_product || ! is_a( $resolved_product, 'WC_Product' ) ) {
-                        throw new Exception( __( 'No se pudo cargar el producto de WooCommerce.', 'woo-contifico' ) );
-                }
-
-                $lookup_sku = trim( $lookup_sku );
-
-                if ( '' === $lookup_sku ) {
-                        $lookup_sku = (string) $resolved_product->get_sku();
-                }
-
-                $contifico_product = $this->get_contifico_product_data_for_product( $resolved_product, $lookup_sku );
-
-                if ( empty( $contifico_product ) || ! is_array( $contifico_product ) ) {
-                        $contifico_meta_id = (string) $resolved_product->get_meta( self::PRODUCT_ID_META_KEY, true );
-
-                        if ( '' !== $contifico_meta_id ) {
-                                throw new Exception(
-                                        sprintf(
-                                                __( 'No se encontró el producto con el identificador de Contífico "%s" en Contífico.', 'woo-contifico' ),
-                                                $contifico_meta_id
-                                        )
-                                );
-                        }
-
-                        if ( '' !== $lookup_sku ) {
-                                throw new Exception(
-                                        sprintf( __( 'No se encontró el producto con el SKU "%s" en Contífico.', 'woo-contifico' ), $lookup_sku )
-                                );
-                        }
-
                                         if ( null === $quantity ) {
                                                 if ( ! array_key_exists( $warehouse_code, $warehouse_id_cache ) ) {
                                                         $warehouse_id_cache[ $warehouse_code ] = (string) ( $this->contifico->get_id_bodega( $warehouse_code ) ?? '' );
@@ -1499,35 +1447,26 @@ class Woo_Contifico_Admin {
                         }
                 }
 
-                $updated_price = false;
+               $updated_price = false;
+               $current_price = (float) $product->get_price();
 
-                if ( $this->woo_contifico->settings['sync_price'] !== 'no' ) {
-                        $price_key = $this->woo_contifico->settings['sync_price'];
+               $changes['previous_price'] = $current_price;
+               $changes['new_price']      = $current_price;
 
-                        if ( isset( $product_entry[ $price_key ] ) ) {
-                                $new_price = (float) $product_entry[ $price_key ];
-                                $old_price = (float) $product->get_price();
+               if ( $this->woo_contifico->settings['sync_price'] !== 'no' ) {
+                       $price_key = $this->woo_contifico->settings['sync_price'];
 
-                                $changes['previous_price'] = $old_price;
-                                $changes['new_price']      = $new_price;
+                       if ( isset( $product_entry[ $price_key ] ) ) {
+                               $new_price = (float) $product_entry[ $price_key ];
 
-                                if ( $new_price !== $old_price ) {
-                                        $product->set_regular_price( $new_price );
-                                        $updated_price = true;
-                                }
-                        }
-                }
-                else {
-                        $current_price = (float) $product->get_price();
-                        $changes['previous_price'] = $current_price;
-                        $changes['new_price']      = $current_price;
-                }
+                               $changes['new_price'] = $new_price;
 
-                if ( null === $changes['previous_price'] ) {
-                        $current_price                = (float) $product->get_price();
-                        $changes['previous_price']    = $current_price;
-                        $changes['new_price']         = $current_price;
-                }
+                               if ( $new_price !== $current_price ) {
+                                       $product->set_regular_price( $new_price );
+                                       $updated_price = true;
+                               }
+                       }
+               }
 
                 if ( $updated_price ) {
                         $changes['price_updated'] = true;
