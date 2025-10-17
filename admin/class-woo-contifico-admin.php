@@ -22,9 +22,12 @@ if ( ! class_exists( 'Woo_Contifico_Diagnostics_Table' ) ) {
  */
 class Woo_Contifico_Admin {
 
-        private const SYNC_DEBUG_TRANSIENT_KEY   = 'woo_contifico_sync_debug_entries';
-        private const SYNC_RESULT_TRANSIENT_KEY  = 'woo_sync_result';
-        private const PRODUCT_ID_META_KEY        = '_woo_contifico_product_id';
+        private const SYNC_DEBUG_TRANSIENT_KEY    = 'woo_contifico_sync_debug_entries';
+        private const SYNC_RESULT_TRANSIENT_KEY   = 'woo_sync_result';
+        private const MANUAL_SYNC_STATE_OPTION    = 'woo_contifico_manual_sync_state';
+        private const MANUAL_SYNC_HISTORY_OPTION  = 'woo_contifico_manual_sync_history';
+        private const MANUAL_SYNC_CANCEL_TRANSIENT = 'woo_contifico_manual_sync_cancel';
+        private const PRODUCT_ID_META_KEY         = '_woo_contifico_product_id';
 
 	/**
 	 * The ID of this plugin.
@@ -245,7 +248,23 @@ class Woo_Contifico_Admin {
                                 'pageReloadPending'  => __( 'Actualizando la página para reflejar los cambios…', 'woo-contifico' ),
                                 'globalSyncHeading'  => __( 'Resumen de actualizaciones', 'woo-contifico' ),
                                 'globalSyncEmpty'    => __( 'No se registraron cambios durante la sincronización.', 'woo-contifico' ),
+                                'manualSyncIdle'     => __( 'No hay sincronizaciones manuales en curso.', 'woo-contifico' ),
+                                'manualSyncQueued'   => __( 'Sincronización manual programada.', 'woo-contifico' ),
+                                'manualSyncRunning'  => __( 'Sincronización en progreso.', 'woo-contifico' ),
+                                'manualSyncCancelling' => __( 'Cancelación solicitada. La sincronización se detendrá pronto.', 'woo-contifico' ),
+                                'manualSyncCancelled' => __( 'La sincronización fue cancelada.', 'woo-contifico' ),
+                                'manualSyncCancelledBeforeStart' => __( 'Sincronización cancelada antes de iniciar.', 'woo-contifico' ),
+                                'manualSyncCompleted' => __( 'Sincronización completada correctamente.', 'woo-contifico' ),
+                                'manualSyncFailed'   => __( 'La sincronización manual encontró un error.', 'woo-contifico' ),
+                                'manualSyncStarting' => __( 'Iniciando sincronización…', 'woo-contifico' ),
+                                'manualSyncCanceling' => __( 'Cancelando sincronización…', 'woo-contifico' ),
+                                'manualSyncError'    => __( 'No se pudo obtener el estado de la sincronización.', 'woo-contifico' ),
+                                'manualSyncLastUpdated' => __( 'Última actualización: %s', 'woo-contifico' ),
+                                'manualSyncViewHistory' => __( 'Revisa el historial para ver el reporte completo.', 'woo-contifico' ),
+                                'manualSyncHistoryLinkLabel' => __( 'Ver historial de sincronizaciones', 'woo-contifico' ),
+                                'manualSyncStatusUnknown' => __( 'Estado de sincronización desconocido.', 'woo-contifico' ),
                         ],
+                        'manualSyncPollingInterval' => 5000,
                 ];
                 wp_localize_script( $this->plugin_name, 'woo_contifico_globals', $params );
         }
@@ -777,6 +796,867 @@ class Woo_Contifico_Admin {
 			# Return the error from the server
 			wp_send_json( $exception->getMessage(),  500);
                 }
+        }
+
+        /**
+         * Start a background manual synchronization.
+         *
+         * @since 4.3.0
+         *
+         * @return void
+         */
+        public function start_manual_sync() : void {
+
+                check_ajax_referer( 'woo_ajax_nonce', 'security' );
+
+                if ( $this->is_active() !== true ) {
+                        wp_send_json_error(
+                                [ 'message' => __( 'El conector no está activo.', 'woo-contifico' ) ],
+                                400
+                        );
+
+                        return;
+                }
+
+                if ( ! function_exists( 'as_enqueue_async_action' ) ) {
+                        wp_send_json_error(
+                                [ 'message' => __( 'La sincronización manual requiere Action Scheduler.', 'woo-contifico' ) ],
+                                500
+                        );
+
+                        return;
+                }
+
+                $state = $this->read_manual_sync_state();
+
+                if ( $this->is_manual_sync_active_state( $state ) ) {
+                        wp_send_json_error(
+                                [ 'message' => __( 'Ya existe una sincronización manual en curso.', 'woo-contifico' ) ],
+                                409
+                        );
+
+                        return;
+                }
+
+                $run_id    = $this->generate_manual_sync_run_id();
+                $timestamp = current_time( 'mysql' );
+                $state     = $this->get_default_manual_sync_state();
+
+                $state['status']       = 'queued';
+                $state['run_id']       = $run_id;
+                $state['started_at']   = $timestamp;
+                $state['last_updated'] = $timestamp;
+                $state['message']      = __( 'Sincronización manual programada.', 'woo-contifico' );
+
+                $this->clear_manual_sync_queue();
+                $this->clear_manual_sync_cancellation_flag();
+                $this->reset_manual_sync_environment();
+
+                $job_id = as_enqueue_async_action( 'woo_contifico_manual_sync', [ 1 ], $this->plugin_name );
+
+                if ( $job_id ) {
+                        $state['job_id'] = (int) $job_id;
+                }
+
+                $this->write_manual_sync_state( $state );
+
+                wp_send_json_success(
+                        [ 'state' => $this->prepare_manual_sync_state_for_response( $state ) ]
+                );
+        }
+
+        /**
+         * Retrieve the current manual synchronization status.
+         *
+         * @since 4.3.0
+         *
+         * @return void
+         */
+        public function get_manual_sync_status() : void {
+
+                check_ajax_referer( 'woo_ajax_nonce', 'security' );
+
+                $state = $this->read_manual_sync_state();
+
+                wp_send_json_success(
+                        [ 'state' => $this->prepare_manual_sync_state_for_response( $state ) ]
+                );
+        }
+
+        /**
+         * Request the cancellation of the current manual synchronization.
+         *
+         * @since 4.3.0
+         *
+         * @return void
+         */
+        public function cancel_manual_sync() : void {
+
+                check_ajax_referer( 'woo_ajax_nonce', 'security' );
+
+                $state = $this->read_manual_sync_state();
+
+                if ( ! $this->is_manual_sync_active_state( $state ) ) {
+                        wp_send_json_error(
+                                [ 'message' => __( 'No hay una sincronización manual en ejecución.', 'woo-contifico' ) ],
+                                400
+                        );
+
+                        return;
+                }
+
+                $status = isset( $state['status'] ) ? (string) $state['status'] : 'idle';
+
+                $this->clear_manual_sync_queue();
+
+                if ( 'queued' === $status ) {
+                        $state = $this->set_manual_sync_status(
+                                $state,
+                                'cancelled',
+                                __( 'Sincronización cancelada antes de iniciar.', 'woo-contifico' )
+                        );
+
+                        $state['finished_at'] = current_time( 'mysql' );
+                        $run_id               = isset( $state['run_id'] ) ? (string) $state['run_id'] : '';
+                        $state['run_id']      = '';
+                        $state['job_id']      = 0;
+
+                        $this->write_manual_sync_state( $state );
+
+                        if ( '' !== $run_id ) {
+                                $this->append_manual_sync_history_entry(
+                                        $this->build_manual_sync_history_entry(
+                                                $run_id,
+                                                $state,
+                                                'cancelled',
+                                                __( 'Sincronización cancelada antes de iniciar.', 'woo-contifico' )
+                                        )
+                                );
+                        }
+
+                        $this->clear_manual_sync_cancellation_flag();
+
+                        wp_send_json_success(
+                                [ 'state' => $this->prepare_manual_sync_state_for_response( $state ) ]
+                        );
+
+                        return;
+                }
+
+                $this->request_manual_sync_cancellation();
+
+                $state = $this->set_manual_sync_status(
+                        $state,
+                        'cancelling',
+                        __( 'Cancelación solicitada. La sincronización se detendrá pronto.', 'woo-contifico' )
+                );
+
+                $this->write_manual_sync_state( $state );
+
+                wp_send_json_success(
+                        [ 'state' => $this->prepare_manual_sync_state_for_response( $state ) ]
+                );
+        }
+
+        /**
+         * Background processor for manual synchronizations.
+         *
+         * @since 4.3.0
+         *
+         * @param int $step
+         *
+         * @return void
+         */
+        public function manual_sync_processing( int $step = 1 ) : void {
+
+                $state  = $this->read_manual_sync_state();
+                $run_id = isset( $state['run_id'] ) ? (string) $state['run_id'] : '';
+
+                if ( '' === $run_id ) {
+                        return;
+                }
+
+                if ( $this->is_manual_sync_cancellation_requested() ) {
+                        $state = $this->finalize_manual_sync_run(
+                                $state,
+                                'cancelled',
+                                __( 'Sincronización cancelada por el usuario.', 'woo-contifico' )
+                        );
+
+                        return;
+                }
+
+                if ( $step === 1 ) {
+                        $this->reset_manual_sync_environment();
+                }
+
+                $state = $this->set_manual_sync_status(
+                        $state,
+                        'running',
+                        __( 'Sincronización en progreso.', 'woo-contifico' )
+                );
+
+                $this->write_manual_sync_state( $state );
+
+                try {
+                        $result = $this->sync_stock( $step, $this->woo_contifico->settings['batch_size'] );
+                }
+                catch ( Exception $exception ) {
+                        $this->finalize_manual_sync_run(
+                                $state,
+                                'failed',
+                                $exception->getMessage()
+                        );
+
+                        throw $exception;
+                }
+
+                $state = $this->persist_manual_sync_progress( $state, $result, 'running' );
+
+                $this->write_manual_sync_state( $state );
+
+                if ( isset( $result['step'] ) && 'done' === $result['step'] ) {
+                        $this->finalize_manual_sync_run(
+                                $state,
+                                'completed',
+                                __( 'Sincronización completada correctamente.', 'woo-contifico' )
+                        );
+
+                        return;
+                }
+
+                if ( $this->is_manual_sync_cancellation_requested() ) {
+                        $this->finalize_manual_sync_run(
+                                $state,
+                                'cancelled',
+                                __( 'Sincronización cancelada por el usuario.', 'woo-contifico' )
+                        );
+
+                        return;
+                }
+
+                if ( function_exists( 'as_enqueue_async_action' ) ) {
+                        as_enqueue_async_action( 'woo_contifico_manual_sync', [ (int) $result['step'] ], $this->plugin_name );
+                }
+        }
+
+        /**
+         * Get the current manual synchronization state.
+         *
+         * @since 4.3.0
+         *
+         * @return array
+         */
+        public function get_manual_sync_state() : array {
+                return $this->read_manual_sync_state();
+        }
+
+        /**
+         * Retrieve the stored manual synchronization history entries.
+         *
+         * @since 4.3.0
+         *
+         * @return array
+         */
+        public function get_manual_sync_history() : array {
+
+                $history = $this->get_manual_sync_history_option();
+
+                return array_map(
+                        function ( $entry ) {
+                                if ( ! is_array( $entry ) ) {
+                                        $entry = [];
+                                }
+
+                                $entry['id']          = isset( $entry['id'] ) ? (string) $entry['id'] : '';
+                                $entry['status']      = isset( $entry['status'] ) ? (string) $entry['status'] : 'completed';
+                                $entry['message']     = isset( $entry['message'] ) ? (string) $entry['message'] : '';
+                                $entry['started_at']  = isset( $entry['started_at'] ) ? (string) $entry['started_at'] : '';
+                                $entry['finished_at'] = isset( $entry['finished_at'] ) ? (string) $entry['finished_at'] : '';
+                                $entry['fetched']     = isset( $entry['fetched'] ) ? (int) $entry['fetched'] : 0;
+                                $entry['found']       = isset( $entry['found'] ) ? (int) $entry['found'] : 0;
+                                $entry['updated']     = isset( $entry['updated'] ) ? (int) $entry['updated'] : 0;
+                                $entry['outofstock']  = isset( $entry['outofstock'] ) ? (int) $entry['outofstock'] : 0;
+                                $entry['debug_log']   = isset( $entry['debug_log'] ) ? (string) $entry['debug_log'] : '';
+                                $entry['updates']     = isset( $entry['updates'] ) && is_array( $entry['updates'] ) ? array_values( $entry['updates'] ) : [];
+
+                                return $entry;
+                        },
+                        $history
+                );
+        }
+
+        /**
+         * Describe an individual product update for manual synchronization reports.
+         *
+         * @since 4.3.0
+         *
+         * @param array $entry
+         *
+         * @return array
+         */
+        public function describe_manual_sync_update_entry( array $entry ) : array {
+
+                $title = isset( $entry['product_name'] ) ? (string) $entry['product_name'] : '';
+
+                if ( '' === $title ) {
+                        $title = __( 'Producto sin nombre', 'woo-contifico' );
+                }
+
+                $meta    = [];
+                $changes = [];
+                $sku     = isset( $entry['sku'] ) ? (string) $entry['sku'] : '';
+
+                if ( '' !== $sku ) {
+                        $meta[] = [
+                                'label' => __( 'SKU en WooCommerce', 'woo-contifico' ),
+                                'value' => $sku,
+                        ];
+                }
+
+                $contifico_id = isset( $entry['contifico_id'] ) ? (string) $entry['contifico_id'] : '';
+
+                if ( '' !== $contifico_id ) {
+                        $meta[] = [
+                                'label' => __( 'ID de Contífico', 'woo-contifico' ),
+                                'value' => $contifico_id,
+                        ];
+                }
+
+                $changes_data = isset( $entry['changes'] ) && is_array( $entry['changes'] ) ? $entry['changes'] : [];
+                $separator    = __( '→', 'woo-contifico' );
+                $fallback     = __( 'N/D', 'woo-contifico' );
+
+                if ( isset( $changes_data['stock'] ) && is_array( $changes_data['stock'] ) ) {
+                        $stock_change = $changes_data['stock'];
+
+                        $changes[] = [
+                                'label' => __( 'Inventario sincronizado', 'woo-contifico' ),
+                                'value' => $this->format_sync_change_value(
+                                        $stock_change['previous'] ?? null,
+                                        $stock_change['current'] ?? null,
+                                        $separator,
+                                        $fallback
+                                ),
+                                'notes' => ! empty( $stock_change['outofstock'] ) ? __( 'Producto sin stock.', 'woo-contifico' ) : '',
+                        ];
+                }
+
+                if ( isset( $changes_data['price'] ) && is_array( $changes_data['price'] ) ) {
+                        $price_change = $changes_data['price'];
+
+                        $changes[] = [
+                                'label' => __( 'Precio sincronizado', 'woo-contifico' ),
+                                'value' => $this->format_sync_change_value(
+                                        $price_change['previous'] ?? null,
+                                        $price_change['current'] ?? null,
+                                        $separator,
+                                        $fallback
+                                ),
+                                'notes' => '',
+                        ];
+                }
+
+                if ( isset( $changes_data['identifier'] ) && is_array( $changes_data['identifier'] ) ) {
+                        $identifier_change = $changes_data['identifier'];
+                        $fallback_identifier = __( 'Sin identificador registrado.', 'woo-contifico' );
+
+                        $changes[] = [
+                                'label' => __( 'Identificador de Contífico', 'woo-contifico' ),
+                                'value' => $this->format_sync_identifier_value(
+                                        isset( $identifier_change['previous'] ) ? (string) $identifier_change['previous'] : '',
+                                        isset( $identifier_change['current'] ) ? (string) $identifier_change['current'] : '',
+                                        $separator,
+                                        $fallback_identifier
+                                ),
+                                'notes' => '',
+                        ];
+                }
+
+                return [
+                        'title'   => $title,
+                        'meta'    => $meta,
+                        'changes' => $changes,
+                ];
+        }
+
+        /**
+         * Read the persisted manual synchronization state.
+         *
+         * @since 4.3.0
+         *
+         * @return array
+         */
+        private function read_manual_sync_state() : array {
+                $state = get_option( self::MANUAL_SYNC_STATE_OPTION, [] );
+
+                if ( ! is_array( $state ) ) {
+                        $state = [];
+                }
+
+                return $this->prepare_manual_sync_state_for_response( $state );
+        }
+
+        /**
+         * Persist the manual synchronization state.
+         *
+         * @since 4.3.0
+         *
+         * @param array $state
+         *
+         * @return void
+         */
+        private function write_manual_sync_state( array $state ) : void {
+                update_option( self::MANUAL_SYNC_STATE_OPTION, $this->prepare_manual_sync_state_for_response( $state ), false );
+        }
+
+        /**
+         * Provide the default shape for manual synchronization state entries.
+         *
+         * @since 4.3.0
+         *
+         * @return array
+         */
+        private function get_default_manual_sync_state() : array {
+                return [
+                        'status'       => 'idle',
+                        'run_id'       => '',
+                        'started_at'   => '',
+                        'finished_at'  => '',
+                        'last_updated' => '',
+                        'message'      => '',
+                        'job_id'       => 0,
+                        'progress'     => [
+                                'step'       => 0,
+                                'fetched'    => 0,
+                                'found'      => 0,
+                                'updated'    => 0,
+                                'outofstock' => 0,
+                                'updates'    => [],
+                                'debug_log'  => '',
+                        ],
+                ];
+        }
+
+        /**
+         * Determine if the provided state represents an active synchronization.
+         *
+         * @since 4.3.0
+         *
+         * @param array $state
+         *
+         * @return bool
+         */
+        private function is_manual_sync_active_state( array $state ) : bool {
+                $run_id = isset( $state['run_id'] ) ? (string) $state['run_id'] : '';
+
+                if ( '' === $run_id ) {
+                        return false;
+                }
+
+                $status = isset( $state['status'] ) ? (string) $state['status'] : 'idle';
+
+                return in_array( $status, [ 'queued', 'running', 'cancelling' ], true );
+        }
+
+        /**
+         * Generate an identifier for a manual synchronization run.
+         *
+         * @since 4.3.0
+         *
+         * @return string
+         */
+        private function generate_manual_sync_run_id() : string {
+                if ( function_exists( 'wp_generate_uuid4' ) ) {
+                        return (string) wp_generate_uuid4();
+                }
+
+                return uniqid( 'woo_contifico_sync_', true );
+        }
+
+        /**
+         * Remove scheduled manual synchronization tasks.
+         *
+         * @since 4.3.0
+         *
+         * @return void
+         */
+        private function clear_manual_sync_queue() : void {
+                if ( function_exists( 'as_unschedule_all_actions' ) ) {
+                        as_unschedule_all_actions( 'woo_contifico_manual_sync', null, $this->plugin_name );
+                }
+        }
+
+        /**
+         * Request a manual synchronization cancellation.
+         *
+         * @since 4.3.0
+         *
+         * @return void
+         */
+        private function request_manual_sync_cancellation() : void {
+                set_transient( self::MANUAL_SYNC_CANCEL_TRANSIENT, 1, HOUR_IN_SECONDS );
+        }
+
+        /**
+         * Clear the manual synchronization cancellation marker.
+         *
+         * @since 4.3.0
+         *
+         * @return void
+         */
+        private function clear_manual_sync_cancellation_flag() : void {
+                delete_transient( self::MANUAL_SYNC_CANCEL_TRANSIENT );
+        }
+
+        /**
+         * Determine whether a cancellation has been requested.
+         *
+         * @since 4.3.0
+         *
+         * @return bool
+         */
+        private function is_manual_sync_cancellation_requested() : bool {
+                return (bool) get_transient( self::MANUAL_SYNC_CANCEL_TRANSIENT );
+        }
+
+        /**
+         * Normalize manual synchronization state data before persisting or returning it.
+         *
+         * @since 4.3.0
+         *
+         * @param array $state
+         *
+         * @return array
+         */
+        private function prepare_manual_sync_state_for_response( array $state ) : array {
+
+                $defaults = $this->get_default_manual_sync_state();
+                $state    = array_merge( $defaults, $state );
+
+                $state['status']       = isset( $state['status'] ) ? (string) $state['status'] : 'idle';
+                $state['run_id']       = isset( $state['run_id'] ) ? (string) $state['run_id'] : '';
+                $state['started_at']   = isset( $state['started_at'] ) ? (string) $state['started_at'] : '';
+                $state['finished_at']  = isset( $state['finished_at'] ) ? (string) $state['finished_at'] : '';
+                $state['last_updated'] = isset( $state['last_updated'] ) ? (string) $state['last_updated'] : '';
+                $state['message']      = isset( $state['message'] ) ? (string) $state['message'] : '';
+                $state['job_id']       = isset( $state['job_id'] ) ? (int) $state['job_id'] : 0;
+                $state['progress']     = $this->normalize_manual_sync_progress(
+                        isset( $state['progress'] ) && is_array( $state['progress'] ) ? $state['progress'] : []
+                );
+
+                return $state;
+        }
+
+        /**
+         * Normalize the manual synchronization progress details.
+         *
+         * @since 4.3.0
+         *
+         * @param array $progress
+         *
+         * @return array
+         */
+        private function normalize_manual_sync_progress( array $progress ) : array {
+                $defaults = [
+                        'step'       => 0,
+                        'fetched'    => 0,
+                        'found'      => 0,
+                        'updated'    => 0,
+                        'outofstock' => 0,
+                        'updates'    => [],
+                        'debug_log'  => '',
+                ];
+
+                $progress = array_merge( $defaults, $progress );
+
+                $progress['fetched']    = (int) $progress['fetched'];
+                $progress['found']      = (int) $progress['found'];
+                $progress['updated']    = (int) $progress['updated'];
+                $progress['outofstock'] = (int) $progress['outofstock'];
+                $progress['updates']    = isset( $progress['updates'] ) && is_array( $progress['updates'] ) ? array_values( $progress['updates'] ) : [];
+                $progress['debug_log']  = isset( $progress['debug_log'] ) ? (string) $progress['debug_log'] : '';
+
+                if ( is_numeric( $progress['step'] ) ) {
+                        $progress['step'] = (int) $progress['step'];
+                } else {
+                        $progress['step'] = (string) $progress['step'];
+                }
+
+                return $progress;
+        }
+
+        /**
+         * Update the state status helper.
+         *
+         * @since 4.3.0
+         *
+         * @param array  $state
+         * @param string $status
+         * @param string $message
+         *
+         * @return array
+         */
+        private function set_manual_sync_status( array $state, string $status, string $message = '' ) : array {
+                $state['status']       = $status;
+                $state['last_updated'] = current_time( 'mysql' );
+
+                if ( '' !== $message ) {
+                        $state['message'] = $message;
+                }
+
+                return $state;
+        }
+
+        /**
+         * Persist manual synchronization progress counters.
+         *
+         * @since 4.3.0
+         *
+         * @param array  $state
+         * @param array  $result
+         * @param string $status
+         *
+         * @return array
+         */
+        private function persist_manual_sync_progress( array $state, array $result, string $status ) : array {
+                $progress = isset( $state['progress'] ) && is_array( $state['progress'] ) ? $state['progress'] : [];
+
+                if ( isset( $result['step'] ) ) {
+                        $progress['step'] = $result['step'];
+                }
+
+                foreach ( [ 'fetched', 'found', 'updated', 'outofstock' ] as $counter ) {
+                        if ( isset( $result[ $counter ] ) ) {
+                                $progress[ $counter ] = (int) $result[ $counter ];
+                        }
+                }
+
+                if ( isset( $result['updates'] ) && is_array( $result['updates'] ) ) {
+                        $progress['updates'] = array_values( $result['updates'] );
+                }
+
+                if ( isset( $result['debug_log'] ) ) {
+                        $progress['debug_log'] = (string) $result['debug_log'];
+                }
+
+                $state['progress'] = $this->normalize_manual_sync_progress( $progress );
+
+                return $this->set_manual_sync_status( $state, $status );
+        }
+
+        /**
+         * Finalize a manual synchronization run and store its history entry.
+         *
+         * @since 4.3.0
+         *
+         * @param array  $state
+         * @param string $status
+         * @param string $message
+         *
+         * @return array
+         */
+        private function finalize_manual_sync_run( array $state, string $status, string $message ) : array {
+                $run_id = isset( $state['run_id'] ) ? (string) $state['run_id'] : '';
+
+                $state = $this->set_manual_sync_status( $state, $status, $message );
+                $state['finished_at'] = current_time( 'mysql' );
+                $state['run_id']      = '';
+                $state['job_id']      = 0;
+
+                $this->write_manual_sync_state( $state );
+
+                if ( '' !== $run_id ) {
+                        $this->append_manual_sync_history_entry(
+                                $this->build_manual_sync_history_entry( $run_id, $state, $status, $message )
+                        );
+                }
+
+                $this->clear_manual_sync_cancellation_flag();
+                $this->clear_manual_sync_queue();
+
+                return $state;
+        }
+
+        /**
+         * Build a manual synchronization history entry.
+         *
+         * @since 4.3.0
+         *
+         * @param string $run_id
+         * @param array  $state
+         * @param string $status
+         * @param string $message
+         *
+         * @return array
+         */
+        private function build_manual_sync_history_entry( string $run_id, array $state, string $status, string $message ) : array {
+                $progress = isset( $state['progress'] ) && is_array( $state['progress'] ) ? $this->normalize_manual_sync_progress( $state['progress'] ) : $this->get_default_manual_sync_state()['progress'];
+
+                return [
+                        'id'          => $run_id,
+                        'status'      => $status,
+                        'message'     => $message,
+                        'started_at'  => isset( $state['started_at'] ) ? (string) $state['started_at'] : '',
+                        'finished_at' => isset( $state['finished_at'] ) ? (string) $state['finished_at'] : '',
+                        'fetched'     => $progress['fetched'] ?? 0,
+                        'found'       => $progress['found'] ?? 0,
+                        'updated'     => $progress['updated'] ?? 0,
+                        'outofstock'  => $progress['outofstock'] ?? 0,
+                        'updates'     => $progress['updates'] ?? [],
+                        'debug_log'   => $progress['debug_log'] ?? '',
+                ];
+        }
+
+        /**
+         * Append a history entry to the stored manual synchronization log.
+         *
+         * @since 4.3.0
+         *
+         * @param array $entry
+         *
+         * @return void
+         */
+        private function append_manual_sync_history_entry( array $entry ) : void {
+                $history = $this->get_manual_sync_history_option();
+
+                array_unshift( $history, $entry );
+
+                $max_entries = 20;
+
+                if ( count( $history ) > $max_entries ) {
+                        $history = array_slice( $history, 0, $max_entries );
+                }
+
+                $this->save_manual_sync_history( $history );
+        }
+
+        /**
+         * Retrieve the raw manual synchronization history option.
+         *
+         * @since 4.3.0
+         *
+         * @return array
+         */
+        private function get_manual_sync_history_option() : array {
+                $history = get_option( self::MANUAL_SYNC_HISTORY_OPTION, [] );
+
+                if ( ! is_array( $history ) ) {
+                        return [];
+                }
+
+                return array_values(
+                        array_filter(
+                                $history,
+                                static function ( $entry ) {
+                                        return is_array( $entry );
+                                }
+                        )
+                );
+        }
+
+        /**
+         * Persist the manual synchronization history list.
+         *
+         * @since 4.3.0
+         *
+         * @param array $history
+         *
+         * @return void
+         */
+        private function save_manual_sync_history( array $history ) : void {
+                update_option( self::MANUAL_SYNC_HISTORY_OPTION, array_values( $history ), false );
+        }
+
+        /**
+         * Reset the environment before running a manual synchronization.
+         *
+         * @since 4.3.0
+         *
+         * @return void
+         */
+        private function reset_manual_sync_environment() : void {
+                delete_transient( 'woo_contifico_fetch_productos' );
+                delete_transient( 'woo_contifico_full_inventory' );
+                delete_transient( self::SYNC_RESULT_TRANSIENT_KEY );
+                $this->reset_sync_debug_log();
+
+                if ( method_exists( $this->contifico, 'reset_inventory_cache' ) ) {
+                        $this->contifico->reset_inventory_cache();
+                }
+        }
+
+        /**
+         * Format numeric synchronization changes for reports.
+         *
+         * @since 4.3.0
+         *
+         * @param mixed  $previous
+         * @param mixed  $current
+         * @param string $separator
+         * @param string $fallback
+         *
+         * @return string
+         */
+        private function format_sync_change_value( $previous, $current, string $separator, string $fallback ) : string {
+                $has_previous = is_numeric( $previous );
+                $has_current  = is_numeric( $current );
+
+                if ( $has_previous && $has_current ) {
+                        $previous_formatted = wc_format_decimal( (float) $previous, 2 );
+                        $current_formatted  = wc_format_decimal( (float) $current, 2 );
+
+                        if ( $previous_formatted === $current_formatted ) {
+                                return $current_formatted;
+                        }
+
+                        return $previous_formatted . ' ' . $separator . ' ' . $current_formatted;
+                }
+
+                if ( $has_current ) {
+                        return wc_format_decimal( (float) $current, 2 );
+                }
+
+                if ( $has_previous ) {
+                        return wc_format_decimal( (float) $previous, 2 );
+                }
+
+                return $fallback;
+        }
+
+        /**
+         * Format identifier changes for manual synchronization reports.
+         *
+         * @since 4.3.0
+         *
+         * @param string $previous
+         * @param string $current
+         * @param string $separator
+         * @param string $fallback
+         *
+         * @return string
+         */
+        private function format_sync_identifier_value( string $previous, string $current, string $separator, string $fallback ) : string {
+                $previous = trim( $previous );
+                $current  = trim( $current );
+
+                if ( '' !== $previous && '' !== $current ) {
+                        if ( $previous === $current ) {
+                                return $current;
+                        }
+
+                        return $previous . ' ' . $separator . ' ' . $current;
+                }
+
+                if ( '' !== $current ) {
+                        return $current;
+                }
+
+                if ( '' !== $previous ) {
+                        return $previous . ' ' . $separator . ' ' . $fallback;
+                }
+
+                return $fallback;
         }
 
         /**
