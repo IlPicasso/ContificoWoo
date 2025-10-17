@@ -198,6 +198,16 @@ class Woo_Contifico_Admin {
 
                 wp_enqueue_script( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/js/woo-contifico-admin.js', [ 'jquery' ], $this->version, false );
 
+                if ( $is_product_editor ) {
+                        wp_enqueue_script(
+                                "{$this->plugin_name}-product-sync",
+                                WOO_CONTIFICO_URL . 'admin/js/woo-contifico-product-sync.js',
+                                [ 'jquery', $this->plugin_name ],
+                                $this->version,
+                                true
+                        );
+                }
+
                 if ( $hook_suffix === "woocommerce_page_{$this->plugin_name}" ) {
                         wp_enqueue_script( "{$this->plugin_name}-diagnostics", WOO_CONTIFICO_URL . 'admin/js/woo-contifico-diagnostics.js', [ 'jquery' ], $this->version, true );
                 }
@@ -226,6 +236,9 @@ class Woo_Contifico_Admin {
                                 'changeSeparator'    => __( '→', 'woo-contifico' ),
                                 'changesHeading'     => __( 'Detalle de cambios', 'woo-contifico' ),
                                 'syncing'            => __( 'Sincronizando producto…', 'woo-contifico' ),
+                                'genericError'       => __( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' ),
+                                'missingSku'         => __( 'Debes proporcionar un SKU para iniciar la sincronización.', 'woo-contifico' ),
+                                'missingIdentifier'  => __( 'No hay identificador de Contífico guardado.', 'woo-contifico' ),
                         ],
                 ];
                 wp_localize_script( $this->plugin_name, 'woo_contifico_globals', $params );
