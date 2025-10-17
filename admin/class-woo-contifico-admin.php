@@ -23,6 +23,7 @@ if ( ! class_exists( 'Woo_Contifico_Diagnostics_Table' ) ) {
 class Woo_Contifico_Admin {
 
         private const SYNC_DEBUG_TRANSIENT_KEY = 'woo_contifico_sync_debug_entries';
+        private const PRODUCT_ID_META_KEY      = '_woo_contifico_product_id';
 
 	/**
 	 * The ID of this plugin.
@@ -153,40 +154,216 @@ class Woo_Contifico_Admin {
 		];
 	}
 
-	/**
-	 * Register the stylesheets for the admin area.
-	 *
-	 * @since 1.0.0
-	 * @see admin_enqueue_scripts
-	 *
-	 * @param string $hook_suffix
-	 */
-	public function enqueue_styles($hook_suffix) {
-		if(	$hook_suffix === "woocommerce_page_{$this->plugin_name}" ) {
-			wp_enqueue_style( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/css/woo-contifico-admin.css', [], $this->version, 'all' );
-			wp_enqueue_style( "{$this->plugin_name}-diagnostics", WOO_CONTIFICO_URL . 'admin/css/woo-contifico-diagnostics.css', [], $this->version, 'all' );
-		}
-	}
+        /**
+         * Register the stylesheets for the admin area.
+         *
+         * @since 1.0.0
+         * @see admin_enqueue_scripts
+         *
+         * @param string $hook_suffix
+         */
+        public function enqueue_styles($hook_suffix) {
+                $current_post_type = get_post_type();
+                $is_product_editor = false;
 
-	/**
-	 * Register the JavaScript for the admin area.
-	 *
-	 * @since 1.0.0
-	 * @see admin_enqueue_scripts
-	 *
-	 * @param string $hook_suffix
-	 */
-	public function enqueue_scripts($hook_suffix) {
-		if(	$hook_suffix === "woocommerce_page_{$this->plugin_name}" || 'shop_order' === get_post_type() ) {
-			wp_enqueue_script( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/js/woo-contifico-admin.js', [ 'jquery' ], $this->version, false );
-			wp_enqueue_script( "{$this->plugin_name}-diagnostics", WOO_CONTIFICO_URL . 'admin/js/woo-contifico-diagnostics.js', [ 'jquery' ], $this->version, true );
-			$params = [
-				'plugin_name' => $this->plugin_name,
-				'woo_nonce'   => wp_create_nonce( 'woo_ajax_nonce' ),
-			];
-			wp_localize_script( $this->plugin_name, 'woo_contifico_globals', $params );
-		}
-	}
+                if ( 'product' === $current_post_type ) {
+                        $is_product_editor = true;
+                } elseif ( function_exists( 'get_current_screen' ) ) {
+                        $screen = get_current_screen();
+
+                        if ( $screen && isset( $screen->post_type ) && 'product' === $screen->post_type ) {
+                                $is_product_editor = true;
+                        }
+                }
+
+                if ( $hook_suffix === "woocommerce_page_{$this->plugin_name}" || $is_product_editor ) {
+                        wp_enqueue_style( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/css/woo-contifico-admin.css', [], $this->version, 'all' );
+
+                        if ( $hook_suffix === "woocommerce_page_{$this->plugin_name}" ) {
+                                wp_enqueue_style( "{$this->plugin_name}-diagnostics", WOO_CONTIFICO_URL . 'admin/css/woo-contifico-diagnostics.css', [], $this->version, 'all' );
+                        }
+                }
+        }
+
+        /**
+         * Register the JavaScript for the admin area.
+         *
+         * @since 1.0.0
+         * @see admin_enqueue_scripts
+         *
+         * @param string $hook_suffix
+         */
+        public function enqueue_scripts($hook_suffix) {
+                $current_post_type = get_post_type();
+                $is_product_editor = false;
+                $should_enqueue_js = false;
+
+                if ( 'product' === $current_post_type ) {
+                        $is_product_editor = true;
+                } elseif ( function_exists( 'get_current_screen' ) ) {
+                        $screen = get_current_screen();
+
+                        if ( $screen && isset( $screen->post_type ) && 'product' === $screen->post_type ) {
+                                $is_product_editor = true;
+                        }
+                }
+
+                if ( $hook_suffix === "woocommerce_page_{$this->plugin_name}" || 'shop_order' === $current_post_type || $is_product_editor ) {
+                        $should_enqueue_js = true;
+                }
+
+                if ( ! $should_enqueue_js ) {
+                        return;
+                }
+
+                wp_enqueue_script( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/js/woo-contifico-admin.js', [ 'jquery' ], $this->version, false );
+
+                if ( $hook_suffix === "woocommerce_page_{$this->plugin_name}" ) {
+                        wp_enqueue_script( "{$this->plugin_name}-diagnostics", WOO_CONTIFICO_URL . 'admin/js/woo-contifico-diagnostics.js', [ 'jquery' ], $this->version, true );
+                }
+
+                $params = [
+                        'plugin_name' => $this->plugin_name,
+                        'woo_nonce'   => wp_create_nonce( 'woo_ajax_nonce' ),
+                        'messages'    => [
+                                'stockUpdated'       => __( 'Inventario actualizado.', 'woo-contifico' ),
+                                'priceUpdated'       => __( 'Precio actualizado.', 'woo-contifico' ),
+                                'metaUpdated'        => __( 'Identificador de Contífico actualizado.', 'woo-contifico' ),
+                                'outOfStock'         => __( 'Producto sin stock.', 'woo-contifico' ),
+                                'noChanges'          => __( 'Sin cambios en inventario ni precio.', 'woo-contifico' ),
+                                'wooSkuLabel'        => __( 'SKU en WooCommerce:', 'woo-contifico' ),
+                                'contificoSkuLabel'  => __( 'SKU en Contífico:', 'woo-contifico' ),
+                                'contificoIdLabel'   => __( 'ID de Contífico:', 'woo-contifico' ),
+                                'stockLabel'         => __( 'Inventario disponible:', 'woo-contifico' ),
+                                'priceLabel'         => __( 'Precio actual:', 'woo-contifico' ),
+                                'changesLabel'       => __( 'Cambios detectados:', 'woo-contifico' ),
+                                'stockChangeLabel'   => __( 'Inventario sincronizado', 'woo-contifico' ),
+                                'priceChangeLabel'   => __( 'Precio sincronizado', 'woo-contifico' ),
+                                'identifierLabel'    => __( 'Identificador de Contífico', 'woo-contifico' ),
+                                'noIdentifier'       => __( 'Sin identificador registrado.', 'woo-contifico' ),
+                                'noValue'            => __( 'N/D', 'woo-contifico' ),
+                                'changeSeparator'    => __( '→', 'woo-contifico' ),
+                                'changesHeading'     => __( 'Detalle de cambios', 'woo-contifico' ),
+                        ],
+                ];
+                wp_localize_script( $this->plugin_name, 'woo_contifico_globals', $params );
+        }
+
+        /**
+         * Display the stored Contífico identifier in the main product editor.
+         *
+         * @since 4.2.0
+         *
+         * @return void
+         */
+        public function display_contifico_product_identifier() : void {
+
+                if ( ! function_exists( 'wc_get_product' ) ) {
+                        return;
+                }
+
+                global $post;
+
+                if ( ! $post || ! isset( $post->ID ) || 'product' !== $post->post_type ) {
+                        return;
+                }
+
+                $product = wc_get_product( $post->ID );
+
+                if ( ! $product ) {
+                        return;
+                }
+
+                $contifico_id       = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
+                $product_sku        = (string) $product->get_sku();
+                $generic_error      = __( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' );
+                $missing_identifier = __( 'No hay identificador de Contífico guardado.', 'woo-contifico' );
+                $sync_button_label  = __( 'Sincronizar con Contífico', 'woo-contifico' );
+
+                echo '<div class="options_group woo-contifico-product-id-field"';
+                echo ' data-product-id="' . esc_attr( (string) $product->get_id() ) . '"';
+                echo ' data-product-sku="' . esc_attr( $product_sku ) . '"';
+                echo ' data-generic-error="' . esc_attr( $generic_error ) . '"';
+                echo ' data-missing-identifier="' . esc_attr( $missing_identifier ) . '"';
+                echo '>';
+                echo '<p class="form-field">';
+                echo '<label>' . esc_html__( 'ID de Contífico', 'woo-contifico' ) . '</label>';
+
+                if ( '' !== $contifico_id ) {
+                        echo '<span class="woo-contifico-product-id-value">' . esc_html( $contifico_id ) . '</span>';
+                } else {
+                        echo '<span class="woo-contifico-product-id-missing">' . esc_html( $missing_identifier ) . '</span>';
+                }
+
+                echo '</p>';
+                echo '<div class="woo-contifico-product-sync-controls">';
+                echo '<button type="button" class="button button-secondary woo-contifico-sync-product-button">' . esc_html( $sync_button_label ) . '</button>';
+                echo '<span class="spinner woo-contifico-sync-spinner"></span>';
+                echo '</div>';
+                echo '<div class="woo-contifico-sync-result" aria-live="polite"></div>';
+                echo '</div>';
+        }
+
+        /**
+         * Display the stored Contífico identifier for each variation.
+         *
+         * @since 4.2.0
+         *
+         * @param int      $loop
+         * @param array    $variation_data
+         * @param WP_Post  $variation
+         *
+         * @return void
+         */
+        public function display_contifico_variation_identifier( $loop, $variation_data, $variation ) : void {
+
+                if ( ! function_exists( 'wc_get_product' ) ) {
+                        return;
+                }
+
+                $variation_id = 0;
+
+                if ( is_numeric( $variation ) ) {
+                        $variation_id = (int) $variation;
+                } elseif ( is_object( $variation ) && isset( $variation->ID ) ) {
+                        $variation_id = (int) $variation->ID;
+                }
+
+                if ( $variation_id <= 0 ) {
+                        return;
+                }
+
+                $variation_product = wc_get_product( $variation_id );
+
+                if ( ! $variation_product ) {
+                        return;
+                }
+
+                $contifico_id = (string) $variation_product->get_meta( self::PRODUCT_ID_META_KEY, true );
+
+                if ( '' === $contifico_id ) {
+                        $parent_id = $variation_product->get_parent_id();
+
+                        if ( $parent_id ) {
+                                $parent_product = wc_get_product( $parent_id );
+
+                                if ( $parent_product ) {
+                                        $contifico_id = (string) $parent_product->get_meta( self::PRODUCT_ID_META_KEY, true );
+                                }
+                        }
+                }
+
+                echo '<div class="woo-contifico-variation-id">';
+                echo '<span class="woo-contifico-variation-id-label">' . esc_html__( 'ID de Contífico:', 'woo-contifico' ) . '</span> ';
+
+                if ( '' !== $contifico_id ) {
+                        echo '<span class="woo-contifico-variation-id-value">' . esc_html( $contifico_id ) . '</span>';
+                } else {
+                        echo '<span class="woo-contifico-variation-id-missing">' . esc_html__( 'No hay identificador de Contífico guardado.', 'woo-contifico' ) . '</span>';
+                }
+
+                echo '</div>';
+        }
 
 	/**
 	 * Add settings option in plugins list table.
@@ -506,10 +683,10 @@ class Woo_Contifico_Admin {
 	 * @see wp_ajax_fetch_products
 	 * @noinspection PhpUnused
 	 */
-	public function fetch_products() {
+        public function fetch_products() {
 
-		# Check the validity of the ajax request
-		check_ajax_referer( 'woo_ajax_nonce', 'security' );
+                # Check the validity of the ajax request
+                check_ajax_referer( 'woo_ajax_nonce', 'security' );
 
 		# Get sync step
 		$step = isset($_POST['step']) ? (int) sanitize_text_field($_POST['step']) : 1;
@@ -533,8 +710,48 @@ class Woo_Contifico_Admin {
 		catch (Exception $exception) {
 			# Return the error from the server
 			wp_send_json( $exception->getMessage(),  500);
-		}
-	}
+                }
+        }
+
+        /**
+         * Ajax endpoint to synchronize a single product.
+         *
+         * @since 4.2.0
+         *
+         * @return void
+         */
+        public function sync_single_product() : void {
+
+                check_ajax_referer( 'woo_ajax_nonce', 'security' );
+
+                $sku        = isset( $_POST['sku'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['sku'] ) ) : '';
+                $product_id = isset( $_POST['product_id'] ) ? absint( wp_unslash( $_POST['product_id'] ) ) : 0;
+
+                if ( $product_id <= 0 && '' === $sku ) {
+                        wp_send_json_error(
+                                [ 'message' => __( 'Debes proporcionar un SKU para iniciar la sincronización.', 'woo-contifico' ) ],
+                                400
+                        );
+
+                        return;
+                }
+
+                try {
+                        if ( $product_id > 0 ) {
+                                $result = $this->sync_single_product_by_product_id( $product_id, $sku );
+                        } else {
+                                $result = $this->sync_single_product_by_sku( $sku );
+                        }
+
+                        wp_send_json_success( $result );
+                }
+                catch ( Exception $exception ) {
+                        wp_send_json_error(
+                                [ 'message' => $exception->getMessage() ],
+                                500
+                        );
+                }
+        }
 
 	/**
 	 * Batch processing function
@@ -546,7 +763,7 @@ class Woo_Contifico_Admin {
 	 * @param int $step
 	 * @throws Exception
 	 */
-	public function batch_sync_processing(int $step = 1) {
+        public function batch_sync_processing(int $step = 1) {
 
                 # Reset transients if the process is starting
                 if( $step === 1 ) {
@@ -574,10 +791,10 @@ class Woo_Contifico_Admin {
 	 * @return array sync results
 	 * @throws Exception
 	 */
-	public function sync_stock(int $step, int $batch_size) : array
-	{
+        public function sync_stock(int $step, int $batch_size) : array
+        {
 
-		$result = [];
+                $result = [];
 
 		# Check is plugin is active
 		if ( $this->is_active() === true ) {
@@ -799,110 +1016,17 @@ class Woo_Contifico_Admin {
 
                                 foreach ( $products as $product ) {
 
-                                        $updated_stock     = false;
-                                        $product_cache_key = (string) $product['id'];
-
-                                        if ( '' === $product_cache_key ) {
-                                                continue;
-                                        }
-
-                                        if ( ! array_key_exists( $product_cache_key, $product_stock_cache ) ) {
-                                                $product_stock_cache[ $product_cache_key ] = $this->contifico->get_product_stock_by_warehouses( $product_cache_key );
-                                        }
-
-                                        $stock_by_warehouse = (array) $product_stock_cache[ $product_cache_key ];
-
-                                        if( $product['product']->get_manage_stock() ) {
-                                                $new_stock = 0;
-
-                                                if ( ! empty( $location_map ) ) {
-                                                        $global_quantity = 0;
-
-                                                        foreach ( $location_map as $location_id => $warehouse_code ) {
-                                                                $location_id    = (string) $location_id;
-                                                                $warehouse_code = (string) $warehouse_code;
-                                                                $quantity       = null;
-
-                                                                if ( isset( $location_stock[ $location_id ][ $product_cache_key ] ) ) {
-                                                                        $quantity = (int) $location_stock[ $location_id ][ $product_cache_key ];
-                                                                }
-
-                                                                if ( null === $quantity ) {
-                                                                        if ( ! array_key_exists( $warehouse_code, $warehouse_id_cache ) ) {
-                                                                                $warehouse_id_cache[ $warehouse_code ] = (string) ( $this->contifico->get_id_bodega( $warehouse_code ) ?? '' );
-                                                                        }
-
-                                                                        $warehouse_id = $warehouse_id_cache[ $warehouse_code ];
-
-                                                                        if ( '' !== $warehouse_id && isset( $stock_by_warehouse[ $warehouse_id ] ) ) {
-                                                                                $quantity = (int) $stock_by_warehouse[ $warehouse_id ];
-                                                                        }
-                                                                }
-
-                                                                if ( null === $quantity ) {
-                                                                        $quantity = 0;
-                                                                }
-
-                                                                $location_stock[ $location_id ][ $product_cache_key ] = $quantity;
-                                                                $global_quantity += $quantity;
-
-                                                                if ( method_exists( $this->woo_contifico->multilocation, 'update_location_stock' ) ) {
-                                                                        $this->woo_contifico->multilocation->update_location_stock( $product['product'], $location_id, $quantity );
-                                                                }
-                                                        }
-
-                                                        $new_stock = $global_quantity;
-                                                }
-                                                else {
-                                                        if ( ! empty( $id_warehouse ) && isset( $stock_by_warehouse[ $id_warehouse ] ) ) {
-                                                                $new_stock = (int) $stock_by_warehouse[ $id_warehouse ];
-                                                        }
-                                                }
-
-                                                $old_stock = (int) $product['product']->get_stock_quantity();
-                                                if ( $old_stock !== $new_stock ) {  # Update stock
-                                                        if ( $new_stock < 1 ) { # Out of stock
-                                                                $product['product']->set_stock_quantity( 0 );
-                                                                $product['product']->set_stock_status( 'outofstock' );
-                                                                $result['outofstock'] ++;
-                                                        } else {  # New stock
-                                                                $product['product']->set_stock_quantity( $new_stock );
-                                                                $product['product']->set_stock_status( 'instock' );
-                                                        }
-                                                        $updated_stock = true;
-                                                }
-                                        }
-
-                                        # Check price
-                                        $updated_price = false;
-                                        if( $this->woo_contifico->settings['sync_price'] !== 'no' ) {
-                                                $new_price = (float) $product[$this->woo_contifico->settings['sync_price']];
-                                                $old_price = (float) $product['product']->get_price();
-                                                if ( $new_price !== $old_price ) {  # Update price
-                                                        $product['product']->set_regular_price( $new_price );
-                                                        $updated_price = true;
-                                                }
-                                        }
-
-                                        # Check if updated
-                                        if( $updated_stock || $updated_price ) {
-                                                $result['updated'] ++;
-                                                $product['product']->save();
-                                        }
-
-                                        $sku = (string) $product['product']->get_sku();
-                                        $warehouse_stock_summary = [];
-
-                                        foreach ( $stock_by_warehouse as $warehouse_id => $quantity ) {
-                                                $warehouse_code = isset( $warehouses_map[ $warehouse_id ] ) ? (string) $warehouses_map[ $warehouse_id ] : (string) $warehouse_id;
-                                                $warehouse_stock_summary[ $warehouse_code ] = (float) $quantity;
-                                        }
-
-                                        $debug_log_entries[ $product_cache_key ] = [
-                                                'id'    => $product_cache_key,
-                                                'sku'   => $sku,
-                                                'stock' => $warehouse_stock_summary,
-                                        ];
+                                        $this->update_product_from_contifico_data(
+                                                $product,
+                                                $result,
+                                                $debug_log_entries,
+                                                $product_stock_cache,
+                                                $warehouse_id_cache,
+                                                $location_stock,
+                                                $warehouses_map,
+                                                $location_map,
+                                                (string) $id_warehouse
+                                        );
 
                                 }
 
@@ -915,6 +1039,681 @@ class Woo_Contifico_Admin {
 
                 return $result;
 
+        }
+
+        /**
+         * Synchronize a single product identified by product ID.
+         *
+         * @since 4.2.0
+         *
+         * @param int    $product_id
+         * @param string $fallback_sku
+         *
+         * @return array
+         * @throws Exception
+         */
+        private function sync_single_product_by_product_id( int $product_id, string $fallback_sku = '' ) : array {
+
+                if ( $product_id <= 0 ) {
+                        throw new Exception( __( 'No se indicó un producto válido para sincronizar.', 'woo-contifico' ) );
+                }
+
+                if ( $this->is_active() !== true ) {
+                        throw new Exception( __( 'El conector no está activo.', 'woo-contifico' ) );
+                }
+
+                $environment = $this->prepare_single_product_sync_environment();
+
+                $wc_product = wc_get_product( $product_id );
+
+                if ( ! $wc_product ) {
+                        throw new Exception( __( 'No se pudo cargar el producto de WooCommerce.', 'woo-contifico' ) );
+                }
+
+                $lookup_sku = trim( $fallback_sku );
+
+                if ( '' === $lookup_sku ) {
+                        $lookup_sku = (string) $wc_product->get_sku();
+                }
+
+                return $this->execute_single_product_sync( $wc_product, $environment, $lookup_sku );
+        }
+
+        /**
+         * Prepare shared context for single-product synchronization.
+         *
+         * @since 4.2.0
+         *
+         * @return array{manage_stock:bool,default_warehouse_id:string,warehouses_map:array,location_map:array}
+         */
+        private function prepare_single_product_sync_environment() : array {
+                $this->contifico->fetch_warehouses();
+
+                $manage_stock   = wc_string_to_bool( get_option( 'woocommerce_manage_stock' ) );
+                $id_warehouse   = $this->contifico->get_id_bodega( $this->woo_contifico->settings['bodega'] );
+                $warehouses_map = $this->contifico->get_warehouses_map();
+                $location_map   = [];
+
+                if ( $manage_stock ) {
+                        if (
+                                $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
+                                && $this->woo_contifico->multilocation->is_active()
+                        ) {
+                                $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
+
+                                if ( is_array( $configured_locations ) ) {
+                                        foreach ( $configured_locations as $location_id => $warehouse_code ) {
+                                                $code = (string) $warehouse_code;
+
+                                                if ( '' === $code ) {
+                                                        continue;
+                                                }
+
+                                                $location_map[ (string) $location_id ] = $code;
+                                        }
+                                }
+                        }
+                }
+
+                return [
+                        'manage_stock'         => $manage_stock,
+                        'default_warehouse_id' => is_scalar( $id_warehouse ) ? (string) $id_warehouse : '',
+                        'warehouses_map'       => is_array( $warehouses_map ) ? $warehouses_map : [],
+                        'location_map'         => $location_map,
+                ];
+        }
+
+        /**
+         * Execute the synchronization for a resolved WooCommerce product.
+         *
+         * @since 4.2.0
+         *
+         * @param WC_Product $resolved_product
+         * @param array      $environment
+         * @param string     $lookup_sku
+         *
+         * @return array
+         * @throws Exception
+         */
+        private function execute_single_product_sync( $resolved_product, array $environment, string $lookup_sku = '' ) : array {
+
+                if ( ! $resolved_product || ! is_a( $resolved_product, 'WC_Product' ) ) {
+                        throw new Exception( __( 'No se pudo cargar el producto de WooCommerce.', 'woo-contifico' ) );
+                }
+
+                $lookup_sku = trim( $lookup_sku );
+
+                if ( '' === $lookup_sku ) {
+                        $lookup_sku = (string) $resolved_product->get_sku();
+                }
+
+                $contifico_product = $this->get_contifico_product_data_for_product( $resolved_product, $lookup_sku, true );
+
+                if ( empty( $contifico_product ) || ! is_array( $contifico_product ) ) {
+                        $contifico_meta_id = (string) $resolved_product->get_meta( self::PRODUCT_ID_META_KEY, true );
+
+                        if ( '' !== $contifico_meta_id ) {
+                                throw new Exception(
+                                        sprintf(
+                                                __( 'No se encontró el producto con el identificador de Contífico "%s" en Contífico.', 'woo-contifico' ),
+                                                $contifico_meta_id
+                                        )
+                                );
+                        }
+
+                        if ( '' !== $lookup_sku ) {
+                                throw new Exception(
+                                        sprintf( __( 'No se encontró el producto con el SKU "%s" en Contífico.', 'woo-contifico' ), $lookup_sku )
+                                );
+                        }
+
+                        throw new Exception( __( 'No se encontró el producto en Contífico.', 'woo-contifico' ) );
+                }
+
+                $contifico_id  = isset( $contifico_product['codigo'] ) ? (string) $contifico_product['codigo'] : '';
+                $contifico_sku = isset( $contifico_product['sku'] ) ? (string) $contifico_product['sku'] : $lookup_sku;
+
+                if ( '' === $contifico_id ) {
+                        throw new Exception( __( 'El producto de Contífico no tiene un identificador válido.', 'woo-contifico' ) );
+                }
+
+                $product_entry = [
+                        'id'      => $contifico_id,
+                        'pvp1'    => isset( $contifico_product['pvp1'] ) ? (float) $contifico_product['pvp1'] : 0.0,
+                        'pvp2'    => isset( $contifico_product['pvp2'] ) ? (float) $contifico_product['pvp2'] : 0.0,
+                        'pvp3'    => isset( $contifico_product['pvp3'] ) ? (float) $contifico_product['pvp3'] : 0.0,
+                        'product' => $resolved_product,
+                ];
+
+                $result = [
+                        'found'      => 1,
+                        'updated'    => 0,
+                        'outofstock' => 0,
+                ];
+
+                $debug_log_entries   = [];
+                $product_stock_cache = [];
+                $warehouse_id_cache  = [];
+                $location_stock      = [];
+
+                $warehouses_map = isset( $environment['warehouses_map'] ) && is_array( $environment['warehouses_map'] )
+                        ? $environment['warehouses_map']
+                        : [];
+                $location_map   = isset( $environment['location_map'] ) && is_array( $environment['location_map'] )
+                        ? $environment['location_map']
+                        : [];
+                $default_warehouse = isset( $environment['default_warehouse_id'] )
+                        ? (string) $environment['default_warehouse_id']
+                        : '';
+
+                $changes = $this->update_product_from_contifico_data(
+                        $product_entry,
+                        $result,
+                        $debug_log_entries,
+                        $product_stock_cache,
+                        $warehouse_id_cache,
+                        $location_stock,
+                        $warehouses_map,
+                        $location_map,
+                        $default_warehouse,
+                        true
+                );
+
+                $message = __( 'El producto se sincronizó correctamente y no registró cambios.', 'woo-contifico' );
+
+                if ( $changes['stock_updated'] || $changes['price_updated'] ) {
+                        $message = __( 'El producto se sincronizó correctamente.', 'woo-contifico' );
+                }
+
+                if ( $changes['outofstock'] ) {
+                        $message = __( 'El producto se sincronizó correctamente y quedó sin stock.', 'woo-contifico' );
+                }
+
+                if ( $changes['meta_updated'] && ! ( $changes['stock_updated'] || $changes['price_updated'] ) ) {
+                        $message = __( 'Se actualizó el identificador de Contífico para el producto.', 'woo-contifico' );
+                }
+
+                return [
+                        'message'             => $message,
+                        'contifico_id'        => $contifico_id,
+                        'contifico_sku'       => $contifico_sku,
+                        'woocommerce_sku'     => (string) $resolved_product->get_sku(),
+                        'woocommerce_product' => $resolved_product->get_id(),
+                        'changes'             => $changes,
+                        'result'              => $result,
+                        'stock_quantity'      => $resolved_product->get_manage_stock() ? (int) $resolved_product->get_stock_quantity() : null,
+                        'price'               => (float) $resolved_product->get_price(),
+                ];
+        }
+
+        /**
+         * Synchronize a single product identified by SKU.
+         *
+         * @since 4.2.0
+         *
+         * @param string $sku
+         *
+         * @return array
+         * @throws Exception
+         */
+        private function sync_single_product_by_sku( string $sku ) : array {
+
+                $sku = trim( $sku );
+
+                if ( '' === $sku ) {
+                        throw new Exception( __( 'Debes proporcionar un SKU para iniciar la sincronización.', 'woo-contifico' ) );
+                }
+
+                if ( $this->is_active() !== true ) {
+                        throw new Exception( __( 'El conector no está activo.', 'woo-contifico' ) );
+                }
+
+                $environment = $this->prepare_single_product_sync_environment();
+
+                $product_id = $this->find_wc_product_id_for_contifico_sku( $sku );
+
+                if ( $product_id <= 0 ) {
+                        throw new Exception( sprintf( __( 'No se encontró un producto con el SKU "%s" en WooCommerce.', 'woo-contifico' ), $sku ) );
+                }
+
+                $wc_product = wc_get_product( $product_id );
+
+                if ( ! $wc_product ) {
+                        throw new Exception( __( 'No se pudo cargar el producto de WooCommerce.', 'woo-contifico' ) );
+                }
+
+                $resolved_product = $this->resolve_wc_product_for_contifico_sku( $wc_product, $sku );
+
+                if ( ! $resolved_product ) {
+                        throw new Exception( __( 'No se pudo resolver la variación del producto para el SKU indicado.', 'woo-contifico' ) );
+                }
+
+                return $this->execute_single_product_sync( $resolved_product, $environment, $sku );
+        }
+        /**
+         * Apply Contífico updates to a WooCommerce product entry.
+         *
+         * @since 4.2.0
+         *
+         * @param array $product_entry
+         * @param array $result
+         * @param array $debug_log_entries
+         * @param array $product_stock_cache
+         * @param array $warehouse_id_cache
+         * @param array $location_stock
+         * @param array $warehouses_map
+         * @param array $location_map
+         * @param string $default_warehouse_id
+         *
+         * @return array{
+         *     stock_updated:bool,
+         *     price_updated:bool,
+         *     meta_updated:bool,
+         *     outofstock:bool,
+         *     previous_stock:?int,
+         *     new_stock:?int,
+         *     previous_price:?float,
+         *     new_price:?float,
+         *     previous_identifier:?string,
+         *     new_identifier:?string
+         * }
+         */
+        private function update_product_from_contifico_data(
+                array $product_entry,
+                array &$result,
+                array &$debug_log_entries,
+                array &$product_stock_cache,
+                array &$warehouse_id_cache,
+                array &$location_stock,
+                array $warehouses_map,
+                array $location_map,
+                string $default_warehouse_id,
+                bool $force_refresh = false
+        ) : array {
+
+                $changes = [
+                        'stock_updated'        => false,
+                        'price_updated'        => false,
+                        'meta_updated'         => false,
+                        'outofstock'           => false,
+                        'previous_stock'       => null,
+                        'new_stock'            => null,
+                        'previous_price'       => null,
+                        'new_price'            => null,
+                        'previous_identifier'  => null,
+                        'new_identifier'       => null,
+                ];
+
+                if ( ! isset( $product_entry['product'] ) || ! is_a( $product_entry['product'], 'WC_Product' ) ) {
+                        return $changes;
+                }
+
+                $product           = $product_entry['product'];
+                $product_cache_key = isset( $product_entry['id'] ) ? (string) $product_entry['id'] : '';
+
+                if ( '' === $product_cache_key ) {
+                        return $changes;
+                }
+
+                if ( $force_refresh ) {
+                        $product_stock_cache[ $product_cache_key ] = $this->contifico->get_product_stock_by_warehouses( $product_cache_key, true );
+                }
+                elseif ( ! array_key_exists( $product_cache_key, $product_stock_cache ) ) {
+                        $product_stock_cache[ $product_cache_key ] = $this->contifico->get_product_stock_by_warehouses( $product_cache_key );
+                }
+
+                $stock_by_warehouse = (array) $product_stock_cache[ $product_cache_key ];
+
+                if ( $product->get_manage_stock() ) {
+                        $old_stock                    = (int) $product->get_stock_quantity();
+                        $changes['previous_stock']    = $old_stock;
+                        $changes['new_stock']         = $old_stock;
+
+                        $new_stock = 0;
+
+                        if ( ! empty( $location_map ) ) {
+                                $global_quantity = 0;
+
+                                foreach ( $location_map as $location_id => $warehouse_code ) {
+                                        $location_id    = (string) $location_id;
+                                        $warehouse_code = (string) $warehouse_code;
+                                        $quantity       = null;
+
+                                        if ( isset( $location_stock[ $location_id ][ $product_cache_key ] ) ) {
+                                                $quantity = (int) $location_stock[ $location_id ][ $product_cache_key ];
+                                        }
+
+                                        if ( null === $quantity ) {
+                                                if ( ! array_key_exists( $warehouse_code, $warehouse_id_cache ) ) {
+                                                        $warehouse_id_cache[ $warehouse_code ] = (string) ( $this->contifico->get_id_bodega( $warehouse_code ) ?? '' );
+                                                }
+
+                                                $warehouse_id = $warehouse_id_cache[ $warehouse_code ];
+
+                                                if ( '' !== $warehouse_id && isset( $stock_by_warehouse[ $warehouse_id ] ) ) {
+                                                        $quantity = (int) $stock_by_warehouse[ $warehouse_id ];
+                                                }
+                                        }
+
+                                        if ( null === $quantity ) {
+                                                $quantity = 0;
+                                        }
+
+                                        $location_stock[ $location_id ][ $product_cache_key ] = $quantity;
+                                        $global_quantity                                      += $quantity;
+
+                                        if ( method_exists( $this->woo_contifico->multilocation, 'update_location_stock' ) ) {
+                                                $this->woo_contifico->multilocation->update_location_stock( $product, $location_id, $quantity );
+                                        }
+                                }
+
+                                $new_stock = $global_quantity;
+                        }
+                        else {
+                                if ( '' !== $default_warehouse_id && isset( $stock_by_warehouse[ $default_warehouse_id ] ) ) {
+                                        $new_stock = (int) $stock_by_warehouse[ $default_warehouse_id ];
+                                }
+                        }
+
+                        if ( $old_stock !== $new_stock ) {
+                                if ( $new_stock < 1 ) {
+                                        $product->set_stock_quantity( 0 );
+                                        $product->set_stock_status( 'outofstock' );
+                                        $result['outofstock'] ++;
+                                        $changes['outofstock'] = true;
+                                }
+                                else {
+                                        $product->set_stock_quantity( $new_stock );
+                                        $product->set_stock_status( 'instock' );
+                                }
+
+                                $changes['stock_updated'] = true;
+                                $changes['new_stock']     = $new_stock;
+                        }
+                        else {
+                                $changes['new_stock'] = $old_stock;
+                        }
+                }
+                elseif ( $product->get_manage_stock() === false ) {
+                        $stock_quantity = $product->get_stock_quantity();
+
+                        if ( '' !== $stock_quantity ) {
+                                $stock_quantity             = (int) $stock_quantity;
+                                $changes['previous_stock']  = $stock_quantity;
+                                $changes['new_stock']       = $stock_quantity;
+                        }
+                }
+
+                $updated_price = false;
+
+                if ( $this->woo_contifico->settings['sync_price'] !== 'no' ) {
+                        $price_key = $this->woo_contifico->settings['sync_price'];
+
+                        if ( isset( $product_entry[ $price_key ] ) ) {
+                                $new_price = (float) $product_entry[ $price_key ];
+                                $old_price = (float) $product->get_price();
+
+                                $changes['previous_price'] = $old_price;
+                                $changes['new_price']      = $new_price;
+
+                                if ( $new_price !== $old_price ) {
+                                        $product->set_regular_price( $new_price );
+                                        $updated_price = true;
+                                }
+                        }
+                }
+                else {
+                        $current_price = (float) $product->get_price();
+                        $changes['previous_price'] = $current_price;
+                        $changes['new_price']      = $current_price;
+                }
+
+                if ( null === $changes['previous_price'] ) {
+                        $current_price                = (float) $product->get_price();
+                        $changes['previous_price']    = $current_price;
+                        $changes['new_price']         = $current_price;
+                }
+
+                if ( $updated_price ) {
+                        $changes['price_updated'] = true;
+                }
+
+                $current_meta_id = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
+                $changes['previous_identifier'] = '' !== $current_meta_id ? $current_meta_id : null;
+                $changes['new_identifier']      = $product_cache_key;
+
+                if ( $current_meta_id !== $product_cache_key ) {
+                        $product->update_meta_data( self::PRODUCT_ID_META_KEY, $product_cache_key );
+                        $changes['meta_updated'] = true;
+                }
+
+                $needs_save = $changes['stock_updated'] || $changes['price_updated'] || $changes['meta_updated'];
+
+                if ( $changes['stock_updated'] || $changes['price_updated'] ) {
+                        $result['updated'] ++;
+                }
+
+                if ( $needs_save ) {
+                        $product->save();
+                }
+
+                $sku = (string) $product->get_sku();
+                $warehouse_stock_summary = [];
+
+                foreach ( $stock_by_warehouse as $warehouse_id => $quantity ) {
+                        $warehouse_code = isset( $warehouses_map[ $warehouse_id ] ) ? (string) $warehouses_map[ $warehouse_id ] : (string) $warehouse_id;
+                        $warehouse_stock_summary[ $warehouse_code ] = (float) $quantity;
+                }
+
+                $debug_log_entries[ $product_cache_key ] = [
+                        'id'    => $product_cache_key,
+                        'sku'   => $sku,
+                        'stock' => $warehouse_stock_summary,
+                ];
+
+                return $changes;
+        }
+
+        /**
+         * Retrieve Contífico data for a WooCommerce product.
+         *
+         * @since 4.2.0
+         *
+         * @param WC_Product $product
+         * @param string     $sku
+         *
+         * @return array|null
+         */
+        private function get_contifico_product_data_for_product( $product, string $sku, bool $force_refresh = false ) {
+
+                $contifico_id = '';
+
+                if ( $product && is_a( $product, 'WC_Product' ) ) {
+                        $contifico_id = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
+
+                        if ( '' === $contifico_id && $product->is_type( 'variation' ) ) {
+                                $parent_id = $product->get_parent_id();
+
+                                if ( $parent_id ) {
+                                        $parent_product = wc_get_product( $parent_id );
+
+                                        if ( $parent_product ) {
+                                                $contifico_id = (string) $parent_product->get_meta( self::PRODUCT_ID_META_KEY, true );
+                                        }
+                                }
+                        }
+                }
+
+                if ( '' !== $contifico_id ) {
+                        $product_data = $this->get_contifico_product_data_by_id( $contifico_id, $force_refresh );
+
+                        if ( ! empty( $product_data ) ) {
+                                return $product_data;
+                        }
+                }
+
+                return $this->get_contifico_product_data_by_sku( $sku, $force_refresh );
+        }
+
+        /**
+         * Locate a Contífico product by its identifier.
+         *
+         * @since 4.2.0
+         *
+         * @param string $contifico_id
+         *
+         * @return array|null
+         */
+        private function get_contifico_product_data_by_id( string $contifico_id, bool $force_refresh = false ) {
+
+                $contifico_id = trim( $contifico_id );
+
+                if ( '' === $contifico_id ) {
+                        return null;
+                }
+
+                $product = $this->contifico->get_product_by_id( $contifico_id, $force_refresh );
+
+                if ( ! empty( $product ) ) {
+                        return $product;
+                }
+
+                $inventory = $this->contifico->get_products();
+
+                if ( is_array( $inventory ) ) {
+                        $product = $this->locate_product_in_inventory_by_id( $inventory, $contifico_id );
+
+                        if ( $product ) {
+                                return $product;
+                        }
+                }
+
+                return null;
+        }
+
+        /**
+         * Locate a Contífico product by SKU.
+         *
+         * @since 4.2.0
+         *
+         * @param string $sku
+         *
+         * @return array|null
+         */
+        private function get_contifico_product_data_by_sku( string $sku, bool $force_refresh = false ) {
+
+                $sku = trim( $sku );
+
+                if ( '' === $sku ) {
+                        return null;
+                }
+
+                $candidates = array_merge( [ $sku ], $this->generate_alternate_skus( $sku ) );
+
+                foreach ( $candidates as $candidate ) {
+                        $candidate = trim( (string) $candidate );
+
+                        if ( '' === $candidate ) {
+                                continue;
+                        }
+
+                        try {
+                                $contifico_id = (string) $this->contifico->get_product_id( $candidate );
+                        }
+                        catch ( Exception $exception ) {
+                                $contifico_id = '';
+                        }
+
+                        if ( '' === $contifico_id ) {
+                                continue;
+                        }
+
+                        $product = $this->contifico->get_product_by_id( $contifico_id, $force_refresh );
+
+                        if ( ! empty( $product ) ) {
+                                return $product;
+                        }
+                }
+
+                $inventory = $this->contifico->get_products();
+
+                if ( is_array( $inventory ) ) {
+                        $product = $this->locate_product_in_inventory_by_sku( $inventory, $candidates );
+
+                        if ( $product ) {
+                                return $product;
+                        }
+                }
+
+                return null;
+        }
+
+        /**
+         * Helper to locate a product in a Contífico inventory dump using SKU candidates.
+         *
+         * @since 4.2.0
+         *
+         * @param array $inventory
+         * @param array $candidates
+         *
+         * @return array|null
+         */
+        private function locate_product_in_inventory_by_sku( array $inventory, array $candidates ) {
+
+                if ( empty( $inventory ) || empty( $candidates ) ) {
+                        return null;
+                }
+
+                $normalized_candidates = array_map( static function ( $candidate ) {
+                        return (string) $candidate;
+                }, array_unique( array_filter( $candidates, 'strlen' ) ) );
+
+                foreach ( $inventory as $product ) {
+                        if ( ! is_array( $product ) ) {
+                                continue;
+                        }
+
+                        $product_sku = isset( $product['sku'] ) ? (string) $product['sku'] : '';
+
+                        if ( '' === $product_sku ) {
+                                continue;
+                        }
+
+                        if ( in_array( $product_sku, $normalized_candidates, true ) ) {
+                                return $product;
+                        }
+                }
+
+                return null;
+        }
+
+        /**
+         * Helper to locate a product in a Contífico inventory dump using the Contífico ID.
+         *
+         * @since 4.2.0
+         *
+         * @param array  $inventory
+         * @param string $contifico_id
+         *
+         * @return array|null
+         */
+        private function locate_product_in_inventory_by_id( array $inventory, string $contifico_id ) {
+
+                if ( '' === $contifico_id || empty( $inventory ) ) {
+                        return null;
+                }
+
+                foreach ( $inventory as $product ) {
+                        if ( ! is_array( $product ) ) {
+                                continue;
+                        }
+
+                        if ( isset( $product['codigo'] ) && (string) $product['codigo'] === $contifico_id ) {
+                                return $product;
+                        }
+                }
+
+                return null;
         }
 
         /**
