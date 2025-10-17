@@ -1364,7 +1364,9 @@ class Woo_Contifico_Admin {
 
                 $stock_by_warehouse = (array) $product_stock_cache[ $product_cache_key ];
 
-                if ( $product->get_manage_stock() ) {
+                $managing_stock = method_exists( $product, 'managing_stock' ) ? (bool) $product->managing_stock() : (bool) $product->get_manage_stock();
+
+                if ( $managing_stock ) {
                         $old_stock                    = (int) $product->get_stock_quantity();
                         $changes['previous_stock']    = $old_stock;
                         $changes['new_stock']         = $old_stock;
@@ -1437,7 +1439,7 @@ class Woo_Contifico_Admin {
                                 $changes['new_stock'] = $old_stock;
                         }
                 }
-                elseif ( $product->get_manage_stock() === false ) {
+                else {
                         $stock_quantity = $product->get_stock_quantity();
 
                         if ( '' !== $stock_quantity ) {
