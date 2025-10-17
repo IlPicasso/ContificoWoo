@@ -1384,6 +1384,9 @@ class Woo_Contifico_Admin {
                                         if ( isset( $location_stock[ $location_id ][ $product_cache_key ] ) ) {
                                                 $quantity = (int) $location_stock[ $location_id ][ $product_cache_key ];
                                         }
+                                }
+                        }
+                }
 
                                         if ( null === $quantity ) {
                                                 if ( ! array_key_exists( $warehouse_code, $warehouse_id_cache ) ) {
