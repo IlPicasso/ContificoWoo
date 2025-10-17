@@ -1,0 +1,45 @@
+.woo-contifico-diagnostics {
+    margin-top: 20px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics-table {
+    margin-top: 10px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostic-row.severity-critical {
+    border-left: 4px solid #dc3232;
+    background-color: #fff5f5;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostic-row.severity-warning {
+    border-left: 4px solid #ffb900;
+    background-color: #fff8e5;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostic-row.problem-none {
+    opacity: 0.75;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__problem,
+.woo-contifico-diagnostics .woo-contifico-diagnostics__suggestion {
+    display: inline-block;
+    max-width: 420px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__missing {
+    color: #dc3232;
+    font-weight: 600;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__matches {
+    display: inline-block;
+    margin-top: 4px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__filters select {
+    min-width: 220px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__filters .button {
+    margin-left: 6px;
+}

@@ -100,6 +100,7 @@ class Woo_Contifico_Diagnostics {
 
         $diagnostics = $this->flag_duplicate_and_missing_skus( $diagnostics, $sku_registry );
         $diagnostics = $this->attach_contifico_matches( $diagnostics, $contifico_by_code, $contifico_by_sku );
+        $diagnostics = $this->annotate_parent_variation_mismatches( $diagnostics );
 
         set_transient( 'woo_contifico_diagnostics', $diagnostics, 10 * MINUTE_IN_SECONDS );
 
@@ -165,6 +166,7 @@ class Woo_Contifico_Diagnostics {
             'error_detectado'        => [],
             'codigo_contifico'       => '',
             'coincidencias_posibles' => [],
+            'variaciones_sin_coincidencia' => [],
         ];
     }
 
@@ -193,6 +195,7 @@ class Woo_Contifico_Diagnostics {
             'error_detectado'        => [],
             'codigo_contifico'       => '',
             'coincidencias_posibles' => [],
+            'parent_id'              => $parent->get_id(),
             '_variation_meta'        => [
                 'candidate_sku' => $candidate_sku,
                 'size_slug'     => $size_slug,
@@ -333,6 +336,60 @@ class Woo_Contifico_Diagnostics {
             } else {
                 $diagnostics[ $index ]['error_detectado'] = [];
             }
+        }
+
+        return $diagnostics;
+    }
+
+    /**
+     * Attach variation mismatch context to parent products.
+     *
+     * @param array<int,array<string,mixed>> $diagnostics Diagnostics entries.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function annotate_parent_variation_mismatches( array $diagnostics ) : array {
+        $missing_by_parent = [];
+
+        foreach ( $diagnostics as $entry ) {
+            if ( ! isset( $entry['tipo'] ) || 'variation' !== $entry['tipo'] ) {
+                continue;
+            }
+
+            $parent_id = isset( $entry['parent_id'] ) ? (int) $entry['parent_id'] : 0;
+
+            if ( $parent_id <= 0 ) {
+                continue;
+            }
+
+            $codigo_contifico = isset( $entry['codigo_contifico'] ) ? (string) $entry['codigo_contifico'] : '';
+
+            if ( '' !== $codigo_contifico ) {
+                continue;
+            }
+
+            $label = isset( $entry['nombre'] ) ? (string) $entry['nombre'] : '';
+            $sku   = isset( $entry['sku_detectado'] ) ? (string) $entry['sku_detectado'] : '';
+
+            if ( '' === $label && '' !== $sku ) {
+                /* translators: %s: variation SKU. */
+                $label = sprintf( __( 'Variación con SKU %s', 'woo-contifico' ), $sku );
+            } elseif ( '' === $label ) {
+                $label = __( 'Variación sin nombre', 'woo-contifico' );
+            }
+
+            $missing_by_parent[ $parent_id ][] = $label;
+        }
+
+        foreach ( $diagnostics as $index => $entry ) {
+            if ( ! isset( $entry['tipo'] ) || 'variable' !== $entry['tipo'] ) {
+                continue;
+            }
+
+            $parent_id = isset( $entry['post_id'] ) ? (int) $entry['post_id'] : 0;
+            $labels    = isset( $missing_by_parent[ $parent_id ] ) ? $missing_by_parent[ $parent_id ] : [];
+
+            $diagnostics[ $index ]['variaciones_sin_coincidencia'] = array_values( array_unique( $labels ) );
         }
 
         return $diagnostics;

@@ -2,6 +2,10 @@
 
 use Pahp\SDK\Contifico;
 
+if ( ! class_exists( 'Woo_Contifico_Diagnostics_Table' ) ) {
+        require_once plugin_dir_path( __FILE__ ) . 'class-woo-contifico-diagnostics-table.php';
+}
+
 /**
  * The admin-specific functionality of the plugin.
  *
@@ -160,6 +164,7 @@ class Woo_Contifico_Admin {
 	public function enqueue_styles($hook_suffix) {
 		if(	$hook_suffix === "woocommerce_page_{$this->plugin_name}" ) {
 			wp_enqueue_style( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/css/woo-contifico-admin.css', [], $this->version, 'all' );
+			wp_enqueue_style( "{$this->plugin_name}-diagnostics", WOO_CONTIFICO_URL . 'admin/css/woo-contifico-diagnostics.css', [], $this->version, 'all' );
 		}
 	}
 
@@ -174,6 +179,7 @@ class Woo_Contifico_Admin {
 	public function enqueue_scripts($hook_suffix) {
 		if(	$hook_suffix === "woocommerce_page_{$this->plugin_name}" || 'shop_order' === get_post_type() ) {
 			wp_enqueue_script( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/js/woo-contifico-admin.js', [ 'jquery' ], $this->version, false );
+			wp_enqueue_script( "{$this->plugin_name}-diagnostics", WOO_CONTIFICO_URL . 'admin/js/woo-contifico-diagnostics.js', [ 'jquery' ], $this->version, true );
 			$params = [
 				'plugin_name' => $this->plugin_name,
 				'woo_nonce'   => wp_create_nonce( 'woo_ajax_nonce' ),
