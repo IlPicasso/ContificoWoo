@@ -65,7 +65,7 @@
             <div class="fetch-products">
                 <h3><?php _e('Sincronizar manualmente desde Contífico', $this->plugin_name); ?></h3>
                 <?php _e('<p>El plugin actualiza periódicamente el inventario de productos desde Contífico.</p>', $this->plugin_name); ?>
-	            <?php _e('<p>La frecuencia de actualización se determina por el campo <strong>Frecuencia</strong> en la <a href="?page=woo-contifico&tab=contifico">pestaña de integración</a>.</p>', $this->plugin_name); ?>
+                    <?php _e('<p>La frecuencia de actualización se determina por el campo <strong>Frecuencia</strong> en la <a href="?page=woo-contifico&tab=contifico">pestaña de integración</a>.</p>', $this->plugin_name); ?>
                 <button class="button"><?php _e('Sincronizar inventario manualmente', $this->plugin_name) ?></button>
                 <img alt="loading" src="<?php echo esc_url( includes_url() . 'js/thickbox/loadingAnimation.gif' ); ?>" />
                 <div class="result">
@@ -75,6 +75,17 @@
                         <li><?php _e('Productos con inventario actualizado: ', $this->plugin_name) ?><span class="updated"></span></li>
                         <li><?php _e('Productos sin inventario: ', $this->plugin_name) ?><span class="outofstock"></span></li>
                     </ul>
+                </div>
+                <div class="fetch-single-product" data-empty-message="<?php echo esc_attr__( 'Ingresa un SKU para sincronizar el producto.', 'woo-contifico' ); ?>" data-generic-error="<?php echo esc_attr__( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' ); ?>">
+                    <h4><?php esc_html_e( 'Sincronizar un producto específico', 'woo-contifico' ); ?></h4>
+                    <p><?php esc_html_e( 'Introduce el SKU del producto que deseas actualizar con los datos de Contífico.', 'woo-contifico' ); ?></p>
+                    <label>
+                        <span class="screen-reader-text"><?php esc_html_e( 'SKU del producto', 'woo-contifico' ); ?></span>
+                        <input type="text" name="woo_contifico_single_sku" placeholder="<?php echo esc_attr__( 'SKU de WooCommerce', 'woo-contifico' ); ?>" />
+                    </label>
+                    <button type="button" class="button button-secondary"><?php esc_html_e( 'Sincronizar producto', 'woo-contifico' ); ?></button>
+                    <img alt="loading" src="<?php echo esc_url( includes_url() . 'js/thickbox/loadingAnimation.gif' ); ?>" />
+                    <div class="result" aria-live="polite"></div>
                 </div>
             </div>
         <?php endif; ?>

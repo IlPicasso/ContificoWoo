@@ -66,6 +66,15 @@ class Contifico
          */
         private $product_stock_cache;
 
+        /**
+         * Cache for individual Contífico product lookups keyed by identifier.
+         *
+         * @since 4.2.0
+         * @access private
+         * @var array<string,array<string,mixed>>
+         */
+        private $product_cache_by_id;
+
 	/**
 	 * @since 3.1.0
 	 * @access private
@@ -100,6 +109,7 @@ class Contifico
                     $this->warehouses = [];
             }
             $this->product_stock_cache = [];
+            $this->product_cache_by_id = [];
             $this->log_transactions = $log_transactions;
             $this->log_path = $log_path;
 
@@ -272,6 +282,7 @@ class Contifico
 
                 $this->products        = [];
                 $this->inventory_total = 0;
+                $this->product_cache_by_id = [];
 
                 delete_transient( self::INVENTORY_TRANSIENT_KEY );
                 delete_transient( self::INVENTORY_TOTAL_TRANSIENT_KEY );
@@ -465,34 +476,200 @@ class Contifico
                 return $stocks;
         }
 
-	/**
-	 * Return the Contifico's product id
-	 *
-	 * @since 1.3.0
-	 *
-	 * @param string $sku
-	 * @return string
-	 * @throws
-	 */
-	public function get_product_id($sku) : string
-	{
-		# Get an array with the SKU as index and the Contifico's id as value
-		$sku_products = array_column($this->products,'codigo','sku');
-		$product_id = isset($sku_products[$sku]) ? $sku_products[$sku] : '';
+        /**
+         * Return the Contifico's product id
+         *
+         * @since 1.3.0
+         *
+         * @param string $sku
+         * @return string
+         * @throws
+         */
+        public function get_product_id($sku) : string
+        {
+                # Get an array with the SKU as index and the Contifico's id as value
+                $sku_products = array_column($this->products,'codigo','sku');
+                $product_id = isset($sku_products[$sku]) ? $sku_products[$sku] : '';
 
-		# If no product ID is set, call Contifico to get it
-		if( empty($product_id) ) {
-			$producto = $this->call( "producto/?codigo={$sku}" );
-			if( empty($producto) ) {
-				throw new Exception("API Error: {$sku} not found", 400);
+                # If no product ID is set, call Contifico to get it
+                if( empty($product_id) ) {
+                        $producto = $this->call( "producto/?codigo={$sku}" );
+                        if( empty($producto) ) {
+                                throw new Exception("API Error: {$sku} not found", 400);
 			}
 			else {
 				$product_id = $producto[0]['id'];
 			}
 		}
 
-		return $product_id;
-	}
+                return $product_id;
+        }
+
+        /**
+         * Retrieve a Contífico product by its identifier using the dedicated endpoint.
+         *
+         * @since 4.2.0
+         *
+         * @param string $product_id
+         * @return array<string,mixed>
+         */
+        public function get_product_by_id( string $product_id ) : array {
+
+                $product_id = trim( $product_id );
+
+                if ( '' === $product_id ) {
+                        return [];
+                }
+
+                if ( isset( $this->product_cache_by_id[ $product_id ] ) ) {
+                        return $this->product_cache_by_id[ $product_id ];
+                }
+
+                foreach ( $this->products as $product_entry ) {
+                        if ( ! is_array( $product_entry ) ) {
+                                continue;
+                        }
+
+                        if (
+                                ( isset( $product_entry['codigo'] ) && (string) $product_entry['codigo'] === $product_id )
+                        ) {
+                                $this->product_cache_by_id[ $product_id ] = $product_entry;
+
+                                return $product_entry;
+                        }
+                }
+
+                $transient_key = 'woo_contifico_product_' . md5( $product_id );
+                $cached_product = get_transient( $transient_key );
+
+                if ( is_array( $cached_product ) && isset( $cached_product['codigo'] ) ) {
+                        $this->product_cache_by_id[ $product_id ] = $cached_product;
+                        $this->cache_single_product_entry( $cached_product );
+
+                        return $cached_product;
+                }
+
+                try {
+                        $product = $this->call( "producto/{$product_id}" );
+                }
+                catch ( Exception $exception ) {
+                        $product = [];
+                }
+
+                if ( isset( $product[0] ) && is_array( $product[0] ) ) {
+                        $product = $product[0];
+                }
+
+                if ( ! is_array( $product ) ) {
+                        return [];
+                }
+
+                $normalized = $this->normalize_product_entry( $product );
+
+                if ( empty( $normalized ) ) {
+                        return [];
+                }
+
+                $this->product_cache_by_id[ $product_id ] = $normalized;
+                $this->cache_single_product_entry( $normalized );
+                set_transient( $transient_key, $normalized, self::TRANSIENT_TTL );
+
+                return $normalized;
+        }
+
+        /**
+         * Cache a single product entry into the local inventory store.
+         *
+         * @since 4.2.0
+         *
+         * @param array<string,mixed> $product
+         * @return void
+         */
+        private function cache_single_product_entry( array $product ) : void {
+
+                if ( empty( $product ) || ! isset( $product['codigo'] ) ) {
+                        return;
+                }
+
+                $contifico_id  = (string) $product['codigo'];
+                $sku           = isset( $product['sku'] ) ? (string) $product['sku'] : '';
+                $needs_persist = false;
+                $updated       = false;
+
+                foreach ( $this->products as $index => $existing ) {
+                        if ( ! is_array( $existing ) ) {
+                                continue;
+                        }
+
+                        $existing_id = isset( $existing['codigo'] ) ? (string) $existing['codigo'] : '';
+                        $existing_sku = isset( $existing['sku'] ) ? (string) $existing['sku'] : '';
+
+                        if ( $existing_id === $contifico_id || ( '' !== $sku && $existing_sku === $sku ) ) {
+                                if ( $this->products[ $index ] !== $product ) {
+                                        $this->products[ $index ] = $product;
+                                        $needs_persist             = true;
+                                }
+
+                                $updated = true;
+                                break;
+                        }
+                }
+
+                if ( ! $updated ) {
+                        $this->products[] = $product;
+                        $needs_persist    = true;
+                }
+
+                if ( $needs_persist ) {
+                        update_option( 'woo_contifico_products', $this->products );
+                        set_transient( self::INVENTORY_TRANSIENT_KEY, $this->products, self::TRANSIENT_TTL );
+                }
+        }
+
+        /**
+         * Normalize a product payload from Contífico into the internal structure.
+         *
+         * @since 4.2.0
+         *
+         * @param array<string,mixed> $product
+         * @return array<string,mixed>
+         */
+        private function normalize_product_entry( array $product ) : array {
+
+                if ( empty( $product ) ) {
+                        return [];
+                }
+
+                $contifico_id = '';
+
+                if ( isset( $product['id'] ) && '' !== $product['id'] ) {
+                        $contifico_id = (string) $product['id'];
+                } elseif ( isset( $product['codigo'] ) && '' !== $product['codigo'] ) {
+                        $contifico_id = (string) $product['codigo'];
+                }
+
+                if ( '' === $contifico_id ) {
+                        return [];
+                }
+
+                $sku = '';
+
+                if ( isset( $product['sku'] ) && '' !== $product['sku'] ) {
+                        $sku = (string) $product['sku'];
+                }
+
+                if ( '' === $sku && isset( $product['codigo'] ) && '' !== $product['codigo'] ) {
+                        $sku = (string) $product['codigo'];
+                }
+
+                return [
+                        'codigo' => $contifico_id,
+                        'sku'    => $sku,
+                        'pvp1'   => isset( $product['pvp1'] ) ? (float) $product['pvp1'] : 0.0,
+                        'pvp2'   => isset( $product['pvp2'] ) ? (float) $product['pvp2'] : 0.0,
+                        'pvp3'   => isset( $product['pvp3'] ) ? (float) $product['pvp3'] : 0.0,
+                ];
+        }
 
 	/**
 	 * Get stored products
