@@ -125,6 +125,10 @@
     margin: 1em 0;
 }
 
+#woo-contifico-settings-page .manual-sync-actions .manual-sync-cancel {
+    display: none;
+}
+
 #woo-contifico-settings-page .manual-sync-spinner {
     float: none;
     margin: 0;

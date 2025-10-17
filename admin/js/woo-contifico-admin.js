@@ -622,6 +622,10 @@
 
                                         setLoading( true );
 
+                                        if ( $cancelButton.length ) {
+                                                $cancelButton.show().prop( 'disabled', true );
+                                        }
+
                                         if ( $status.length && messages.manualSyncStarting ) {
                                                 $status.removeClass( 'empty' ).text( messages.manualSyncStarting );
                                         }
