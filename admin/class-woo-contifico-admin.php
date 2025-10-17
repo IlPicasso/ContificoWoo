@@ -154,54 +154,92 @@ class Woo_Contifico_Admin {
 		];
 	}
 
-	/**
-	 * Register the stylesheets for the admin area.
-	 *
-	 * @since 1.0.0
-	 * @see admin_enqueue_scripts
-	 *
-	 * @param string $hook_suffix
-	 */
-	public function enqueue_styles($hook_suffix) {
-		if(	$hook_suffix === "woocommerce_page_{$this->plugin_name}" ) {
-			wp_enqueue_style( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/css/woo-contifico-admin.css', [], $this->version, 'all' );
-			wp_enqueue_style( "{$this->plugin_name}-diagnostics", WOO_CONTIFICO_URL . 'admin/css/woo-contifico-diagnostics.css', [], $this->version, 'all' );
-		}
-	}
+        /**
+         * Register the stylesheets for the admin area.
+         *
+         * @since 1.0.0
+         * @see admin_enqueue_scripts
+         *
+         * @param string $hook_suffix
+         */
+        public function enqueue_styles($hook_suffix) {
+                $current_post_type = get_post_type();
+                $is_product_editor = false;
 
-	/**
-	 * Register the JavaScript for the admin area.
-	 *
-	 * @since 1.0.0
-	 * @see admin_enqueue_scripts
-	 *
-	 * @param string $hook_suffix
-	 */
-	public function enqueue_scripts($hook_suffix) {
-		$current_post_type = get_post_type();
+                if ( 'product' === $current_post_type ) {
+                        $is_product_editor = true;
+                } elseif ( function_exists( 'get_current_screen' ) ) {
+                        $screen = get_current_screen();
 
-		if(	$hook_suffix === "woocommerce_page_{$this->plugin_name}" || 'shop_order' === $current_post_type || 'product' === $current_post_type ) {
-			wp_enqueue_script( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/js/woo-contifico-admin.js', [ 'jquery' ], $this->version, false );
-			wp_enqueue_script( "{$this->plugin_name}-diagnostics", WOO_CONTIFICO_URL . 'admin/js/woo-contifico-diagnostics.js', [ 'jquery' ], $this->version, true );
-                        $params = [
-                                'plugin_name' => $this->plugin_name,
-                                'woo_nonce'   => wp_create_nonce( 'woo_ajax_nonce' ),
-                                'messages'    => [
-                                        'stockUpdated'     => __( 'Inventario actualizado.', 'woo-contifico' ),
-                                        'priceUpdated'     => __( 'Precio actualizado.', 'woo-contifico' ),
-                                        'metaUpdated'      => __( 'Identificador de Contífico actualizado.', 'woo-contifico' ),
-                                        'outOfStock'       => __( 'Producto sin stock.', 'woo-contifico' ),
-                                        'noChanges'        => __( 'Sin cambios en inventario ni precio.', 'woo-contifico' ),
-                                        'wooSkuLabel'      => __( 'SKU en WooCommerce:', 'woo-contifico' ),
-                                        'contificoSkuLabel'=> __( 'SKU en Contífico:', 'woo-contifico' ),
-                                        'contificoIdLabel' => __( 'ID de Contífico:', 'woo-contifico' ),
-                                        'stockLabel'       => __( 'Inventario disponible:', 'woo-contifico' ),
-                                        'priceLabel'       => __( 'Precio actual:', 'woo-contifico' ),
-                                        'changesLabel'     => __( 'Cambios detectados:', 'woo-contifico' ),
-                                ],
-                        ];
-                        wp_localize_script( $this->plugin_name, 'woo_contifico_globals', $params );
+                        if ( $screen && isset( $screen->post_type ) && 'product' === $screen->post_type ) {
+                                $is_product_editor = true;
+                        }
                 }
+
+                if ( $hook_suffix === "woocommerce_page_{$this->plugin_name}" || $is_product_editor ) {
+                        wp_enqueue_style( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/css/woo-contifico-admin.css', [], $this->version, 'all' );
+
+                        if ( $hook_suffix === "woocommerce_page_{$this->plugin_name}" ) {
+                                wp_enqueue_style( "{$this->plugin_name}-diagnostics", WOO_CONTIFICO_URL . 'admin/css/woo-contifico-diagnostics.css', [], $this->version, 'all' );
+                        }
+                }
+        }
+
+        /**
+         * Register the JavaScript for the admin area.
+         *
+         * @since 1.0.0
+         * @see admin_enqueue_scripts
+         *
+         * @param string $hook_suffix
+         */
+        public function enqueue_scripts($hook_suffix) {
+                $current_post_type = get_post_type();
+                $is_product_editor = false;
+                $should_enqueue_js = false;
+
+                if ( 'product' === $current_post_type ) {
+                        $is_product_editor = true;
+                } elseif ( function_exists( 'get_current_screen' ) ) {
+                        $screen = get_current_screen();
+
+                        if ( $screen && isset( $screen->post_type ) && 'product' === $screen->post_type ) {
+                                $is_product_editor = true;
+                        }
+                }
+
+                if ( $hook_suffix === "woocommerce_page_{$this->plugin_name}" || 'shop_order' === $current_post_type || $is_product_editor ) {
+                        $should_enqueue_js = true;
+                }
+
+                if ( ! $should_enqueue_js ) {
+                        return;
+                }
+
+                wp_enqueue_script( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/js/woo-contifico-admin.js', [ 'jquery' ], $this->version, false );
+
+                if ( $hook_suffix === "woocommerce_page_{$this->plugin_name}" ) {
+                        wp_enqueue_script( "{$this->plugin_name}-diagnostics", WOO_CONTIFICO_URL . 'admin/js/woo-contifico-diagnostics.js', [ 'jquery' ], $this->version, true );
+                }
+
+                $params = [
+                        'plugin_name' => $this->plugin_name,
+                        'woo_nonce'   => wp_create_nonce( 'woo_ajax_nonce' ),
+                        'messages'    => [
+                                'stockUpdated'     => __( 'Inventario actualizado.', 'woo-contifico' ),
+                                'priceUpdated'     => __( 'Precio actualizado.', 'woo-contifico' ),
+                                'metaUpdated'      => __( 'Identificador de Contífico actualizado.', 'woo-contifico' ),
+                                'outOfStock'       => __( 'Producto sin stock.', 'woo-contifico' ),
+                                'noChanges'        => __( 'Sin cambios en inventario ni precio.', 'woo-contifico' ),
+                                'wooSkuLabel'      => __( 'SKU en WooCommerce:', 'woo-contifico' ),
+                                'contificoSkuLabel'=> __( 'SKU en Contífico:', 'woo-contifico' ),
+                                'contificoIdLabel' => __( 'ID de Contífico:', 'woo-contifico' ),
+                                'stockLabel'       => __( 'Inventario disponible:', 'woo-contifico' ),
+                                'priceLabel'       => __( 'Precio actual:', 'woo-contifico' ),
+                                'changesLabel'     => __( 'Cambios detectados:', 'woo-contifico' ),
+                        ],
+                ];
+                wp_localize_script( $this->plugin_name, 'woo_contifico_globals', $params );
         }
 
         /**
