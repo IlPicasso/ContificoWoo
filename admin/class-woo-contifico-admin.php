@@ -163,18 +163,8 @@ class Woo_Contifico_Admin {
          * @param string $hook_suffix
          */
         public function enqueue_styles($hook_suffix) {
-                $current_post_type = get_post_type();
-                $is_product_editor = false;
-
-                if ( 'product' === $current_post_type ) {
-                        $is_product_editor = true;
-                } elseif ( function_exists( 'get_current_screen' ) ) {
-                        $screen = get_current_screen();
-
-                        if ( $screen && isset( $screen->post_type ) && 'product' === $screen->post_type ) {
-                                $is_product_editor = true;
-                        }
-                }
+                $current_post_type = $this->resolve_admin_post_type();
+                $is_product_editor = $this->is_product_editor_screen();
 
                 if ( $hook_suffix === "woocommerce_page_{$this->plugin_name}" || $is_product_editor ) {
                         wp_enqueue_style( $this->plugin_name, WOO_CONTIFICO_URL . 'admin/css/woo-contifico-admin.css', [], $this->version, 'all' );
@@ -194,19 +184,9 @@ class Woo_Contifico_Admin {
          * @param string $hook_suffix
          */
         public function enqueue_scripts($hook_suffix) {
-                $current_post_type = get_post_type();
-                $is_product_editor = false;
+                $current_post_type = $this->resolve_admin_post_type();
+                $is_product_editor = $this->is_product_editor_screen();
                 $should_enqueue_js = false;
-
-                if ( 'product' === $current_post_type ) {
-                        $is_product_editor = true;
-                } elseif ( function_exists( 'get_current_screen' ) ) {
-                        $screen = get_current_screen();
-
-                        if ( $screen && isset( $screen->post_type ) && 'product' === $screen->post_type ) {
-                                $is_product_editor = true;
-                        }
-                }
 
                 if ( $hook_suffix === "woocommerce_page_{$this->plugin_name}" || 'shop_order' === $current_post_type || $is_product_editor ) {
                         $should_enqueue_js = true;
@@ -225,6 +205,7 @@ class Woo_Contifico_Admin {
                 $params = [
                         'plugin_name' => $this->plugin_name,
                         'woo_nonce'   => wp_create_nonce( 'woo_ajax_nonce' ),
+                        'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
                         'messages'    => [
                                 'stockUpdated'       => __( 'Inventario actualizado.', 'woo-contifico' ),
                                 'priceUpdated'       => __( 'Precio actualizado.', 'woo-contifico' ),
@@ -244,9 +225,70 @@ class Woo_Contifico_Admin {
                                 'noValue'            => __( 'N/D', 'woo-contifico' ),
                                 'changeSeparator'    => __( '→', 'woo-contifico' ),
                                 'changesHeading'     => __( 'Detalle de cambios', 'woo-contifico' ),
+                                'syncing'            => __( 'Sincronizando producto…', 'woo-contifico' ),
                         ],
                 ];
                 wp_localize_script( $this->plugin_name, 'woo_contifico_globals', $params );
+        }
+
+        /**
+         * Determine if the current admin request is related to the product editor.
+         *
+         * @since 4.2.0
+         *
+         * @return bool
+         */
+        private function is_product_editor_screen() : bool {
+                if ( 'product' === $this->resolve_admin_post_type() ) {
+                        return true;
+                }
+
+                if ( function_exists( 'get_current_screen' ) ) {
+                        $screen = get_current_screen();
+
+                        if ( $screen && isset( $screen->post_type ) && 'product' === $screen->post_type ) {
+                                return true;
+                        }
+                }
+
+                return false;
+        }
+
+        /**
+         * Resolve the current admin post type taking into account request context.
+         *
+         * @since 4.2.0
+         *
+         * @return string
+         */
+        private function resolve_admin_post_type() : string {
+                $post_type = get_post_type();
+
+                if ( is_string( $post_type ) && '' !== $post_type ) {
+                        return $post_type;
+                }
+
+                if ( isset( $_GET['post_type'] ) ) {
+                        $requested_post_type = sanitize_key( wp_unslash( (string) $_GET['post_type'] ) );
+
+                        if ( '' !== $requested_post_type ) {
+                                return $requested_post_type;
+                        }
+                }
+
+                if ( isset( $_GET['post'] ) ) {
+                        $post_id = absint( wp_unslash( $_GET['post'] ) );
+
+                        if ( $post_id > 0 ) {
+                                $post = get_post( $post_id );
+
+                                if ( $post && isset( $post->post_type ) ) {
+                                        return (string) $post->post_type;
+                                }
+                        }
+                }
+
+                return '';
         }
 
         /**

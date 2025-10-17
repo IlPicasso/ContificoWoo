@@ -4,8 +4,10 @@
 
         // DOM ready
         $(function() {
-                const pluginGlobals = ( typeof woo_contifico_globals !== 'undefined' ) ? woo_contifico_globals : {};
-                const messages      = pluginGlobals.messages || {};
+                const pluginGlobals  = ( typeof woo_contifico_globals !== 'undefined' ) ? woo_contifico_globals : {};
+                const messages       = pluginGlobals.messages || {};
+                const ajaxEndpoint   = pluginGlobals.ajaxUrl || ( typeof window.ajaxurl !== 'undefined' ? window.ajaxurl : '' );
+                const syncingMessage = messages.syncing || '';
 
                 function formatChangeValue( previous, next, separator, fallback ) {
                         const hasPrevious = typeof previous === 'number';
@@ -216,10 +218,14 @@
 				'step': step
 			};
 
-			$.ajax({
-				type: 'post',
-				url: ajaxurl,
-				data: data,
+                        if ( ! ajaxEndpoint ) {
+                                return;
+                        }
+
+                        $.ajax({
+                                type: 'post',
+                                url: ajaxEndpoint,
+                                data: data,
 				success: function (response) {
 
 					/** @param {{step, fetched, found, outofstock}} response */
@@ -268,12 +274,24 @@
                                         return;
                                 }
 
+                                if ( syncingMessage ) {
+                                        $result.text( syncingMessage ).show();
+                                }
+
+                                if ( ! ajaxEndpoint ) {
+                                        if ( genericError ) {
+                                                $result.addClass( 'error' ).text( genericError ).show();
+                                        }
+
+                                        return;
+                                }
+
                                 $button.prop( 'disabled', true );
                                 $spinner.fadeIn();
 
                                 $.ajax( {
                                         type: 'post',
-                                        url: ajaxurl,
+                                        url: ajaxEndpoint,
                                         data: {
                                                 action:   'woo_contifico_sync_single_product',
                                                 security: pluginGlobals.woo_nonce,
@@ -333,7 +351,22 @@
                                 const skuFromInput = $skuInput.length ? $.trim( $skuInput.val() ) : '';
                                 const sku          = skuFromAttr || skuFromInput;
 
-                                $result.removeClass( 'error success' ).empty().hide();
+                                $result.removeClass( 'error success' ).empty();
+
+                                if ( syncingMessage ) {
+                                        $result.text( syncingMessage ).show();
+                                } else {
+                                        $result.hide();
+                                }
+
+                                if ( ! ajaxEndpoint ) {
+                                        if ( genericError ) {
+                                                $result.addClass( 'error' ).text( genericError ).show();
+                                        }
+
+                                        return;
+                                }
+
                                 $button.prop( 'disabled', true );
                                 $spinner.addClass( 'is-active' );
 
@@ -352,7 +385,7 @@
 
                                 $.ajax( {
                                         type: 'post',
-                                        url: ajaxurl,
+                                        url: ajaxEndpoint,
                                         data: requestData
                                 } ).done( function ( response ) {
                                         if ( response && response.success && response.data ) {
@@ -432,12 +465,16 @@
 
 			//Call Ajax
 			/** @param {{get_customer_details_nonce}} woocommerce_admin_meta_boxes */
-			$.ajax({
-				type: "POST",
-				url: ajaxurl,
-				data: {
-					user_id:      this.value,
-					action:       'woocommerce_get_customer_details',
+                        if ( ! ajaxEndpoint ) {
+                                return;
+                        }
+
+                        $.ajax({
+                                type: "POST",
+                                url: ajaxEndpoint,
+                                data: {
+                                        user_id:      this.value,
+                                        action:       'woocommerce_get_customer_details',
 					security:     woocommerce_admin_meta_boxes.get_customer_details_nonce
 				},
 				success: function (response) {
