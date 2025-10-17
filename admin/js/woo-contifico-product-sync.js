@@ -17,9 +17,12 @@
                 const missingSkuMessage      = messages.missingSku || genericErrorMessage;
                 const fallbackMissingId      = messages.missingIdentifier || messages.noIdentifier || '';
                 const defaultReloadDelay     = 2000;
-                const renderResult           = ( typeof namespace.renderSingleSyncResult === 'function' )
-                        ? namespace.renderSingleSyncResult
-                        : function( $container, data ) {
+                const getRenderResult = function() {
+                        if ( typeof namespace.renderSingleSyncResult === 'function' ) {
+                                return namespace.renderSingleSyncResult;
+                        }
+
+                        return function( $container, data ) {
                                 $container.removeClass( 'error success' ).empty();
 
                                 if ( data && data.message ) {
@@ -28,9 +31,13 @@
 
                                 $container.addClass( 'success' ).show();
                         };
-                const updateIdentifierDisplay = ( typeof namespace.updateProductIdentifierDisplay === 'function' )
-                        ? namespace.updateProductIdentifierDisplay
-                        : function( $field, contificoId, missingIdentifier ) {
+                };
+                const getIdentifierUpdater = function() {
+                        if ( typeof namespace.updateProductIdentifierDisplay === 'function' ) {
+                                return namespace.updateProductIdentifierDisplay;
+                        }
+
+                        return function( $field, contificoId, missingIdentifier ) {
                                 const $value   = $field.find( '.woo-contifico-product-id-value' );
                                 const $missing = $field.find( '.woo-contifico-product-id-missing' );
 
@@ -69,6 +76,7 @@
                                         } ) );
                                 }
                         };
+                };
 
                 $( document ).on( 'click', '.woo-contifico-sync-product-button', function( event ) {
                         event.preventDefault();
@@ -147,6 +155,8 @@
                         } ).done( function( response ) {
                                 if ( response && response.success && response.data ) {
                                         const data = response.data;
+                                        const renderResult = getRenderResult();
+                                        const updateIdentifierDisplay = getIdentifierUpdater();
 
                                         renderResult( $result, data );
 
