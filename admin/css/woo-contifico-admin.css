@@ -44,8 +44,27 @@
     border: thin solid red;
 }
 
-#woo-contifico-settings-page .fetch-products .result, #woo-contifico-settings-page .fetch-products img {
+#woo-contifico-settings-page .fetch-products .result,
+#woo-contifico-settings-page .fetch-products img,
+#woo-contifico-settings-page .fetch-single-product .result,
+#woo-contifico-settings-page .fetch-single-product img {
     display: none;
+}
+
+#woo-contifico-settings-page .fetch-single-product {
+    margin-top: 1.5em;
+}
+
+#woo-contifico-settings-page .fetch-single-product .result {
+    margin-top: 1em;
+}
+
+#woo-contifico-settings-page .fetch-single-product .result.success {
+    color: #007cba;
+}
+
+#woo-contifico-settings-page .fetch-single-product .result.error {
+    color: #d63638;
 }
 
 #setting-error-settings_updated b {
