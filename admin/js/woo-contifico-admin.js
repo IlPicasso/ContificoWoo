@@ -60,11 +60,44 @@
                 }
 
                 function renderSingleSyncResult( $container, data ) {
-                        const changes        = data.changes || {};
-                        const changeMessages = [];
-                        const separator      = messages.changeSeparator || '→';
-                        const noValue        = messages.noValue || 'N/D';
-                        const noIdentifier   = messages.noIdentifier || 'Sin identificador registrado.';
+                        const changes             = data.changes || {};
+                        const changeMessages      = [];
+                        const separator           = messages.changeSeparator || '→';
+                        const noValue             = messages.noValue || 'N/D';
+                        const noIdentifier        = messages.noIdentifier || 'Sin identificador registrado.';
+                        const detailSummaryLabel  = messages.changeDetailSummary || 'Detalle sincronizado:';
+                        const detailJoiner        = messages.changeDetailJoiner || ' · ';
+                        const changeDetails       = [];
+                        const previousStock       = ( typeof changes.previous_stock === 'number' ) ? changes.previous_stock : null;
+                        const newStock            = ( typeof changes.new_stock === 'number' ) ? changes.new_stock : null;
+                        const previousPrice       = ( typeof changes.previous_price === 'number' ) ? changes.previous_price : null;
+                        const newPrice            = ( typeof changes.new_price === 'number' ) ? changes.new_price : null;
+                        const previousIdentifier  = changes.previous_identifier ? String( changes.previous_identifier ) : '';
+                        const newIdentifier       = changes.new_identifier ? String( changes.new_identifier ) : '';
+
+                        if ( previousStock !== null || newStock !== null ) {
+                                changeDetails.push( {
+                                        label:   messages.stockChangeLabel || 'Inventario sincronizado',
+                                        value:   formatChangeValue( previousStock, newStock, separator, noValue ),
+                                        changed: previousStock !== null && newStock !== null && previousStock !== newStock
+                                } );
+                        }
+
+                        if ( previousPrice !== null || newPrice !== null ) {
+                                changeDetails.push( {
+                                        label:   messages.priceChangeLabel || 'Precio sincronizado',
+                                        value:   formatChangeValue( previousPrice, newPrice, separator, noValue ),
+                                        changed: previousPrice !== null && newPrice !== null && previousPrice !== newPrice
+                                } );
+                        }
+
+                        if ( typeof changes.meta_updated !== 'undefined' ) {
+                                changeDetails.push( {
+                                        label:   messages.identifierLabel || 'Identificador de Contífico',
+                                        value:   formatIdentifierValue( previousIdentifier, newIdentifier, separator, noIdentifier ),
+                                        changed: previousIdentifier !== newIdentifier
+                                } );
+                        }
 
                         $container.removeClass( 'error success' ).empty();
 
@@ -97,6 +130,18 @@
                                         .addClass( 'woo-contifico-sync-result-summary' )
                                         .text( ( messages.changesLabel || 'Cambios detectados:' ) + ' ' + changeMessages.join( ' ' ) )
                         );
+
+                        if ( changeDetails.length > 0 ) {
+                                const changeSummaryText = changeDetails.map( function ( detail ) {
+                                        return detail.label + ': ' + detail.value;
+                                } ).join( detailJoiner );
+
+                                $container.append(
+                                        $( '<p />' )
+                                                .addClass( 'woo-contifico-sync-result-detail-summary' )
+                                                .text( detailSummaryLabel + ' ' + changeSummaryText )
+                                );
+                        }
 
                         const generalDetails = [];
 
@@ -133,40 +178,6 @@
                                 } );
 
                                 $container.append( $detailsList );
-                        }
-
-                        const changeDetails = [];
-                        const previousStock = ( typeof changes.previous_stock === 'number' ) ? changes.previous_stock : null;
-                        const newStock      = ( typeof changes.new_stock === 'number' ) ? changes.new_stock : null;
-
-                        if ( previousStock !== null || newStock !== null ) {
-                                changeDetails.push( {
-                                        label:   messages.stockChangeLabel || 'Inventario sincronizado',
-                                        value:   formatChangeValue( previousStock, newStock, separator, noValue ),
-                                        changed: previousStock !== null && newStock !== null && previousStock !== newStock
-                                } );
-                        }
-
-                        const previousPrice = ( typeof changes.previous_price === 'number' ) ? changes.previous_price : null;
-                        const newPrice      = ( typeof changes.new_price === 'number' ) ? changes.new_price : null;
-
-                        if ( previousPrice !== null || newPrice !== null ) {
-                                changeDetails.push( {
-                                        label:   messages.priceChangeLabel || 'Precio sincronizado',
-                                        value:   formatChangeValue( previousPrice, newPrice, separator, noValue ),
-                                        changed: previousPrice !== null && newPrice !== null && previousPrice !== newPrice
-                                } );
-                        }
-
-                        const previousIdentifier = changes.previous_identifier ? String( changes.previous_identifier ) : '';
-                        const newIdentifier      = changes.new_identifier ? String( changes.new_identifier ) : '';
-
-                        if ( typeof changes.meta_updated !== 'undefined' ) {
-                                changeDetails.push( {
-                                        label:   messages.identifierLabel || 'Identificador de Contífico',
-                                        value:   formatIdentifierValue( previousIdentifier, newIdentifier, separator, noIdentifier ),
-                                        changed: previousIdentifier !== newIdentifier
-                                } );
                         }
 
                         if ( changeDetails.length > 0 ) {
