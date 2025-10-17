@@ -1384,9 +1384,6 @@ class Woo_Contifico_Admin {
                                         if ( isset( $location_stock[ $location_id ][ $product_cache_key ] ) ) {
                                                 $quantity = (int) $location_stock[ $location_id ][ $product_cache_key ];
                                         }
-                                }
-                        }
-                }
 
                                         if ( null === $quantity ) {
                                                 if ( ! array_key_exists( $warehouse_code, $warehouse_id_cache ) ) {
@@ -1414,10 +1411,9 @@ class Woo_Contifico_Admin {
 
                                 $new_stock = $global_quantity;
                         }
-                        else {
-                                if ( '' !== $default_warehouse_id && isset( $stock_by_warehouse[ $default_warehouse_id ] ) ) {
-                                        $new_stock = (int) $stock_by_warehouse[ $default_warehouse_id ];
-                                }
+
+                        if ( empty( $location_map ) && '' !== $default_warehouse_id && isset( $stock_by_warehouse[ $default_warehouse_id ] ) ) {
+                                $new_stock = (int) $stock_by_warehouse[ $default_warehouse_id ];
                         }
 
                         if ( $old_stock !== $new_stock ) {
