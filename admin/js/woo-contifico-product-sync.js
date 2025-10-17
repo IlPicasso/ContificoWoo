@@ -15,6 +15,7 @@
                 const genericErrorMessage    = messages.genericError || '';
                 const missingSkuMessage      = messages.missingSku || genericErrorMessage;
                 const fallbackMissingId      = messages.missingIdentifier || messages.noIdentifier || '';
+                const defaultReloadDelay     = 2000;
                 const renderResult           = ( typeof namespace.renderSingleSyncResult === 'function' )
                         ? namespace.renderSingleSyncResult
                         : function( $container, data ) {
@@ -81,6 +82,12 @@
                         const $result           = $field.find( '.woo-contifico-sync-result' );
                         const $spinner          = $field.find( '.woo-contifico-sync-spinner' );
                         const $skuInput         = $( '#_sku' );
+                        const reloadAttribute   = String( $field.attr( 'data-reload-on-success' ) || '' ).toLowerCase();
+                        const reloadDelayAttr   = parseInt( String( $field.attr( 'data-reload-delay' ) || '' ), 10 );
+                        const reloadDelay       = Number.isNaN( reloadDelayAttr ) || reloadDelayAttr < 0 ? defaultReloadDelay : reloadDelayAttr;
+                        const reloadMessageAttr = $field.attr( 'data-reload-message' );
+                        const reloadMessage     = reloadMessageAttr ? String( reloadMessageAttr ) : ( messages.pageReloadPending || '' );
+                        const reloadOnSuccess   = [ '1', 'true', 'yes', 'on' ].indexOf( reloadAttribute ) !== -1;
                         const missingIdentifier = $field.data( 'missing-identifier' )
                                 || $field.attr( 'data-missing-identifier' )
                                 || fallbackMissingId;
@@ -152,6 +159,19 @@
                                         }
 
                                         updateIdentifierDisplay( $field, data.contifico_id || '', missingIdentifier );
+
+                                        if ( reloadOnSuccess ) {
+                                                if ( reloadMessage ) {
+                                                        $result.append( $( '<p />' )
+                                                                .addClass( 'woo-contifico-sync-result-reloading' )
+                                                                .text( reloadMessage )
+                                                        );
+                                                }
+
+                                                window.setTimeout( function() {
+                                                        window.location.reload();
+                                                }, reloadDelay );
+                                        }
                                 } else {
                                         const message = ( response && response.data && response.data.message ) ? response.data.message : genericError;
 

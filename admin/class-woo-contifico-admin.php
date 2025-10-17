@@ -241,6 +241,7 @@ class Woo_Contifico_Admin {
                                 'genericError'       => __( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' ),
                                 'missingSku'         => __( 'Debes proporcionar un SKU para iniciar la sincronización.', 'woo-contifico' ),
                                 'missingIdentifier'  => __( 'No hay identificador de Contífico guardado.', 'woo-contifico' ),
+                                'pageReloadPending'  => __( 'Actualizando la página para reflejar los cambios…', 'woo-contifico' ),
                         ],
                 ];
                 wp_localize_script( $this->plugin_name, 'woo_contifico_globals', $params );
@@ -331,17 +332,22 @@ class Woo_Contifico_Admin {
                         return;
                 }
 
-                $contifico_id       = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
-                $product_sku        = (string) $product->get_sku();
-                $generic_error      = __( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' );
-                $missing_identifier = __( 'No hay identificador de Contífico guardado.', 'woo-contifico' );
-                $sync_button_label  = __( 'Sincronizar con Contífico', 'woo-contifico' );
+                $contifico_id         = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
+                $product_sku          = (string) $product->get_sku();
+                $generic_error        = __( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' );
+                $missing_identifier   = __( 'No hay identificador de Contífico guardado.', 'woo-contifico' );
+                $sync_button_label    = __( 'Sincronizar con Contífico', 'woo-contifico' );
+                $page_reload_message  = __( 'Actualizando la página para reflejar los cambios…', 'woo-contifico' );
+                $page_reload_delay_ms = 2000;
 
                 echo '<div class="options_group woo-contifico-product-id-field"';
                 echo ' data-product-id="' . esc_attr( (string) $product->get_id() ) . '"';
                 echo ' data-product-sku="' . esc_attr( $product_sku ) . '"';
                 echo ' data-generic-error="' . esc_attr( $generic_error ) . '"';
                 echo ' data-missing-identifier="' . esc_attr( $missing_identifier ) . '"';
+                echo ' data-reload-on-success="1"';
+                echo ' data-reload-delay="' . esc_attr( (string) $page_reload_delay_ms ) . '"';
+                echo ' data-reload-message="' . esc_attr( $page_reload_message ) . '"';
                 echo '>';
                 echo '<p class="form-field">';
                 echo '<label>' . esc_html__( 'ID de Contífico', 'woo-contifico' ) . '</label>';
