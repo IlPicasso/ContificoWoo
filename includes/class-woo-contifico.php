@@ -734,9 +734,14 @@ class Woo_Contifico
 	     */
 	    require_once WOO_CONTIFICO_PATH . 'libraries/Contifico.php';
 
-        $this->loader = new Woo_Contifico_Loader();
+	    /**
+	     * Diagnostics helper.
+	     */
+	    require_once WOO_CONTIFICO_PATH . 'includes/class-woo-contifico-diagnostics.php';
 
-    }
+	$this->loader = new Woo_Contifico_Loader();
+
+}
 
     /**
      * Define the locale for this plugin for internationalization.
