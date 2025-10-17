@@ -799,6 +799,20 @@ class Woo_Contifico
         $this->loader->add_action('admin_menu', $plugin_admin, 'register_menu');
         $this->loader->add_action('admin_notices', $plugin_admin, 'admin_init_notice');
 
+        # Display Contífico identifiers in WooCommerce product editors
+        $this->loader->add_action(
+                'woocommerce_product_options_general_product_data',
+                $plugin_admin,
+                'display_contifico_product_identifier'
+        );
+        $this->loader->add_action(
+                'woocommerce_product_after_variable_attributes',
+                $plugin_admin,
+                'display_contifico_variation_identifier',
+                10,
+                3
+        );
+
         # Stock manage hooks
 	    $this->loader->add_action('woocommerce_reduce_order_stock', $plugin_admin, 'transfer_contifico_stock');
 	    $this->loader->add_action('woocommerce_restore_order_stock', $plugin_admin, 'restore_contifico_stock');
