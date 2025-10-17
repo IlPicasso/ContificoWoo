@@ -339,162 +339,355 @@
                         } );
                 }
 
-		// Fetch products manually in settings page
-		/** @param {{plugin_name, woo_nonce}} woo_contifico_globals */
-		$( '#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .button').on('click', function(){
+                // Manual synchronization controls
+                ( function registerManualSyncControls() {
+                        const selector = '#' + pluginGlobals.plugin_name + '-settings-page .manual-sync-section';
+                        const $sections = $( selector );
 
-			// Reset results
-			$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .button').hide();
-			$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products p').hide();
-			$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products img').fadeIn();
-			$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .fetched').html(0);
-			$('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .found').html(0);
-                        $('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .updated').html(0);
-                        $('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result .outofstock').html(0);
-                        $('#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result').fadeIn();
-                        renderGlobalSyncUpdates( [] );
-
-                        // Start batch
-                        batch_processing(1);
-                });
-
-		// Batch processing
-                function batch_processing(step) {
-
-			let data = {
-				'action': 'fetch_products',
-				'security': pluginGlobals.woo_nonce,
-				'step': step
-			};
-
-                        if ( ! ajaxEndpoint ) {
+                        if ( ! $sections.length ) {
                                 return;
                         }
 
-                        $.ajax({
-                                type: 'post',
-                                url: ajaxEndpoint,
-                                data: data,
-                                success: function (response) {
+                        const pollingInterval = Math.max( 3000, parseInt( pluginGlobals.manualSyncPollingInterval || 5000, 10 ) || 5000 );
+                        const activeStatuses  = [ 'queued', 'running', 'cancelling' ];
 
-                                        const $section = $( '#' + pluginGlobals.plugin_name + '-settings-page .fetch-products' );
+                        $sections.each( function () {
+                                const $section      = $( this );
+                                const $startButton  = $section.find( '.manual-sync-start' );
+                                const $cancelButton = $section.find( '.manual-sync-cancel' );
+                                const $spinner      = $section.find( '.manual-sync-spinner' );
+                                const $status       = $section.find( '.manual-sync-status-message' );
+                                const $resultBox    = $section.find( '.result' );
+                                const startAction   = String( $section.data( 'start-action' ) || '' );
+                                const statusAction  = String( $section.data( 'status-action' ) || '' );
+                                const cancelAction  = String( $section.data( 'cancel-action' ) || '' );
+                                const historyUrl    = String( $section.data( 'history-url' ) || '' );
+                                const initialState  = $section.data( 'initial-state' ) || null;
+                                const $counts       = {
+                                        fetched: $resultBox.find( '.fetched' ),
+                                        found: $resultBox.find( '.found' ),
+                                        updated: $resultBox.find( '.updated' ),
+                                        outofstock: $resultBox.find( '.outofstock' )
+                                };
 
-                                        if ( response && typeof response === 'object' ) {
-                                                const updates = Array.isArray( response.updates ) ? response.updates : [];
+                                let pollingTimer = null;
+                                let lastState = null;
 
-                                                renderGlobalSyncUpdates( updates );
-
-                                                if ( typeof response.fetched !== 'undefined' ) {
-                                                        $section.find( '.result .fetched' ).html( response.fetched );
-                                                }
-
-                                                if ( typeof response.found !== 'undefined' ) {
-                                                        $section.find( '.result .found' ).html( response.found );
-                                                }
-
-                                                if ( typeof response.updated !== 'undefined' ) {
-                                                        $section.find( '.result .updated' ).html( response.updated );
-                                                }
-
-                                                if ( typeof response.outofstock !== 'undefined' ) {
-                                                        $section.find( '.result .outofstock' ).html( response.outofstock );
-                                                }
-                                        }
-
-                                        if ( response && response.step && response.step !== 'done' ) {
-                                                batch_processing( response.step );
+                                function setSpinner( isActive ) {
+                                        if ( ! $spinner.length ) {
                                                 return;
                                         }
 
-                                        $section.find( 'img' ).fadeOut();
-                                },
-                                error: function (response) {
-                                        $( '#' + pluginGlobals.plugin_name + '-settings-page .fetch-products .result' ).html( response.responseText );
-                                        renderGlobalSyncUpdates( [] );
-                                }
-                        });
-
-                }
-
-                // Synchronize a single product by SKU
-                $( '#' + pluginGlobals.plugin_name + '-settings-page .fetch-single-product' ).each( function () {
-                        const $container     = $( this );
-                        const $button        = $container.find( '.button' );
-                        const $skuInput      = $container.find( 'input[name="woo_contifico_single_sku"]' );
-                        const $spinner       = $container.find( 'img' );
-                        const $result        = $container.find( '.result' );
-                        const emptyMessage   = $container.data( 'empty-message' ) || '';
-                        const genericError   = $container.data( 'generic-error' ) || '';
-                        $button.on( 'click', function ( event ) {
-                                event.preventDefault();
-
-                                const sku = $.trim( $skuInput.val() );
-
-                                $result.removeClass( 'error success' ).empty().hide();
-
-                                if ( '' === sku ) {
-                                        if ( emptyMessage ) {
-                                                $result.addClass( 'error' ).text( emptyMessage ).show();
+                                        if ( isActive ) {
+                                                $spinner.addClass( 'is-active' );
+                                        } else {
+                                                $spinner.removeClass( 'is-active' );
                                         }
-
-                                        return;
                                 }
 
-                                if ( syncingMessage ) {
-                                        $result.text( syncingMessage ).show();
+                                function setLoading( isLoading ) {
+                                        if ( $startButton.length ) {
+                                                $startButton.prop( 'disabled', isLoading || isStatusActive( lastState ) );
+                                        }
+
+                                        if ( $cancelButton.length ) {
+                                                $cancelButton.prop( 'disabled', isLoading );
+                                        }
+
+                                        setSpinner( isLoading );
                                 }
 
-                                if ( ! ajaxEndpoint ) {
-                                        if ( genericError ) {
-                                                $result.addClass( 'error' ).text( genericError ).show();
-                                        }
+                                function isStatusActive( state ) {
+                                        const status = state && state.status ? String( state.status ) : 'idle';
 
-                                        return;
+                                        return activeStatuses.indexOf( status ) !== -1;
                                 }
 
-                                $button.prop( 'disabled', true );
-                                $spinner.fadeIn();
-
-                                $.ajax( {
-                                        type: 'post',
-                                        url: ajaxEndpoint,
-                                        data: {
-                                                action:   'woo_contifico_sync_single_product',
-                                                security: pluginGlobals.woo_nonce,
-                                                sku:      sku
+                                function stopPolling() {
+                                        if ( pollingTimer ) {
+                                                window.clearInterval( pollingTimer );
+                                                pollingTimer = null;
                                         }
-                                } ).done( function ( response ) {
+                                }
 
-                                        if ( response && response.success && response.data ) {
-                                                renderSingleSyncResult( $result, response.data );
-                                        }
-                                        else {
-                                                const message = ( response && response.data && response.data.message ) ? response.data.message : genericError;
+                                function schedulePolling() {
+                                        stopPolling();
 
-                                                if ( message ) {
-                                                        $result.addClass( 'error' ).text( message ).show();
-                                                }
+                                        if ( ! statusAction ) {
+                                                return;
                                         }
-                                } ).fail( function ( xhr ) {
 
-                                        let message = genericError;
+                                        pollingTimer = window.setInterval( function () {
+                                                fetchStatus( { silent: true } );
+                                        }, pollingInterval );
+                                }
 
-                                        if ( xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message ) {
-                                                message = xhr.responseJSON.data.message;
+                                function updateCounts( progress ) {
+                                        const fetched    = progress && typeof progress.fetched !== 'undefined' ? progress.fetched : 0;
+                                        const found      = progress && typeof progress.found !== 'undefined' ? progress.found : 0;
+                                        const updated    = progress && typeof progress.updated !== 'undefined' ? progress.updated : 0;
+                                        const outofstock = progress && typeof progress.outofstock !== 'undefined' ? progress.outofstock : 0;
+
+                                        if ( $counts.fetched.length ) {
+                                                $counts.fetched.text( fetched );
                                         }
-                                        else if ( xhr.responseText ) {
-                                                message = xhr.responseText;
+
+                                        if ( $counts.found.length ) {
+                                                $counts.found.text( found );
                                         }
+
+                                        if ( $counts.updated.length ) {
+                                                $counts.updated.text( updated );
+                                        }
+
+                                        if ( $counts.outofstock.length ) {
+                                                $counts.outofstock.text( outofstock );
+                                        }
+
+                                        const shouldShow = isStatusActive( lastState ) || fetched || found || updated || outofstock;
+
+                                        if ( $resultBox.length ) {
+                                                $resultBox.prop( 'hidden', ! shouldShow );
+                                        }
+                                }
+
+                                function resolveStatusMessage( state ) {
+                                        const status = state && state.status ? String( state.status ) : 'idle';
+                                        const customMessage = state && state.message ? String( state.message ) : '';
+
+                                        if ( customMessage ) {
+                                                return customMessage;
+                                        }
+
+                                        switch ( status ) {
+                                                case 'queued':
+                                                        return messages.manualSyncQueued || '';
+                                                case 'running':
+                                                        return messages.manualSyncRunning || '';
+                                                case 'cancelling':
+                                                        return messages.manualSyncCancelling || '';
+                                                case 'cancelled':
+                                                        return messages.manualSyncCancelled || '';
+                                                case 'completed':
+                                                        return messages.manualSyncCompleted || '';
+                                                case 'failed':
+                                                        return messages.manualSyncFailed || '';
+                                                case 'idle':
+                                                        return messages.manualSyncIdle || '';
+                                                default:
+                                                        return messages.manualSyncStatusUnknown || '';
+                                        }
+                                }
+
+                                function renderStatusMessage( state ) {
+                                        if ( ! $status.length ) {
+                                                return;
+                                        }
+
+                                        const message = resolveStatusMessage( state );
+                                        const lastUpdated = state && state.last_updated ? String( state.last_updated ) : '';
+                                        const status = state && state.status ? String( state.status ) : 'idle';
+
+                                        $status.removeClass( 'empty' ).empty();
 
                                         if ( message ) {
-                                                $result.addClass( 'error' ).text( message ).show();
+                                                $status.text( message );
+                                        } else {
+                                                $status.addClass( 'empty' );
                                         }
-                                } ).always( function () {
-                                        $spinner.fadeOut();
-                                        $button.prop( 'disabled', false );
+
+                                        if ( lastUpdated ) {
+                                                const lastUpdatedTemplate = messages.manualSyncLastUpdated || '';
+
+                                                if ( lastUpdatedTemplate ) {
+                                                        const text = lastUpdatedTemplate.replace( '%s', lastUpdated );
+
+                                                        if ( text ) {
+                                                                if ( $status.text() ) {
+                                                                        $status.append( ' · ' );
+                                                                }
+
+                                                                $status.append( $( '<span />' ).addClass( 'manual-sync-last-updated' ).text( text ) );
+                                                        }
+                                                }
+                                        }
+
+                                        if ( status === 'completed' && historyUrl ) {
+                                                const linkLabel = messages.manualSyncHistoryLinkLabel || '';
+
+                                                if ( linkLabel ) {
+                                                        const $link = $( '<a />', {
+                                                                href: historyUrl,
+                                                                text: linkLabel
+                                                        } );
+
+                                                        if ( $status.text() ) {
+                                                                $status.append( ' ' );
+                                                        }
+
+                                                        $status.append( $link );
+                                                } else if ( messages.manualSyncViewHistory ) {
+                                                        if ( $status.text() ) {
+                                                                $status.append( ' ' + messages.manualSyncViewHistory );
+                                                        } else {
+                                                                $status.text( messages.manualSyncViewHistory );
+                                                        }
+                                                }
+                                        }
+                                }
+
+                                function applyState( state ) {
+                                        lastState = state || null;
+
+                                        const progress = state && state.progress && typeof state.progress === 'object' ? state.progress : {};
+                                        const updates  = Array.isArray( progress.updates ) ? progress.updates : [];
+                                        const status   = state && state.status ? String( state.status ) : 'idle';
+                                        const active   = isStatusActive( state );
+
+                                        if ( active ) {
+                                                schedulePolling();
+                                        } else {
+                                                stopPolling();
+                                        }
+
+                                        updateCounts( progress );
+                                        renderGlobalSyncUpdates( updates );
+                                        renderStatusMessage( state );
+
+                                        if ( $startButton.length ) {
+                                                $startButton.prop( 'disabled', active );
+                                        }
+
+                                        if ( $cancelButton.length ) {
+                                                if ( active || status === 'cancelling' ) {
+                                                        $cancelButton.show();
+                                                        $cancelButton.prop( 'disabled', status === 'cancelling' );
+                                                } else {
+                                                        $cancelButton.hide().prop( 'disabled', false );
+                                                }
+                                        }
+                                }
+
+                                function extractErrorMessage( xhr, fallback ) {
+                                        if ( xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message ) {
+                                                return xhr.responseJSON.data.message;
+                                        }
+
+                                        if ( xhr && xhr.responseText ) {
+                                                return xhr.responseText;
+                                        }
+
+                                        return fallback || messages.manualSyncError || '';
+                                }
+
+                                function handleError( message ) {
+                                        if ( $status.length ) {
+                                                $status.removeClass( 'empty' ).text( message || messages.manualSyncError || '' );
+                                        }
+                                }
+
+                                function fetchStatus( options ) {
+                                        options = options || {};
+
+                                        if ( ! ajaxEndpoint || ! statusAction ) {
+                                                return;
+                                        }
+
+                                        $.ajax( {
+                                                type: 'post',
+                                                url: ajaxEndpoint,
+                                                data: {
+                                                        action:   statusAction,
+                                                        security: pluginGlobals.woo_nonce
+                                                }
+                                        } ).done( function ( response ) {
+                                                if ( response && response.success && response.data && response.data.state ) {
+                                                        applyState( response.data.state );
+                                                } else if ( ! options.silent ) {
+                                                        handleError( messages.manualSyncError || '' );
+                                                }
+                                        } ).fail( function () {
+                                                if ( ! options.silent ) {
+                                                        handleError( messages.manualSyncError || '' );
+                                                }
+                                        } );
+                                }
+
+                                $startButton.on( 'click', function ( event ) {
+                                        event.preventDefault();
+
+                                        if ( ! ajaxEndpoint || ! startAction ) {
+                                                return;
+                                        }
+
+                                        setLoading( true );
+
+                                        if ( $status.length && messages.manualSyncStarting ) {
+                                                $status.removeClass( 'empty' ).text( messages.manualSyncStarting );
+                                        }
+
+                                        $.ajax( {
+                                                type: 'post',
+                                                url: ajaxEndpoint,
+                                                data: {
+                                                        action:   startAction,
+                                                        security: pluginGlobals.woo_nonce
+                                                }
+                                        } ).done( function ( response ) {
+                                                if ( response && response.success && response.data && response.data.state ) {
+                                                        applyState( response.data.state );
+                                                } else {
+                                                        handleError( messages.manualSyncError || '' );
+                                                }
+                                        } ).fail( function ( xhr ) {
+                                                handleError( extractErrorMessage( xhr, messages.manualSyncError ) );
+                                        } ).always( function () {
+                                                setLoading( false );
+                                                fetchStatus( { silent: true } );
+                                        } );
                                 } );
+
+                                $cancelButton.hide().on( 'click', function ( event ) {
+                                        event.preventDefault();
+
+                                        if ( ! ajaxEndpoint || ! cancelAction ) {
+                                                return;
+                                        }
+
+                                        setLoading( true );
+
+                                        if ( $status.length && messages.manualSyncCanceling ) {
+                                                $status.removeClass( 'empty' ).text( messages.manualSyncCanceling );
+                                        }
+
+                                        $.ajax( {
+                                                type: 'post',
+                                                url: ajaxEndpoint,
+                                                data: {
+                                                        action:   cancelAction,
+                                                        security: pluginGlobals.woo_nonce
+                                                }
+                                        } ).done( function ( response ) {
+                                                if ( response && response.success && response.data && response.data.state ) {
+                                                        applyState( response.data.state );
+                                                } else {
+                                                        handleError( messages.manualSyncError || '' );
+                                                }
+                                        } ).fail( function ( xhr ) {
+                                                handleError( extractErrorMessage( xhr, messages.manualSyncError ) );
+                                        } ).always( function () {
+                                                setLoading( false );
+                                                fetchStatus( { silent: true } );
+                                        } );
+                                } );
+
+                                if ( initialState && typeof initialState === 'object' ) {
+                                        applyState( initialState );
+                                }
+
+                                fetchStatus( { silent: !! initialState } );
                         } );
-                } );
+                } )();
 
                 function updateProductIdentifierDisplay( $field, contificoId, missingIdentifier ) {
                         const $value   = $field.find( '.woo-contifico-product-id-value' );
