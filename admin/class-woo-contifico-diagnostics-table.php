@@ -430,6 +430,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'missing_sku'       => __( 'Sin SKU', 'woo-contifico' ),
             'duplicate_sku'     => __( 'SKU duplicado', 'woo-contifico' ),
             'no_contifico_match' => __( 'Sin coincidencia en Contífico', 'woo-contifico' ),
+            'child_no_contifico_match' => __( 'Variaciones sin coincidencia', 'woo-contifico' ),
         ];
     }
 
@@ -467,6 +468,8 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'error_detectado'        => [],
             'codigo_contifico'       => '',
             'coincidencias_posibles' => [],
+            'variaciones_sin_coincidencia' => [],
+            'parent_id'              => 0,
         ];
 
         $entry = wp_parse_args( $entry, $defaults );
@@ -478,6 +481,8 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
         $entry['codigo_contifico']       = (string) $entry['codigo_contifico'];
         $entry['error_detectado']        = is_array( $entry['error_detectado'] ) ? array_values( $entry['error_detectado'] ) : [];
         $entry['coincidencias_posibles'] = is_array( $entry['coincidencias_posibles'] ) ? array_values( $entry['coincidencias_posibles'] ) : [];
+        $entry['variaciones_sin_coincidencia'] = is_array( $entry['variaciones_sin_coincidencia'] ) ? array_values( $entry['variaciones_sin_coincidencia'] ) : [];
+        $entry['parent_id']              = (int) $entry['parent_id'];
 
         $entry['problem_types']       = $this->detect_problem_types( $entry );
         $entry['severity']            = $this->determine_severity( $entry['problem_types'] );
@@ -501,7 +506,11 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             $types[] = (string) $code;
         }
 
-        if ( '' === $entry['codigo_contifico'] ) {
+        $is_variable = ( 'variable' === $entry['tipo'] );
+
+        if ( $is_variable && ! empty( $entry['variaciones_sin_coincidencia'] ) ) {
+            $types[] = 'child_no_contifico_match';
+        } elseif ( '' === $entry['codigo_contifico'] && ! $is_variable ) {
             $types[] = 'no_contifico_match';
         }
 
@@ -522,7 +531,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             return 'critical';
         }
 
-        if ( in_array( 'no_contifico_match', $types, true ) ) {
+        if ( array_intersect( [ 'no_contifico_match', 'child_no_contifico_match' ], $types ) ) {
             return 'warning';
         }
 
@@ -563,6 +572,34 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                         $messages[] = __( 'No se encontraron coincidencias en Contífico para el SKU actual.', 'woo-contifico' );
                     }
                     break;
+                case 'child_no_contifico_match':
+                    $labels = isset( $entry['variaciones_sin_coincidencia'] ) ? (array) $entry['variaciones_sin_coincidencia'] : [];
+                    $labels = array_filter( array_map( 'trim', $labels ) );
+
+                    if ( empty( $labels ) ) {
+                        $messages[] = __( 'Algunas variaciones no tienen coincidencia en Contífico.', 'woo-contifico' );
+                        break;
+                    }
+
+                    $limit        = 5;
+                    $display      = array_slice( $labels, 0, $limit );
+                    $display      = array_map( 'esc_html', $display );
+                    $hidden_count = count( $labels ) - count( $display );
+
+                    if ( $hidden_count > 0 ) {
+                        $display[] = sprintf(
+                            /* translators: %d: number of additional variations. */
+                            _n( 'y %d más', 'y %d más', $hidden_count, 'woo-contifico' ),
+                            $hidden_count
+                        );
+                    }
+
+                    $messages[] = sprintf(
+                        /* translators: %s: comma-separated list of variation names. */
+                        __( 'Variaciones sin coincidencia en Contífico: %s.', 'woo-contifico' ),
+                        implode( ', ', $display )
+                    );
+                    break;
             }
         }
 
@@ -594,6 +631,9 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                     } else {
                         $messages[] = __( 'Verifica que el producto exista en Contífico o crea uno con el mismo SKU.', 'woo-contifico' );
                     }
+                    break;
+                case 'child_no_contifico_match':
+                    $messages[] = __( 'Revisa las variaciones listadas y sincroniza cada SKU con un producto en Contífico.', 'woo-contifico' );
                     break;
             }
         }
