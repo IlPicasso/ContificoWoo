@@ -828,6 +828,7 @@ class Woo_Contifico
             # Add plugin crons
             $this->loader->add_action('woo_contifico_sync_stock', $plugin_admin, 'batch_sync_processing', 10, 1);
             $this->loader->add_action('woo_contifico_manual_sync', $plugin_admin, 'manual_sync_processing', 10, 1);
+            $this->loader->add_action('woo_contifico_manual_sync_keepalive', $plugin_admin, 'run_manual_sync_keepalive');
 
 	    # Check processing status to send invoice
 	    $triggering_status = (isset($this->settings['etapa_envio'])) ? $this->settings['etapa_envio'] : 'processing';

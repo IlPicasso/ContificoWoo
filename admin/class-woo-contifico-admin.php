@@ -27,6 +27,7 @@ class Woo_Contifico_Admin {
         private const MANUAL_SYNC_STATE_OPTION    = 'woo_contifico_manual_sync_state';
         private const MANUAL_SYNC_HISTORY_OPTION  = 'woo_contifico_manual_sync_history';
         private const MANUAL_SYNC_CANCEL_TRANSIENT = 'woo_contifico_manual_sync_cancel';
+        private const MANUAL_SYNC_KEEPALIVE_HOOK    = 'woo_contifico_manual_sync_keepalive';
         private const PRODUCT_ID_META_KEY         = '_woo_contifico_product_id';
 
 	/**
@@ -859,6 +860,7 @@ class Woo_Contifico_Admin {
                 }
 
                 $this->write_manual_sync_state( $state );
+                $this->schedule_manual_sync_keepalive();
 
                 wp_send_json_success(
                         [ 'state' => $this->prepare_manual_sync_state_for_response( $state ) ]
@@ -922,6 +924,7 @@ class Woo_Contifico_Admin {
                         $state['job_id']      = 0;
 
                         $this->write_manual_sync_state( $state );
+                        $this->clear_manual_sync_keepalive();
 
                         if ( '' !== $run_id ) {
                                 $this->append_manual_sync_history_entry(
@@ -952,6 +955,7 @@ class Woo_Contifico_Admin {
                 );
 
                 $this->write_manual_sync_state( $state );
+                $this->schedule_manual_sync_keepalive();
 
                 wp_send_json_success(
                         [ 'state' => $this->prepare_manual_sync_state_for_response( $state ) ]
@@ -975,6 +979,8 @@ class Woo_Contifico_Admin {
                 if ( '' === $run_id ) {
                         return;
                 }
+
+                $this->schedule_manual_sync_keepalive();
 
                 if ( $this->is_manual_sync_cancellation_requested() ) {
                         $state = $this->finalize_manual_sync_run(
@@ -1295,6 +1301,42 @@ class Woo_Contifico_Admin {
         }
 
         /**
+         * Schedule a keepalive event for manual synchronizations.
+         *
+         * @since 4.3.0
+         *
+         * @param int $delay
+         *
+         * @return void
+         */
+        private function schedule_manual_sync_keepalive( int $delay = 30 ) : void {
+                if ( ! function_exists( 'wp_schedule_single_event' ) ) {
+                        return;
+                }
+
+                $delay = max( 15, (int) $delay );
+
+                if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+                        wp_clear_scheduled_hook( self::MANUAL_SYNC_KEEPALIVE_HOOK );
+                }
+
+                wp_schedule_single_event( time() + $delay, self::MANUAL_SYNC_KEEPALIVE_HOOK );
+        }
+
+        /**
+         * Cancel any pending keepalive events for manual synchronizations.
+         *
+         * @since 4.3.0
+         *
+         * @return void
+         */
+        private function clear_manual_sync_keepalive() : void {
+                if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+                        wp_clear_scheduled_hook( self::MANUAL_SYNC_KEEPALIVE_HOOK );
+                }
+        }
+
+        /**
          * Request a manual synchronization cancellation.
          *
          * @since 4.3.0
@@ -1481,8 +1523,48 @@ class Woo_Contifico_Admin {
 
                 $this->clear_manual_sync_cancellation_flag();
                 $this->clear_manual_sync_queue();
+                $this->clear_manual_sync_keepalive();
 
                 return $state;
+        }
+
+        /**
+         * Ensure manual synchronization background jobs continue running.
+         *
+         * @since 4.3.0
+         *
+         * @return void
+         */
+        public function run_manual_sync_keepalive() : void {
+                if ( ! function_exists( 'as_next_scheduled_action' ) || ! function_exists( 'as_enqueue_async_action' ) ) {
+                        $this->clear_manual_sync_keepalive();
+
+                        return;
+                }
+
+                $state = $this->read_manual_sync_state();
+
+                if ( ! $this->is_manual_sync_active_state( $state ) ) {
+                        $this->clear_manual_sync_keepalive();
+
+                        return;
+                }
+
+                $next_step = 1;
+
+                if ( isset( $state['progress']['step'] ) ) {
+                        $progress_step = $state['progress']['step'];
+
+                        if ( is_numeric( $progress_step ) ) {
+                                $next_step = max( 1, (int) $progress_step );
+                        }
+                }
+
+                if ( ! as_next_scheduled_action( 'woo_contifico_manual_sync', null, $this->plugin_name ) ) {
+                        as_enqueue_async_action( 'woo_contifico_manual_sync', [ $next_step ], $this->plugin_name );
+                }
+
+                $this->schedule_manual_sync_keepalive();
         }
 
         /**

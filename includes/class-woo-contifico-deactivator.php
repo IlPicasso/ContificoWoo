@@ -44,6 +44,10 @@ class Woo_Contifico_Deactivator {
                 if ( function_exists( 'as_unschedule_all_actions' ) ) {
                         as_unschedule_all_actions( 'woo_contifico_manual_sync' );
                 }
-	}
+
+                if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+                        wp_clear_scheduled_hook( 'woo_contifico_manual_sync_keepalive' );
+                }
+        }
 
 }

@@ -397,6 +397,30 @@
                                         setSpinner( isLoading );
                                 }
 
+                                function showCancelButton( disabled ) {
+                                        if ( ! $cancelButton.length ) {
+                                                return;
+                                        }
+
+                                        $cancelButton
+                                                .attr( 'aria-hidden', 'false' )
+                                                .removeAttr( 'hidden' )
+                                                .show()
+                                                .prop( 'disabled', !! disabled );
+                                }
+
+                                function hideCancelButton() {
+                                        if ( ! $cancelButton.length ) {
+                                                return;
+                                        }
+
+                                        $cancelButton
+                                                .hide()
+                                                .prop( 'disabled', false )
+                                                .attr( 'aria-hidden', 'true' )
+                                                .attr( 'hidden', 'hidden' );
+                                }
+
                                 function isStatusActive( state ) {
                                         const status = state && state.status ? String( state.status ) : 'idle';
 
@@ -560,10 +584,9 @@
 
                                         if ( $cancelButton.length ) {
                                                 if ( active || status === 'cancelling' ) {
-                                                        $cancelButton.show();
-                                                        $cancelButton.prop( 'disabled', status === 'cancelling' );
+                                                        showCancelButton( status === 'cancelling' );
                                                 } else {
-                                                        $cancelButton.hide().prop( 'disabled', false );
+                                                        hideCancelButton();
                                                 }
                                         }
                                 }
@@ -622,9 +645,7 @@
 
                                         setLoading( true );
 
-                                        if ( $cancelButton.length ) {
-                                                $cancelButton.show().prop( 'disabled', true );
-                                        }
+                                        showCancelButton( true );
 
                                         if ( $status.length && messages.manualSyncStarting ) {
                                                 $status.removeClass( 'empty' ).text( messages.manualSyncStarting );
@@ -651,12 +672,15 @@
                                         } );
                                 } );
 
-                                $cancelButton.hide().on( 'click', function ( event ) {
+                                hideCancelButton();
+
+                                $cancelButton.on( 'click', function ( event ) {
                                         event.preventDefault();
 
                                         if ( ! ajaxEndpoint || ! cancelAction ) {
                                                 return;
                                         }
+                                }
 
                                         setLoading( true );
 

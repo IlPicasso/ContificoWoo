@@ -76,7 +76,7 @@
                 <p><?php esc_html_e( 'Inicia una sincronización manual cuando necesites actualizar tu inventario al instante. Puedes salir de esta página y volver más tarde para revisar el progreso.', 'woo-contifico' ); ?></p>
                 <div class="manual-sync-actions">
                     <button type="button" class="button button-primary manual-sync-start"><?php esc_html_e( 'Iniciar sincronización manual', 'woo-contifico' ); ?></button>
-                    <button type="button" class="button manual-sync-cancel"><?php esc_html_e( 'Cancelar sincronización', 'woo-contifico' ); ?></button>
+                    <button type="button" class="button manual-sync-cancel" hidden aria-hidden="true"><?php esc_html_e( 'Cancelar sincronización', 'woo-contifico' ); ?></button>
                     <span class="spinner manual-sync-spinner"></span>
                 </div>
                 <p class="manual-sync-status-message" aria-live="polite"></p>
