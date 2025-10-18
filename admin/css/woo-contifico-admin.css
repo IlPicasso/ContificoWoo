@@ -44,10 +44,7 @@
     border: thin solid red;
 }
 
-#woo-contifico-settings-page .fetch-products .result,
-#woo-contifico-settings-page .fetch-products img,
-#woo-contifico-settings-page .fetch-single-product .result,
-#woo-contifico-settings-page .fetch-single-product img {
+#woo-contifico-settings-page .fetch-products img {
     display: none;
 }
 
@@ -88,7 +85,10 @@
 
 #woo-contifico-settings-page .fetch-products .sync-summary-meta {
     margin: 0.25em 0 0;
+    padding-left: 0;
+    list-style: none;
     color: #50575e;
+    font-size: 0.9em;
 }
 
 #woo-contifico-settings-page .fetch-products .sync-summary-change-list {
@@ -101,20 +101,119 @@
     margin-bottom: 0.25em;
 }
 
-#woo-contifico-settings-page .fetch-single-product {
-    margin-top: 1.5em;
+#woo-contifico-settings-page .fetch-products .sync-summary-change-list .label,
+#woo-contifico-settings-page .fetch-products .sync-summary-meta .label {
+    font-weight: 600;
+    margin-right: 0.25em;
 }
 
-#woo-contifico-settings-page .fetch-single-product .result {
-    margin-top: 1em;
+#woo-contifico-settings-page .fetch-products .sync-summary-change-list .notes {
+    display: block;
+    margin-top: 0.25em;
+    color: #646970;
+    font-style: italic;
 }
 
-#woo-contifico-settings-page .fetch-single-product .result.success {
-    color: #007cba;
+#woo-contifico-settings-page .manual-sync-section {
+    max-width: 720px;
 }
 
-#woo-contifico-settings-page .fetch-single-product .result.error {
+#woo-contifico-settings-page .manual-sync-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75em;
+    margin: 1em 0;
+}
+
+#woo-contifico-settings-page .manual-sync-actions .manual-sync-cancel {
+    display: none;
+}
+
+#woo-contifico-settings-page .manual-sync-spinner {
+    float: none;
+    margin: 0;
+}
+
+#woo-contifico-settings-page .manual-sync-status-message {
+    margin: 0 0 1em;
+    font-weight: 500;
+}
+
+#woo-contifico-settings-page .manual-sync-status-message.empty {
+    font-weight: normal;
+}
+
+#woo-contifico-settings-page .manual-sync-history {
+    margin-top: 2em;
+}
+
+#woo-contifico-settings-page .manual-sync-history-results,
+#woo-contifico-settings-page .manual-sync-history-meta,
+#woo-contifico-settings-page .manual-sync-history-changes,
+#woo-contifico-settings-page .manual-sync-history-updates {
+    margin: 0.5em 0 0;
+    padding-left: 1.25em;
+}
+
+#woo-contifico-settings-page .manual-sync-history-results {
+    list-style: none;
+    padding-left: 0;
+}
+
+#woo-contifico-settings-page .manual-sync-history-results .label,
+#woo-contifico-settings-page .manual-sync-history-meta .label,
+#woo-contifico-settings-page .manual-sync-history-changes .label {
+    font-weight: 600;
+}
+
+#woo-contifico-settings-page .manual-sync-history-meta,
+#woo-contifico-settings-page .manual-sync-history-changes {
+    list-style: none;
+    color: #50575e;
+    padding-left: 0;
+}
+
+#woo-contifico-settings-page .manual-sync-history-changes {
+    padding-left: 1.5em;
+    list-style: disc;
+}
+
+#woo-contifico-settings-page .manual-sync-history-message {
+    margin: 0 0 0.75em;
+}
+
+#woo-contifico-settings-page .manual-sync-status-label {
+    display: inline-block;
+    padding: 0.15em 0.75em;
+    border-radius: 999px;
+    font-size: 0.85em;
+    background: #f0f0f1;
+    color: #1d2327;
+}
+
+#woo-contifico-settings-page .manual-sync-status-running {
+    background: #e1f0ff;
+    color: #0550ae;
+}
+
+#woo-contifico-settings-page .manual-sync-status-completed {
+    background: #dcf4e4;
+    color: #006b1b;
+}
+
+#woo-contifico-settings-page .manual-sync-status-cancelled,
+#woo-contifico-settings-page .manual-sync-status-cancelling {
+    background: #fef3d1;
+    color: #8a6d3b;
+}
+
+#woo-contifico-settings-page .manual-sync-status-failed {
+    background: #fdecea;
     color: #d63638;
+}
+
+#woo-contifico-settings-page .manual-sync-history-table details {
+    margin-top: 0.5em;
 }
 
 #setting-error-settings_updated b {
