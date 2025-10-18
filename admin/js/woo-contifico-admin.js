@@ -680,7 +680,6 @@
                                         if ( ! ajaxEndpoint || ! cancelAction ) {
                                                 return;
                                         }
-                                }
 
                                         setLoading( true );
 
