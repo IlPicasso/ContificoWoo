@@ -1900,11 +1900,18 @@ class Woo_Contifico_Admin {
                         $fetched_products = $this->contifico->fetch_products( $step, $batch_size );
 
                         $products_by_sku = [];
+                        $products_by_id  = [];
                         $contifico_skus  = [];
 
                         foreach ( $fetched_products as $product_data ) {
                                 if ( ! is_array( $product_data ) ) {
                                         continue;
+                                }
+
+                                $contifico_id = isset( $product_data['codigo'] ) ? (string) $product_data['codigo'] : '';
+
+                                if ( '' !== $contifico_id ) {
+                                        $products_by_id[ $contifico_id ] = $product_data;
                                 }
 
                                 $sku = isset( $product_data['sku'] ) ? (string) $product_data['sku'] : '';
@@ -1990,15 +1997,37 @@ class Woo_Contifico_Admin {
 
                                         $contifico_product = $products_by_sku[ $sku ];
                                         $contifico_id      = isset( $contifico_product['codigo'] ) ? (string) $contifico_product['codigo'] : '';
-                                        $contifico_sku      = isset( $contifico_product['sku'] ) ? (string) $contifico_product['sku'] : $sku;
+                                        $contifico_sku     = isset( $contifico_product['sku'] ) ? (string) $contifico_product['sku'] : $sku;
+
+                                        $resolved_product = $this->resolve_wc_product_for_contifico_sku( $wc_product, $contifico_sku );
+
+                                        if ( ! $resolved_product ) {
+                                                continue;
+                                        }
+
+                                        $stored_contifico_id = $this->resolve_contifico_product_identifier( $resolved_product );
+
+                                        if ( '' !== $stored_contifico_id && isset( $products_by_id[ $stored_contifico_id ] ) ) {
+                                                $contifico_product = $products_by_id[ $stored_contifico_id ];
+                                                $new_sku           = isset( $contifico_product['sku'] ) ? (string) $contifico_product['sku'] : '';
+
+                                                if ( '' !== $new_sku && $new_sku !== $contifico_sku ) {
+                                                        $contifico_sku    = $new_sku;
+                                                        $resolved_product = $this->resolve_wc_product_for_contifico_sku( $wc_product, $contifico_sku );
+
+                                                        if ( ! $resolved_product ) {
+                                                                continue;
+                                                        }
+                                                }
+
+                                                $contifico_id = $stored_contifico_id;
+                                        }
 
                                         if ( '' === $contifico_id ) {
                                                 continue;
                                         }
 
-                                        $resolved_product = $this->resolve_wc_product_for_contifico_sku( $wc_product, $contifico_sku );
-
-                                        if ( ! $resolved_product ) {
+                                        if ( isset( $matched_contifico_ids[ $contifico_id ] ) ) {
                                                 continue;
                                         }
 
@@ -2020,7 +2049,11 @@ class Woo_Contifico_Admin {
 
                                         $contifico_id = isset( $product_data['codigo'] ) ? (string) $product_data['codigo'] : '';
 
-                                        if ( '' === $contifico_id || isset( $matched_contifico_ids[ $contifico_id ] ) ) {
+                                        if ( '' === $contifico_id ) {
+                                                continue;
+                                        }
+
+                                        if ( isset( $matched_contifico_ids[ $contifico_id ] ) ) {
                                                 continue;
                                         }
 
@@ -2048,15 +2081,40 @@ class Woo_Contifico_Admin {
                                                 continue;
                                         }
 
+                                        $effective_product_data = $product_data;
+                                        $effective_id           = $contifico_id;
+                                        $effective_sku          = $contifico_sku;
+
+                                        $stored_contifico_id = $this->resolve_contifico_product_identifier( $resolved_product );
+
+                                        if ( '' !== $stored_contifico_id && isset( $products_by_id[ $stored_contifico_id ] ) ) {
+                                                $effective_product_data = $products_by_id[ $stored_contifico_id ];
+                                                $effective_id           = $stored_contifico_id;
+                                                $new_sku                = isset( $effective_product_data['sku'] ) ? (string) $effective_product_data['sku'] : '';
+
+                                                if ( '' !== $new_sku && $new_sku !== $effective_sku ) {
+                                                        $effective_sku    = $new_sku;
+                                                        $resolved_product = $this->resolve_wc_product_for_contifico_sku( $wc_product, $effective_sku );
+
+                                                        if ( ! $resolved_product ) {
+                                                                continue;
+                                                        }
+                                                }
+                                        }
+
+                                        if ( isset( $matched_contifico_ids[ $effective_id ] ) ) {
+                                                continue;
+                                        }
+
                                         $products[] = [
-                                                'id'      => $contifico_id,
-                                                'pvp1'    => isset( $product_data['pvp1'] ) ? (float) $product_data['pvp1'] : 0.0,
-                                                'pvp2'    => isset( $product_data['pvp2'] ) ? (float) $product_data['pvp2'] : 0.0,
-                                                'pvp3'    => isset( $product_data['pvp3'] ) ? (float) $product_data['pvp3'] : 0.0,
+                                                'id'      => $effective_id,
+                                                'pvp1'    => isset( $effective_product_data['pvp1'] ) ? (float) $effective_product_data['pvp1'] : 0.0,
+                                                'pvp2'    => isset( $effective_product_data['pvp2'] ) ? (float) $effective_product_data['pvp2'] : 0.0,
+                                                'pvp3'    => isset( $effective_product_data['pvp3'] ) ? (float) $effective_product_data['pvp3'] : 0.0,
                                                 'product' => $resolved_product,
                                         ];
 
-                                        $matched_contifico_ids[ $contifico_id ] = true;
+                                        $matched_contifico_ids[ $effective_id ] = true;
                                 }
 
                                 $result['found'] = $result['found'] + count( $products );
