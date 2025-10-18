@@ -1080,7 +1080,7 @@ class Woo_Contifico_Admin {
                                 $entry['debug_log']   = isset( $entry['debug_log'] ) ? (string) $entry['debug_log'] : '';
                                 $entry['updates']     = isset( $entry['updates'] ) && is_array( $entry['updates'] ) ? array_values( $entry['updates'] ) : [];
 
-                                return $entry;
+                                return $this->normalize_manual_sync_data( $entry );
                         },
                         $history
                 );
@@ -1096,6 +1096,12 @@ class Woo_Contifico_Admin {
          * @return array
          */
         public function describe_manual_sync_update_entry( array $entry ) : array {
+
+                $entry = $this->normalize_manual_sync_data( $entry );
+
+                if ( ! is_array( $entry ) ) {
+                        $entry = [];
+                }
 
                 $title = isset( $entry['product_name'] ) ? (string) $entry['product_name'] : '';
 
@@ -1189,6 +1195,7 @@ class Woo_Contifico_Admin {
          */
         private function read_manual_sync_state() : array {
                 $state = get_option( self::MANUAL_SYNC_STATE_OPTION, [] );
+                $state = $this->normalize_manual_sync_data( $state );
 
                 if ( ! is_array( $state ) ) {
                         $state = [];
@@ -1540,19 +1547,23 @@ class Woo_Contifico_Admin {
          */
         private function get_manual_sync_history_option() : array {
                 $history = get_option( self::MANUAL_SYNC_HISTORY_OPTION, [] );
+                $history = $this->normalize_manual_sync_data( $history );
 
                 if ( ! is_array( $history ) ) {
                         return [];
                 }
 
-                return array_values(
-                        array_filter(
-                                $history,
-                                static function ( $entry ) {
-                                        return is_array( $entry );
-                                }
-                        )
-                );
+                $normalized_history = [];
+
+                foreach ( $history as $entry ) {
+                        $entry = $this->normalize_manual_sync_data( $entry );
+
+                        if ( is_array( $entry ) ) {
+                                $normalized_history[] = $entry;
+                        }
+                }
+
+                return $normalized_history;
         }
 
         /**
@@ -1566,6 +1577,30 @@ class Woo_Contifico_Admin {
          */
         private function save_manual_sync_history( array $history ) : void {
                 update_option( self::MANUAL_SYNC_HISTORY_OPTION, array_values( $history ), false );
+        }
+
+        /**
+         * Normalize manual synchronization data casting objects to arrays recursively.
+         *
+         * @since 4.3.1
+         *
+         * @param mixed $value
+         *
+         * @return mixed
+         */
+        private function normalize_manual_sync_data( $value ) {
+
+                if ( is_object( $value ) ) {
+                        $value = get_object_vars( $value );
+                }
+
+                if ( is_array( $value ) ) {
+                        foreach ( $value as $key => $item ) {
+                                $value[ $key ] = $this->normalize_manual_sync_data( $item );
+                        }
+                }
+
+                return $value;
         }
 
         /**
