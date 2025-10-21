@@ -158,6 +158,13 @@ class Woo_Contifico_Diagnostics {
      * @return array<string,mixed>
      */
     private function build_product_entry( WC_Product $product ) : array {
+        $managing_stock = method_exists( $product, 'managing_stock' )
+            ? (bool) $product->managing_stock()
+            : (bool) $product->get_manage_stock();
+        $variation_count = $product->is_type( 'variable' )
+            ? count( (array) $product->get_children() )
+            : 0;
+
         return [
             'post_id'                => $product->get_id(),
             'nombre'                 => $product->get_name(),
@@ -167,6 +174,8 @@ class Woo_Contifico_Diagnostics {
             'codigo_contifico'       => '',
             'coincidencias_posibles' => [],
             'variaciones_sin_coincidencia' => [],
+            'managing_stock'         => $managing_stock,
+            'variation_count'        => $variation_count,
         ];
     }
 
