@@ -187,6 +187,10 @@ class Woo_Contifico_Diagnostics {
             $candidate_sku = sprintf( '%s/%s', $parent_sku, $size_slug );
         }
 
+        $managing_stock = method_exists( $variation, 'managing_stock' )
+            ? (bool) $variation->managing_stock()
+            : (bool) $variation->get_manage_stock();
+
         return [
             'post_id'                => $variation->get_id(),
             'nombre'                 => $variation->get_name(),
@@ -196,6 +200,7 @@ class Woo_Contifico_Diagnostics {
             'codigo_contifico'       => '',
             'coincidencias_posibles' => [],
             'parent_id'              => $parent->get_id(),
+            'managing_stock'         => $managing_stock,
             '_variation_meta'        => [
                 'candidate_sku' => $candidate_sku,
                 'size_slug'     => $size_slug,
