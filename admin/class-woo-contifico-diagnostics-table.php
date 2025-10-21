@@ -431,6 +431,8 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'duplicate_sku'     => __( 'SKU duplicado', 'woo-contifico' ),
             'no_contifico_match' => __( 'Sin coincidencia en Contífico', 'woo-contifico' ),
             'child_no_contifico_match' => __( 'Variaciones sin coincidencia', 'woo-contifico' ),
+            'variation_stock_disabled'  => __( 'Variación sin manejo de inventario', 'woo-contifico' ),
+            'product_stock_disabled'    => __( 'Producto sin manejo de inventario', 'woo-contifico' ),
         ];
     }
 
@@ -471,6 +473,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'variaciones_sin_coincidencia' => [],
             'parent_id'              => 0,
             'managing_stock'         => null,
+            'variation_count'        => 0,
         ];
 
         $entry = wp_parse_args( $entry, $defaults );
@@ -485,6 +488,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
         $entry['variaciones_sin_coincidencia'] = is_array( $entry['variaciones_sin_coincidencia'] ) ? array_values( $entry['variaciones_sin_coincidencia'] ) : [];
         $entry['parent_id']              = (int) $entry['parent_id'];
         $entry['managing_stock']         = is_null( $entry['managing_stock'] ) ? null : (bool) $entry['managing_stock'];
+        $entry['variation_count']        = (int) $entry['variation_count'];
 
         $entry['problem_types']       = $this->detect_problem_types( $entry );
         $entry['severity']            = $this->determine_severity( $entry['problem_types'] );
@@ -520,6 +524,14 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             $types[] = 'variation_stock_disabled';
         }
 
+        if (
+            in_array( $entry['tipo'], [ 'simple', 'variable' ], true )
+            && false === $entry['managing_stock']
+            && ( 'simple' === $entry['tipo'] || $entry['variation_count'] <= 0 )
+        ) {
+            $types[] = 'product_stock_disabled';
+        }
+
         $types = array_filter( array_map( 'sanitize_key', $types ) );
 
         return array_values( array_unique( $types ) );
@@ -537,7 +549,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             return 'critical';
         }
 
-        if ( array_intersect( [ 'no_contifico_match', 'child_no_contifico_match', 'variation_stock_disabled' ], $types ) ) {
+        if ( array_intersect( [ 'no_contifico_match', 'child_no_contifico_match', 'variation_stock_disabled', 'product_stock_disabled' ], $types ) ) {
             return 'warning';
         }
 
@@ -609,6 +621,9 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                 case 'variation_stock_disabled':
                     $messages[] = __( 'La variación no tiene habilitado el manejo de inventario, por lo que no se sincronizará el stock.', 'woo-contifico' );
                     break;
+                case 'product_stock_disabled':
+                    $messages[] = __( 'El producto no tiene habilitado el manejo de inventario, por lo que no se sincronizará el stock.', 'woo-contifico' );
+                    break;
             }
         }
 
@@ -646,6 +661,9 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                     break;
                 case 'variation_stock_disabled':
                     $messages[] = __( 'Activa la opción "Gestionar inventario" en la variación y guarda los cambios antes de sincronizar.', 'woo-contifico' );
+                    break;
+                case 'product_stock_disabled':
+                    $messages[] = __( 'Activa la opción "Gestionar inventario" en el producto y guarda los cambios antes de sincronizar.', 'woo-contifico' );
                     break;
             }
         }

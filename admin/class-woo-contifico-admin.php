@@ -2452,6 +2452,16 @@ class Woo_Contifico_Admin {
                         throw new Exception( __( 'El producto de Contífico no tiene un identificador válido.', 'woo-contifico' ) );
                 }
 
+                $managing_stock = method_exists( $resolved_product, 'managing_stock' )
+                        ? (bool) $resolved_product->managing_stock()
+                        : (bool) $resolved_product->get_manage_stock();
+
+                if ( $resolved_product->is_type( 'variation' ) && ! $managing_stock ) {
+                        throw new Exception(
+                                __( 'La variación no tiene habilitada la opción "Gestionar inventario". Actívala y guarda los cambios antes de sincronizar.', 'woo-contifico' )
+                        );
+                }
+
                 $product_entry = [
                         'id'      => $contifico_id,
                         'pvp1'    => isset( $contifico_product['pvp1'] ) ? (float) $contifico_product['pvp1'] : 0.0,
