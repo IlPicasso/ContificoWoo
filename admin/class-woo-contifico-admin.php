@@ -2286,6 +2286,8 @@ class Woo_Contifico_Admin {
                         throw new Exception( __( 'No se pudo cargar el producto de WooCommerce.', 'woo-contifico' ) );
                 }
 
+                $original_product = $resolved_product;
+
                 $lookup_sku = trim( $lookup_sku );
 
                 if ( '' === $lookup_sku ) {
@@ -2303,49 +2305,147 @@ class Woo_Contifico_Admin {
 
                 if ( empty( $contifico_product ) || ! is_array( $contifico_product ) ) {
                         $contifico_product = $this->get_contifico_product_data_for_product( $resolved_product, $lookup_sku, true );
+                }
 
-                        if ( empty( $contifico_product ) || ! is_array( $contifico_product ) ) {
-                                if ( '' !== $contifico_id ) {
-                                        throw new Exception(
-                                                sprintf(
-                                                        __( 'No se encontró el producto con el identificador de Contífico "%s" en Contífico.', 'woo-contifico' ),
-                                                        $contifico_id
-                                                )
-                                        );
+                if ( ( empty( $contifico_product ) || ! is_array( $contifico_product ) ) && $original_product->is_type( 'variable' ) ) {
+                        $variation_candidate = $this->resolve_variation_sync_candidate(
+                                $original_product,
+                                '' !== $lookup_sku ? $lookup_sku : (string) $original_product->get_sku(),
+                                true
+                        );
+
+                        if ( $variation_candidate ) {
+                                $resolved_product  = $variation_candidate['product'];
+                                $contifico_product = $variation_candidate['contifico_product'];
+                                $lookup_candidate  = isset( $variation_candidate['lookup_sku'] )
+                                        ? (string) $variation_candidate['lookup_sku']
+                                        : '';
+                                $candidate_id      = isset( $variation_candidate['contifico_id'] )
+                                        ? (string) $variation_candidate['contifico_id']
+                                        : '';
+                                $candidate_sku     = isset( $variation_candidate['contifico_sku'] )
+                                        ? (string) $variation_candidate['contifico_sku']
+                                        : '';
+
+                                if ( '' !== $lookup_candidate ) {
+                                        $lookup_sku = $lookup_candidate;
                                 }
 
-                                if ( '' !== $lookup_sku ) {
-                                        throw new Exception(
-                                                sprintf( __( 'No se encontró el producto con el SKU "%s" en Contífico.', 'woo-contifico' ), $lookup_sku )
-                                        );
+                                if ( '' === $contifico_id && '' !== $candidate_id ) {
+                                        $contifico_id = $candidate_id;
                                 }
 
-                                throw new Exception( __( 'No se encontró el producto en Contífico.', 'woo-contifico' ) );
+                                if ( '' !== $candidate_sku && ! isset( $contifico_product['sku'] ) ) {
+                                        $contifico_product['sku'] = $candidate_sku;
+                                }
+                        }
+                }
+
+                if ( empty( $contifico_product ) || ! is_array( $contifico_product ) ) {
+                        if ( '' !== $contifico_id ) {
+                                throw new Exception(
+                                        sprintf(
+                                                __( 'No se encontró el producto con el identificador de Contífico "%s" en Contífico.', 'woo-contifico' ),
+                                                $contifico_id
+                                        )
+                                );
                         }
 
-                        if ( isset( $contifico_product['codigo'] ) && '' === $contifico_id ) {
-                                $contifico_id = (string) $contifico_product['codigo'];
+                        if ( '' !== $lookup_sku ) {
+                                throw new Exception(
+                                        sprintf( __( 'No se encontró el producto con el SKU "%s" en Contífico.', 'woo-contifico' ), $lookup_sku )
+                                );
                         }
+
+                        throw new Exception( __( 'No se encontró el producto en Contífico.', 'woo-contifico' ) );
+                }
+
+                if ( isset( $contifico_product['codigo'] ) && '' === $contifico_id ) {
+                        $contifico_id = (string) $contifico_product['codigo'];
                 }
 
                 $contifico_id  = isset( $contifico_product['codigo'] ) ? (string) $contifico_product['codigo'] : $contifico_id;
                 $contifico_sku = isset( $contifico_product['sku'] ) ? (string) $contifico_product['sku'] : $lookup_sku;
 
+                $parent_for_resolution = $resolved_product;
+
+                if ( $resolved_product->is_type( 'variation' ) ) {
+                        $parent_id = $resolved_product->get_parent_id();
+
+                        if ( $parent_id ) {
+                                $parent_product = wc_get_product( $parent_id );
+
+                                if ( $parent_product && is_a( $parent_product, 'WC_Product' ) ) {
+                                        $parent_for_resolution = $parent_product;
+                                } else {
+                                        $parent_for_resolution = null;
+                                }
+                        } else {
+                                $parent_for_resolution = null;
+                        }
+                }
+
                 if (
-                        '' !== $contifico_id
+                        $parent_for_resolution
+                        && $parent_for_resolution->is_type( 'variable' )
                         && '' !== $contifico_sku
+                ) {
+                        $matched_product = $this->resolve_wc_product_for_contifico_sku( $parent_for_resolution, $contifico_sku );
+
+                        if ( $matched_product && is_a( $matched_product, 'WC_Product' ) ) {
+                                $resolved_product = $matched_product;
+
+                                if ( $resolved_product->get_id() !== $original_product->get_id() ) {
+                                        $refreshed_product = $this->get_contifico_product_data_for_product(
+                                                $resolved_product,
+                                                '' !== $contifico_sku ? $contifico_sku : $lookup_sku,
+                                                true
+                                        );
+
+                                        if ( ! empty( $refreshed_product ) && is_array( $refreshed_product ) ) {
+                                                $contifico_product = $refreshed_product;
+                                                $contifico_id      = isset( $contifico_product['codigo'] ) ? (string) $contifico_product['codigo'] : $contifico_id;
+                                                $contifico_sku     = isset( $contifico_product['sku'] ) ? (string) $contifico_product['sku'] : $contifico_sku;
+                                        } else {
+                                                $stored_contifico_id = $this->resolve_contifico_product_identifier( $resolved_product );
+
+                                                if ( '' !== $stored_contifico_id ) {
+                                                        $contifico_id = $stored_contifico_id;
+                                                }
+                                        }
+                                }
+                        }
+                }
+
+                $woocommerce_sku = (string) $resolved_product->get_sku();
+
+                if ( '' === $lookup_sku && '' !== $woocommerce_sku ) {
+                        $lookup_sku = $woocommerce_sku;
+                }
+
+                if ( '' === $lookup_sku && '' !== $contifico_sku ) {
+                        $lookup_sku = $contifico_sku;
+                }
+
+                if (
+                        '' !== $contifico_sku
                         && '' !== $woocommerce_sku
                         && $contifico_sku !== $woocommerce_sku
                 ) {
-                        throw new Exception(
-                                sprintf(
-                                        /* translators: 1: Contífico product identifier, 2: Contífico SKU, 3: WooCommerce SKU */
-                                        __( 'El ID de Contífico "%1$s" está asociado al SKU "%2$s" en Contífico, pero este producto de WooCommerce usa el SKU "%3$s". Actualiza el SKU en WooCommerce para que coincida antes de sincronizar.', 'woo-contifico' ),
-                                        $contifico_id,
-                                        $contifico_sku,
-                                        $woocommerce_sku
-                                )
-                        );
+                        $contifico_candidates   = array_merge( [ $contifico_sku ], $this->generate_alternate_skus( $contifico_sku ) );
+                        $woocommerce_candidates = array_merge( [ $woocommerce_sku ], $this->generate_alternate_skus( $woocommerce_sku ) );
+
+                        if ( empty( array_intersect( $contifico_candidates, $woocommerce_candidates ) ) ) {
+                                throw new Exception(
+                                        sprintf(
+                                                /* translators: 1: Contífico product identifier, 2: Contífico SKU, 3: WooCommerce SKU */
+                                                __( 'El ID de Contífico "%1$s" está asociado al SKU "%2$s" en Contífico, pero este producto de WooCommerce usa el SKU "%3$s". Actualiza el SKU en WooCommerce para que coincida antes de sincronizar.', 'woo-contifico' ),
+                                                $contifico_id,
+                                                $contifico_sku,
+                                                $woocommerce_sku
+                                        )
+                                );
+                        }
                 }
 
                 if ( '' === $contifico_id ) {
@@ -3237,6 +3337,101 @@ class Woo_Contifico_Admin {
         }
 
         /**
+         * Locate a variation candidate to synchronize when the parent product has no Contífico match.
+         *
+         * @since 4.2.1
+         *
+         * @param WC_Product $parent_product
+         * @param string     $lookup_sku
+         * @param bool       $force_refresh
+         * @return array|null
+         */
+        private function resolve_variation_sync_candidate( $parent_product, string $lookup_sku, bool $force_refresh = false ) {
+
+                if ( ! $parent_product || ! is_a( $parent_product, 'WC_Product' ) || ! $parent_product->is_type( 'variable' ) ) {
+                        return null;
+                }
+
+                $children = (array) $parent_product->get_children();
+
+                if ( empty( $children ) ) {
+                        return null;
+                }
+
+                $lookup_sku        = trim( $lookup_sku );
+                $lookup_candidates = '' !== $lookup_sku
+                        ? array_merge( [ $lookup_sku ], $this->generate_alternate_skus( $lookup_sku ) )
+                        : [];
+
+                foreach ( $children as $child_id ) {
+                        $variation = wc_get_product( $child_id );
+
+                        if ( ! $variation || ! is_a( $variation, 'WC_Product' ) ) {
+                                continue;
+                        }
+
+                        $variation_identifier = $this->resolve_contifico_product_identifier( $variation );
+
+                        if ( '' !== $variation_identifier ) {
+                                $variation_data = $this->get_contifico_product_data_by_id( $variation_identifier, $force_refresh );
+
+                                if ( ! empty( $variation_data ) && is_array( $variation_data ) ) {
+                                        $variation_sku = (string) $variation->get_sku();
+
+                                        return [
+                                                'product'           => $variation,
+                                                'contifico_product' => $variation_data,
+                                                'contifico_id'      => isset( $variation_data['codigo'] )
+                                                        ? (string) $variation_data['codigo']
+                                                        : $variation_identifier,
+                                                'contifico_sku'     => isset( $variation_data['sku'] )
+                                                        ? (string) $variation_data['sku']
+                                                        : ( '' !== $variation_sku ? $variation_sku : '' ),
+                                                'lookup_sku'        => '' !== $variation_sku
+                                                        ? $variation_sku
+                                                        : ( isset( $variation_data['sku'] ) ? (string) $variation_data['sku'] : $lookup_sku ),
+                                        ];
+                                }
+                        }
+
+                        $variation_sku  = (string) $variation->get_sku();
+                        $candidate_skus = [];
+
+                        if ( '' !== $variation_sku ) {
+                                $candidate_skus = array_merge( [ $variation_sku ], $this->generate_alternate_skus( $variation_sku ) );
+                        }
+
+                        if ( ! empty( $lookup_candidates ) ) {
+                                $candidate_skus = array_merge( $candidate_skus, $lookup_candidates );
+                        }
+
+                        $candidate_skus = array_values( array_unique( array_filter( $candidate_skus, 'strlen' ) ) );
+
+                        foreach ( $candidate_skus as $candidate_sku ) {
+                                $variation_data = $this->get_contifico_product_data_by_sku( $candidate_sku, $force_refresh );
+
+                                if ( empty( $variation_data ) || ! is_array( $variation_data ) ) {
+                                        continue;
+                                }
+
+                                $contifico_sku = isset( $variation_data['sku'] ) ? (string) $variation_data['sku'] : $candidate_sku;
+
+                                return [
+                                        'product'           => $variation,
+                                        'contifico_product' => $variation_data,
+                                        'contifico_id'      => isset( $variation_data['codigo'] )
+                                                ? (string) $variation_data['codigo']
+                                                : '',
+                                        'contifico_sku'     => $contifico_sku,
+                                        'lookup_sku'        => '' !== $variation_sku ? $variation_sku : $contifico_sku,
+                                ];
+                        }
+                }
+
+                return null;
+        }
+
+        /**
          * Locate a variation that matches a Contífico SKU pattern.
          *
          * @since 4.1.7
@@ -3251,21 +3446,32 @@ class Woo_Contifico_Admin {
                         return null;
                 }
 
-                if ( false === strpos( $contifico_sku, '/' ) ) {
+                $contifico_sku = trim( $contifico_sku );
+
+                if ( '' === $contifico_sku ) {
                         return null;
                 }
-
-                $suffix = substr( strrchr( $contifico_sku, '/' ), 1 );
-
-                if ( false === $suffix ) {
-                        return null;
-                }
-
-                $suffix            = trim( (string) $suffix );
-                $normalized_suffix = sanitize_title( $suffix );
-                $lower_suffix      = strtolower( $suffix );
 
                 $candidate_skus = array_merge( [ $contifico_sku ], $this->generate_alternate_skus( $contifico_sku ) );
+
+                $suffix            = '';
+                $normalized_suffix = '';
+                $lower_suffix      = '';
+                $has_suffix        = false;
+
+                if ( false !== strpos( $contifico_sku, '/' ) ) {
+                        $raw_suffix = substr( strrchr( $contifico_sku, '/' ), 1 );
+
+                        if ( false !== $raw_suffix ) {
+                                $suffix = trim( (string) $raw_suffix );
+
+                                if ( '' !== $suffix ) {
+                                        $normalized_suffix = sanitize_title( $suffix );
+                                        $lower_suffix      = strtolower( $suffix );
+                                        $has_suffix        = true;
+                                }
+                        }
+                }
 
                 foreach ( (array) $parent_product->get_children() as $child_id ) {
                         $variation = wc_get_product( $child_id );
@@ -3278,6 +3484,10 @@ class Woo_Contifico_Admin {
 
                         if ( '' !== $variation_sku && in_array( $variation_sku, $candidate_skus, true ) ) {
                                 return $variation;
+                        }
+
+                        if ( ! $has_suffix ) {
+                                continue;
                         }
 
                         $attributes = (array) $variation->get_attributes();
