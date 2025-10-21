@@ -2286,6 +2286,8 @@ class Woo_Contifico_Admin {
                         throw new Exception( __( 'No se pudo cargar el producto de WooCommerce.', 'woo-contifico' ) );
                 }
 
+                $original_product = $resolved_product;
+
                 $lookup_sku = trim( $lookup_sku );
 
                 if ( '' === $lookup_sku ) {
@@ -2331,21 +2333,85 @@ class Woo_Contifico_Admin {
                 $contifico_id  = isset( $contifico_product['codigo'] ) ? (string) $contifico_product['codigo'] : $contifico_id;
                 $contifico_sku = isset( $contifico_product['sku'] ) ? (string) $contifico_product['sku'] : $lookup_sku;
 
+                $parent_for_resolution = $resolved_product;
+
+                if ( $resolved_product->is_type( 'variation' ) ) {
+                        $parent_id = $resolved_product->get_parent_id();
+
+                        if ( $parent_id ) {
+                                $parent_product = wc_get_product( $parent_id );
+
+                                if ( $parent_product && is_a( $parent_product, 'WC_Product' ) ) {
+                                        $parent_for_resolution = $parent_product;
+                                } else {
+                                        $parent_for_resolution = null;
+                                }
+                        } else {
+                                $parent_for_resolution = null;
+                        }
+                }
+
                 if (
-                        '' !== $contifico_id
+                        $parent_for_resolution
+                        && $parent_for_resolution->is_type( 'variable' )
                         && '' !== $contifico_sku
+                ) {
+                        $matched_product = $this->resolve_wc_product_for_contifico_sku( $parent_for_resolution, $contifico_sku );
+
+                        if ( $matched_product && is_a( $matched_product, 'WC_Product' ) ) {
+                                $resolved_product = $matched_product;
+
+                                if ( $resolved_product->get_id() !== $original_product->get_id() ) {
+                                        $refreshed_product = $this->get_contifico_product_data_for_product(
+                                                $resolved_product,
+                                                '' !== $contifico_sku ? $contifico_sku : $lookup_sku,
+                                                true
+                                        );
+
+                                        if ( ! empty( $refreshed_product ) && is_array( $refreshed_product ) ) {
+                                                $contifico_product = $refreshed_product;
+                                                $contifico_id      = isset( $contifico_product['codigo'] ) ? (string) $contifico_product['codigo'] : $contifico_id;
+                                                $contifico_sku     = isset( $contifico_product['sku'] ) ? (string) $contifico_product['sku'] : $contifico_sku;
+                                        } else {
+                                                $stored_contifico_id = $this->resolve_contifico_product_identifier( $resolved_product );
+
+                                                if ( '' !== $stored_contifico_id ) {
+                                                        $contifico_id = $stored_contifico_id;
+                                                }
+                                        }
+                                }
+                        }
+                }
+
+                $woocommerce_sku = (string) $resolved_product->get_sku();
+
+                if ( '' === $lookup_sku && '' !== $woocommerce_sku ) {
+                        $lookup_sku = $woocommerce_sku;
+                }
+
+                if ( '' === $lookup_sku && '' !== $contifico_sku ) {
+                        $lookup_sku = $contifico_sku;
+                }
+
+                if (
+                        '' !== $contifico_sku
                         && '' !== $woocommerce_sku
                         && $contifico_sku !== $woocommerce_sku
                 ) {
-                        throw new Exception(
-                                sprintf(
-                                        /* translators: 1: Contífico product identifier, 2: Contífico SKU, 3: WooCommerce SKU */
-                                        __( 'El ID de Contífico "%1$s" está asociado al SKU "%2$s" en Contífico, pero este producto de WooCommerce usa el SKU "%3$s". Actualiza el SKU en WooCommerce para que coincida antes de sincronizar.', 'woo-contifico' ),
-                                        $contifico_id,
-                                        $contifico_sku,
-                                        $woocommerce_sku
-                                )
-                        );
+                        $contifico_candidates   = array_merge( [ $contifico_sku ], $this->generate_alternate_skus( $contifico_sku ) );
+                        $woocommerce_candidates = array_merge( [ $woocommerce_sku ], $this->generate_alternate_skus( $woocommerce_sku ) );
+
+                        if ( empty( array_intersect( $contifico_candidates, $woocommerce_candidates ) ) ) {
+                                throw new Exception(
+                                        sprintf(
+                                                /* translators: 1: Contífico product identifier, 2: Contífico SKU, 3: WooCommerce SKU */
+                                                __( 'El ID de Contífico "%1$s" está asociado al SKU "%2$s" en Contífico, pero este producto de WooCommerce usa el SKU "%3$s". Actualiza el SKU en WooCommerce para que coincida antes de sincronizar.', 'woo-contifico' ),
+                                                $contifico_id,
+                                                $contifico_sku,
+                                                $woocommerce_sku
+                                        )
+                                );
+                        }
                 }
 
                 if ( '' === $contifico_id ) {
@@ -3251,21 +3317,32 @@ class Woo_Contifico_Admin {
                         return null;
                 }
 
-                if ( false === strpos( $contifico_sku, '/' ) ) {
+                $contifico_sku = trim( $contifico_sku );
+
+                if ( '' === $contifico_sku ) {
                         return null;
                 }
-
-                $suffix = substr( strrchr( $contifico_sku, '/' ), 1 );
-
-                if ( false === $suffix ) {
-                        return null;
-                }
-
-                $suffix            = trim( (string) $suffix );
-                $normalized_suffix = sanitize_title( $suffix );
-                $lower_suffix      = strtolower( $suffix );
 
                 $candidate_skus = array_merge( [ $contifico_sku ], $this->generate_alternate_skus( $contifico_sku ) );
+
+                $suffix            = '';
+                $normalized_suffix = '';
+                $lower_suffix      = '';
+                $has_suffix        = false;
+
+                if ( false !== strpos( $contifico_sku, '/' ) ) {
+                        $raw_suffix = substr( strrchr( $contifico_sku, '/' ), 1 );
+
+                        if ( false !== $raw_suffix ) {
+                                $suffix = trim( (string) $raw_suffix );
+
+                                if ( '' !== $suffix ) {
+                                        $normalized_suffix = sanitize_title( $suffix );
+                                        $lower_suffix      = strtolower( $suffix );
+                                        $has_suffix        = true;
+                                }
+                        }
+                }
 
                 foreach ( (array) $parent_product->get_children() as $child_id ) {
                         $variation = wc_get_product( $child_id );
@@ -3278,6 +3355,10 @@ class Woo_Contifico_Admin {
 
                         if ( '' !== $variation_sku && in_array( $variation_sku, $candidate_skus, true ) ) {
                                 return $variation;
+                        }
+
+                        if ( ! $has_suffix ) {
+                                continue;
                         }
 
                         $attributes = (array) $variation->get_attributes();
