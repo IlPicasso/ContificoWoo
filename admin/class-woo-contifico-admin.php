@@ -2430,7 +2430,7 @@ class Woo_Contifico_Admin {
                 if (
                         '' !== $contifico_sku
                         && '' !== $woocommerce_sku
-                        && $contifico_sku !== $woocommerce_sku
+                        && ! $this->skus_are_equivalent( $contifico_sku, $woocommerce_sku )
                 ) {
                         $contifico_candidates   = array_merge( [ $contifico_sku ], $this->generate_alternate_skus( $contifico_sku ) );
                         $woocommerce_candidates = array_merge( [ $woocommerce_sku ], $this->generate_alternate_skus( $woocommerce_sku ) );
@@ -3016,9 +3016,21 @@ class Woo_Contifico_Admin {
 
                         $product = $this->contifico->get_product_by_id( $contifico_id, $force_refresh );
 
-                        if ( ! empty( $product ) ) {
-                                return $product;
+                        if ( empty( $product ) || ! is_array( $product ) ) {
+                                continue;
                         }
+
+                        $contifico_sku = isset( $product['sku'] ) ? (string) $product['sku'] : '';
+
+                        if (
+                                '' !== $contifico_sku
+                                && ! $this->skus_are_equivalent( $contifico_sku, $candidate )
+                                && ! $this->skus_are_equivalent( $contifico_sku, $sku )
+                        ) {
+                                continue;
+                        }
+
+                        return $product;
                 }
 
                 $inventory = $this->contifico->get_products();
@@ -3065,8 +3077,10 @@ class Woo_Contifico_Admin {
                                 continue;
                         }
 
-                        if ( in_array( $product_sku, $normalized_candidates, true ) ) {
-                                return $product;
+                        foreach ( $normalized_candidates as $candidate ) {
+                                if ( $this->skus_are_equivalent( $product_sku, $candidate ) ) {
+                                        return $product;
+                                }
                         }
                 }
 
@@ -3260,6 +3274,37 @@ class Woo_Contifico_Admin {
         }
 
         /**
+         * Determine if two SKU representations should be considered equivalent.
+         *
+         * @since 4.2.2
+         *
+         * @param string $first
+         * @param string $second
+         * @return bool
+         */
+        private function skus_are_equivalent( string $first, string $second ) : bool {
+
+                $first  = trim( $first );
+                $second = trim( $second );
+
+                if ( '' === $first || '' === $second ) {
+                        return false;
+                }
+
+                if ( $first === $second ) {
+                        return true;
+                }
+
+                $first_candidates  = array_merge( [ $first ], $this->generate_alternate_skus( $first ) );
+                $second_candidates = array_merge( [ $second ], $this->generate_alternate_skus( $second ) );
+
+                $first_candidates = array_map( 'strval', array_unique( array_filter( $first_candidates, 'strlen' ) ) );
+                $second_candidates = array_map( 'strval', array_unique( array_filter( $second_candidates, 'strlen' ) ) );
+
+                return ! empty( array_intersect( $first_candidates, $second_candidates ) );
+        }
+
+        /**
          * Attempt to locate a WooCommerce product ID for a Contífico SKU.
          *
          * @since 4.1.7
@@ -3298,7 +3343,11 @@ class Woo_Contifico_Admin {
                                 $product_id = wc_get_product_id_by_sku( $base );
 
                                 if ( $product_id ) {
-                                        return (int) $product_id;
+                                        $product = wc_get_product( $product_id );
+
+                                        if ( $product && is_a( $product, 'WC_Product' ) && $product->is_type( 'variable' ) ) {
+                                                return (int) $product_id;
+                                        }
                                 }
                         }
                 }
