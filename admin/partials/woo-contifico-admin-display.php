@@ -88,37 +88,39 @@
                         <li><?php _e('Productos sin inventario: ', $this->plugin_name) ?><span class="outofstock"><?php echo esc_html( number_format_i18n( isset( $manual_progress['outofstock'] ) ? (int) $manual_progress['outofstock'] : 0 ) ); ?></span></li>
                     </ul>
                     <div class="sync-summary" <?php echo empty( $manual_updates ) ? 'hidden' : ''; ?> aria-live="polite">
-                        <h4 class="sync-summary-heading"><?php esc_html_e( 'Resumen de actualizaciones', 'woo-contifico' ); ?></h4>
-                        <p class="sync-summary-empty" <?php echo empty( $manual_updates ) ? '' : 'hidden'; ?>><?php esc_html_e( 'No se registraron cambios durante la sincronización.', 'woo-contifico' ); ?></p>
-                        <ul class="sync-summary-list">
-                            <?php foreach ( $manual_updates as $update ) :
-                                $description = $this->describe_manual_sync_update_entry( $update );
-                                ?>
-                                <li class="sync-summary-item">
-                                    <span class="sync-summary-title"><?php echo esc_html( $description['title'] ); ?></span>
-                                    <?php if ( ! empty( $description['meta'] ) ) : ?>
-                                        <ul class="sync-summary-meta">
-                                            <?php foreach ( $description['meta'] as $meta ) : ?>
-                                                <li><span class="label"><?php echo esc_html( $meta['label'] ); ?></span> <span class="value"><?php echo esc_html( $meta['value'] ); ?></span></li>
-                                            <?php endforeach; ?>
-                                        </ul>
-                                    <?php endif; ?>
-                                    <?php if ( ! empty( $description['changes'] ) ) : ?>
-                                        <ul class="sync-summary-change-list">
-                                            <?php foreach ( $description['changes'] as $change ) : ?>
-                                                <li>
-                                                    <span class="label"><?php echo esc_html( $change['label'] ); ?></span>
-                                                    <span class="value"><?php echo esc_html( $change['value'] ); ?></span>
-                                                    <?php if ( ! empty( $change['notes'] ) ) : ?>
-                                                        <span class="notes"><?php echo esc_html( $change['notes'] ); ?></span>
-                                                    <?php endif; ?>
-                                                </li>
-                                            <?php endforeach; ?>
-                                        </ul>
-                                    <?php endif; ?>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
+                        <details class="sync-summary-panel">
+                            <summary class="sync-summary-heading"><?php esc_html_e( 'Resumen de actualizaciones', 'woo-contifico' ); ?></summary>
+                            <p class="sync-summary-empty" <?php echo empty( $manual_updates ) ? '' : 'hidden'; ?>><?php esc_html_e( 'No se registraron cambios durante la sincronización.', 'woo-contifico' ); ?></p>
+                            <ul class="sync-summary-list">
+                                <?php foreach ( $manual_updates as $update ) :
+                                    $description = $this->describe_manual_sync_update_entry( $update );
+                                    ?>
+                                    <li class="sync-summary-item">
+                                        <span class="sync-summary-title"><?php echo esc_html( $description['title'] ); ?></span>
+                                        <?php if ( ! empty( $description['meta'] ) ) : ?>
+                                            <ul class="sync-summary-meta">
+                                                <?php foreach ( $description['meta'] as $meta ) : ?>
+                                                    <li><span class="label"><?php echo esc_html( $meta['label'] ); ?></span> <span class="value"><?php echo esc_html( $meta['value'] ); ?></span></li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        <?php endif; ?>
+                                        <?php if ( ! empty( $description['changes'] ) ) : ?>
+                                            <ul class="sync-summary-change-list">
+                                                <?php foreach ( $description['changes'] as $change ) : ?>
+                                                    <li>
+                                                        <span class="label"><?php echo esc_html( $change['label'] ); ?></span>
+                                                        <span class="value"><?php echo esc_html( $change['value'] ); ?></span>
+                                                        <?php if ( ! empty( $change['notes'] ) ) : ?>
+                                                            <span class="notes"><?php echo esc_html( $change['notes'] ); ?></span>
+                                                        <?php endif; ?>
+                                                    </li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        <?php endif; ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </details>
                     </div>
                 </div>
             </div>

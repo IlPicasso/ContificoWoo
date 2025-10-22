@@ -2027,6 +2027,12 @@ class Woo_Contifico_Admin {
                                                 continue;
                                         }
 
+                                        $resolved_product = $this->ensure_product_matches_contifico_identifier( $resolved_product, $contifico_id );
+
+                                        if ( ! $resolved_product ) {
+                                                continue;
+                                        }
+
                                         if ( isset( $matched_contifico_ids[ $contifico_id ] ) ) {
                                                 continue;
                                         }
@@ -2100,6 +2106,12 @@ class Woo_Contifico_Admin {
                                                                 continue;
                                                         }
                                                 }
+                                        }
+
+                                        $resolved_product = $this->ensure_product_matches_contifico_identifier( $resolved_product, $effective_id );
+
+                                        if ( ! $resolved_product ) {
+                                                continue;
                                         }
 
                                         if ( isset( $matched_contifico_ids[ $effective_id ] ) ) {
@@ -2417,6 +2429,18 @@ class Woo_Contifico_Admin {
                         }
                 }
 
+                if ( '' === $contifico_id ) {
+                        throw new Exception( __( 'El producto de Contífico no tiene un identificador válido.', 'woo-contifico' ) );
+                }
+
+                $resolved_product = $this->ensure_product_matches_contifico_identifier( $resolved_product, $contifico_id );
+
+                if ( ! $resolved_product || ! is_a( $resolved_product, 'WC_Product' ) ) {
+                        throw new Exception(
+                                __( 'No se pudo resolver la variación del producto para el identificador de Contífico proporcionado.', 'woo-contifico' )
+                        );
+                }
+
                 $woocommerce_sku = (string) $resolved_product->get_sku();
 
                 if ( '' === $lookup_sku && '' !== $woocommerce_sku ) {
@@ -2448,8 +2472,14 @@ class Woo_Contifico_Admin {
                         }
                 }
 
-                if ( '' === $contifico_id ) {
-                        throw new Exception( __( 'El producto de Contífico no tiene un identificador válido.', 'woo-contifico' ) );
+                $managing_stock = method_exists( $resolved_product, 'managing_stock' )
+                        ? (bool) $resolved_product->managing_stock()
+                        : (bool) $resolved_product->get_manage_stock();
+
+                if ( $resolved_product->is_type( 'variation' ) && ! $managing_stock ) {
+                        throw new Exception(
+                                __( 'La variación no tiene habilitada la opción "Gestionar inventario". Actívala y guarda los cambios antes de sincronizar.', 'woo-contifico' )
+                        );
                 }
 
                 $managing_stock = method_exists( $resolved_product, 'managing_stock' )
@@ -3549,9 +3579,10 @@ class Woo_Contifico_Admin {
                                 continue;
                         }
 
-                        $attributes = (array) $variation->get_attributes();
+                        $attributes               = (array) $variation->get_attributes();
+                        $size_attribute_keywords = [ 'talla', 'talle', 'size', 'tamano', 'tamaño', 'medida', 'medidas', 'dimension', 'dimensión' ];
 
-                        foreach ( $attributes as $attribute_value ) {
+                        foreach ( $attributes as $attribute_key => $attribute_value ) {
                                 $attribute_value = (string) $attribute_value;
 
                                 if ( '' === $attribute_value ) {
@@ -3565,15 +3596,144 @@ class Woo_Contifico_Admin {
                                 ) {
                                         return $variation;
                                 }
+
+                                $attribute_key = (string) $attribute_key;
+
+                                $maybe_size_attribute = false;
+
+                                foreach ( $size_attribute_keywords as $keyword ) {
+                                        if ( false !== stripos( $attribute_key, $keyword ) ) {
+                                                $maybe_size_attribute = true;
+                                                break;
+                                        }
+                                }
+
+                                if ( ! $maybe_size_attribute ) {
+                                        continue;
+                                }
+
+                                $normalized_value = strtolower( $attribute_value );
+                                $tokens           = preg_split( '/[\s\-\_\/]+/', $normalized_value );
+                                $tokens           = array_values( array_filter( $tokens, 'strlen' ) );
+
+                                foreach ( $tokens as $token ) {
+                                        if ( $token === $lower_suffix ) {
+                                                return $variation;
+                                        }
+
+                                        if ( '' !== $lower_suffix && 0 === strpos( $token, $lower_suffix ) ) {
+                                                return $variation;
+                                        }
+                                }
                         }
                 }
 
                 return null;
         }
 
-	/**
-	 * Transfer stock from the main warehouse to a temporal web warehouse
-	 *
+        /**
+         * Locate a variation that already stores a Contífico identifier.
+         *
+         * @since 4.2.3
+         *
+         * @param WC_Product $parent_product
+         * @param string     $contifico_id
+         * @return WC_Product|null
+         */
+        private function locate_variation_for_contifico_id( $parent_product, string $contifico_id ) {
+
+                if ( ! $parent_product || ! is_a( $parent_product, 'WC_Product' ) || ! $parent_product->is_type( 'variable' ) ) {
+                        return null;
+                }
+
+                $contifico_id = trim( $contifico_id );
+
+                if ( '' === $contifico_id ) {
+                        return null;
+                }
+
+                foreach ( (array) $parent_product->get_children() as $child_id ) {
+                        $variation = wc_get_product( $child_id );
+
+                        if ( ! $variation || ! is_a( $variation, 'WC_Product' ) ) {
+                                continue;
+                        }
+
+                        $stored_identifier = (string) $variation->get_meta( self::PRODUCT_ID_META_KEY, true );
+
+                        if ( '' === $stored_identifier ) {
+                                continue;
+                        }
+
+                        if ( $stored_identifier === $contifico_id ) {
+                                return $variation;
+                        }
+                }
+
+                return null;
+        }
+
+        /**
+         * Ensure the resolved WooCommerce product matches the Contífico identifier being synchronized.
+         *
+         * @since 4.2.3
+         *
+         * @param WC_Product|mixed $product
+         * @param string           $contifico_id
+         * @return WC_Product|null
+         */
+        private function ensure_product_matches_contifico_identifier( $product, string $contifico_id ) {
+
+                if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+                        return null;
+                }
+
+                $contifico_id = trim( $contifico_id );
+
+                if ( '' === $contifico_id ) {
+                        return $product;
+                }
+
+                if ( $product->is_type( 'variation' ) ) {
+                        $stored_identifier = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
+
+                        if ( '' === $stored_identifier || $stored_identifier === $contifico_id ) {
+                                return $product;
+                        }
+
+                        $parent_id = $product->get_parent_id();
+
+                        if ( $parent_id ) {
+                                $parent_product = wc_get_product( $parent_id );
+
+                                if ( $parent_product && is_a( $parent_product, 'WC_Product' ) && $parent_product->is_type( 'variable' ) ) {
+                                        $matched_variation = $this->locate_variation_for_contifico_id( $parent_product, $contifico_id );
+
+                                        if ( $matched_variation ) {
+                                                return $matched_variation;
+                                        }
+                                }
+                        }
+
+                        return $product;
+                }
+
+                if ( $product->is_type( 'variable' ) ) {
+                        $matched_variation = $this->locate_variation_for_contifico_id( $product, $contifico_id );
+
+                        if ( $matched_variation ) {
+                                return $matched_variation;
+                        }
+
+                        return $product;
+                }
+
+                return $product;
+        }
+
+        /**
+         * Transfer stock from the main warehouse to a temporal web warehouse
+         *
 	 * @since 3.0.0
 	 * @see woocommerce_reduce_order_stock
 	 * @see woocommerce_order_refunded

@@ -208,15 +208,20 @@
 
                 namespace.renderSingleSyncResult = renderSingleSyncResult;
 
-                function renderGlobalSyncUpdates( updates ) {
+                function renderGlobalSyncUpdates( updates, options ) {
                         const $section = $( '#' + pluginGlobals.plugin_name + '-settings-page .fetch-products' );
 
                         if ( ! $section.length ) {
                                 return;
                         }
 
+                        options = options || {};
+
+                        const autoOpen  = !! options.autoOpen;
+                        const forceClose = !! options.forceClose;
                         const $summary       = $section.find( '.sync-summary' );
                         const $heading       = $summary.find( '.sync-summary-heading' );
+                        const $panel         = $summary.find( '.sync-summary-panel' );
                         const $emptyMessage  = $summary.find( '.sync-summary-empty' );
                         const $updatesList   = $summary.find( '.sync-summary-list' );
                         const headingText    = messages.globalSyncHeading || ( $heading.length ? $heading.text() : '' ) || 'Resumen de actualizaciones';
@@ -239,6 +244,10 @@
                                         $summary.attr( 'hidden', 'hidden' );
                                 }
 
+                                if ( $panel.length ) {
+                                        $panel.prop( 'open', false );
+                                }
+
                                 return;
                         }
 
@@ -251,6 +260,14 @@
                         }
 
                         if ( ! $updatesList.length ) {
+                                if ( $panel.length ) {
+                                        if ( forceClose ) {
+                                                $panel.prop( 'open', false );
+                                        } else if ( autoOpen ) {
+                                                $panel.prop( 'open', true );
+                                        }
+                                }
+
                                 return;
                         }
 
@@ -337,6 +354,14 @@
 
                                 $updatesList.append( $item );
                         } );
+
+                        if ( $panel.length ) {
+                                if ( forceClose ) {
+                                        $panel.prop( 'open', false );
+                                } else if ( autoOpen ) {
+                                        $panel.prop( 'open', true );
+                                }
+                        }
                 }
 
                 // Manual synchronization controls
@@ -372,6 +397,9 @@
 
                                 let pollingTimer = null;
                                 let lastState = null;
+                                let hasAppliedState = false;
+                                let lastSummarySignature = null;
+                                let lastActiveState = false;
 
                                 function setSpinner( isActive ) {
                                         if ( ! $spinner.length ) {
@@ -561,6 +589,7 @@
                                 }
 
                                 function applyState( state ) {
+                                        const firstApplication = ! hasAppliedState;
                                         lastState = state || null;
 
                                         const progress = state && state.progress && typeof state.progress === 'object' ? state.progress : {};
@@ -575,7 +604,17 @@
                                         }
 
                                         updateCounts( progress );
-                                        renderGlobalSyncUpdates( updates );
+
+                                        const summarySignature = JSON.stringify( updates );
+                                        const shouldAutoOpen   = ! active && updates.length > 0 && (
+                                                ( lastActiveState && ! active ) ||
+                                                ( ! firstApplication && summarySignature !== lastSummarySignature )
+                                        );
+
+                                        renderGlobalSyncUpdates( updates, {
+                                                autoOpen: shouldAutoOpen,
+                                                forceClose: active
+                                        } );
                                         renderStatusMessage( state );
 
                                         if ( $startButton.length ) {
@@ -589,6 +628,10 @@
                                                         hideCancelButton();
                                                 }
                                         }
+
+                                        lastSummarySignature = summarySignature;
+                                        lastActiveState      = active;
+                                        hasAppliedState      = true;
                                 }
 
                                 function extractErrorMessage( xhr, fallback ) {
