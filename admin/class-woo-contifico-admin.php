@@ -3575,6 +3575,13 @@ class Woo_Contifico_Admin {
                                 return $variation;
                         }
 
+                        if (
+                                '' !== $variation_sku
+                                && ! $this->skus_are_equivalent( $variation_sku, $contifico_sku )
+                        ) {
+                                continue;
+                        }
+
                         if ( ! $has_suffix ) {
                                 continue;
                         }
