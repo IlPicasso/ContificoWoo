@@ -6,6 +6,37 @@
     margin-top: 10px;
 }
 
+.woo-contifico-diagnostics .woo-contifico-diagnostics__summary {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__summary h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__summary ul {
+    margin: 0 0 12px 18px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__summary li {
+    margin-bottom: 4px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__summary strong {
+    display: inline-block;
+    min-width: 220px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__summary-timestamp {
+    margin: 0;
+    color: #555d66;
+}
+
 .woo-contifico-diagnostics .woo-contifico-diagnostic-row.severity-critical {
     border-left: 4px solid #dc3232;
     background-color: #fff5f5;
