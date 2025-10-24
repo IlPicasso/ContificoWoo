@@ -30,7 +30,11 @@ class Woo_Contifico_Diagnostics {
      *
      * @param bool $force_refresh Optional. Whether to bypass the cached transient.
      *
-     * @return array<int,array<string,mixed>>
+     * @return array{
+     *     entries:array<int,array<string,mixed>>,
+     *     summary:array<string,int>,
+     *     generated_at:int
+     * }
      */
     public function build_diagnostics( bool $force_refresh = false ) : array {
         if ( ! $force_refresh ) {
@@ -46,6 +50,17 @@ class Woo_Contifico_Diagnostics {
         $contifico_by_sku     = $contifico_inventory['by_sku'];
         $diagnostics          = [];
         $sku_registry         = [];
+        $summary              = [
+            'woocommerce_products'     => 0,
+            'woocommerce_variations'   => 0,
+            'entries_total'            => 0,
+            'matched_entries'          => 0,
+            'entries_with_errors'      => 0,
+            'entries_needing_attention' => 0,
+            'entries_synced'           => 0,
+            'entries_without_match'    => 0,
+            'contifico_items'          => $contifico_inventory['count'],
+        ];
         $woocommerce_products = wc_get_products(
             [
                 'limit'   => -1,
@@ -65,6 +80,8 @@ class Woo_Contifico_Diagnostics {
 
             $diagnostics[] = $entry;
             $index         = count( $diagnostics ) - 1;
+
+            ++$summary['woocommerce_products'];
 
             if ( '' !== $entry['sku_detectado'] ) {
                 $sku_registry[ $entry['sku_detectado'] ][] = $index;
@@ -91,6 +108,8 @@ class Woo_Contifico_Diagnostics {
                     $diagnostics[] = $variation_entry;
                     $variation_idx = count( $diagnostics ) - 1;
 
+                    ++$summary['woocommerce_variations'];
+
                     if ( '' !== $variation_entry['sku_detectado'] ) {
                         $sku_registry[ $variation_entry['sku_detectado'] ][] = $variation_idx;
                     }
@@ -102,15 +121,74 @@ class Woo_Contifico_Diagnostics {
         $diagnostics = $this->attach_contifico_matches( $diagnostics, $contifico_by_code, $contifico_by_sku );
         $diagnostics = $this->annotate_parent_variation_mismatches( $diagnostics );
 
-        set_transient( 'woo_contifico_diagnostics', $diagnostics, 10 * MINUTE_IN_SECONDS );
+        foreach ( $diagnostics as $entry ) {
+            ++$summary['entries_total'];
 
-        return $diagnostics;
+            $codigo_contifico = isset( $entry['codigo_contifico'] ) ? (string) $entry['codigo_contifico'] : '';
+            $errores          = isset( $entry['error_detectado'] ) && is_array( $entry['error_detectado'] )
+                ? $entry['error_detectado']
+                : [];
+            $tipo             = isset( $entry['tipo'] ) ? (string) $entry['tipo'] : '';
+            $variaciones_sin  = isset( $entry['variaciones_sin_coincidencia'] ) && is_array( $entry['variaciones_sin_coincidencia'] )
+                ? $entry['variaciones_sin_coincidencia']
+                : [];
+            $maneja_stock     = array_key_exists( 'managing_stock', $entry ) ? $entry['managing_stock'] : null;
+            $variation_count  = isset( $entry['variation_count'] ) ? (int) $entry['variation_count'] : 0;
+            $requiere_revision = false;
+
+            if ( ! empty( $errores ) ) {
+                $requiere_revision = true;
+            }
+
+            if ( 'variable' === $tipo && ! empty( $variaciones_sin ) ) {
+                $requiere_revision = true;
+            }
+
+            if ( 'variation' === $tipo && false === $maneja_stock ) {
+                $requiere_revision = true;
+            }
+
+            if (
+                in_array( $tipo, [ 'simple', 'variable' ], true )
+                && false === $maneja_stock
+                && ( 'simple' === $tipo || $variation_count <= 0 )
+            ) {
+                $requiere_revision = true;
+            }
+
+            if ( '' !== $codigo_contifico ) {
+                ++$summary['matched_entries'];
+
+                if ( ! $requiere_revision ) {
+                    ++$summary['entries_synced'];
+                }
+            } else {
+                ++$summary['entries_without_match'];
+                $requiere_revision = true;
+            }
+
+            if ( ! empty( $errores ) ) {
+                ++$summary['entries_with_errors'];
+            }
+        }
+
+        $summary['entries_needing_attention'] = max( 0, $summary['entries_total'] - $summary['entries_synced'] );
+
+        $result = [
+            'entries'      => $diagnostics,
+            'summary'      => $summary,
+            'generated_at' => time(),
+        ];
+
+        set_transient( 'woo_contifico_diagnostics', $result, 10 * MINUTE_IN_SECONDS );
+
+        return $result;
     }
 
     /**
      * Load Contifico inventory and build quick lookup tables.
      *
-     * @return array{by_code:array<string,array>,by_sku:array<string,array<int,array>>>}
+     * @return array{by_code:array<string,array>,by_sku:array<string,array<int,array>>,count:int}
      */
     private function load_contifico_inventory() : array {
         $inventory = $this->contifico->get_products();
@@ -120,11 +198,14 @@ class Woo_Contifico_Diagnostics {
         }
         $by_code   = [];
         $by_sku    = [];
+        $count     = 0;
 
         foreach ( $inventory as $product ) {
             if ( ! is_array( $product ) ) {
                 continue;
             }
+
+            ++$count;
 
             $codigo = isset( $product['codigo'] ) ? (string) $product['codigo'] : '';
             $sku    = isset( $product['sku'] ) ? (string) $product['sku'] : $codigo;
@@ -147,6 +228,7 @@ class Woo_Contifico_Diagnostics {
         return [
             'by_code' => $by_code,
             'by_sku'  => $by_sku,
+            'count'   => $count,
         ];
     }
 

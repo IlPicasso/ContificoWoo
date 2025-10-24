@@ -6,6 +6,37 @@
     margin-top: 10px;
 }
 
+.woo-contifico-diagnostics .woo-contifico-diagnostics__summary {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__summary h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__summary ul {
+    margin: 0 0 12px 18px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__summary li {
+    margin-bottom: 4px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__summary strong {
+    display: inline-block;
+    min-width: 220px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__summary-timestamp {
+    margin: 0;
+    color: #555d66;
+}
+
 .woo-contifico-diagnostics .woo-contifico-diagnostic-row.severity-critical {
     border-left: 4px solid #dc3232;
     background-color: #fff5f5;
@@ -34,6 +65,34 @@
 .woo-contifico-diagnostics .woo-contifico-diagnostics__matches {
     display: inline-block;
     margin-top: 4px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__status-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 140px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__status-tag.status-synced {
+    background-color: #d1e7dd;
+    color: #0f5132;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__status-tag.status-unmatched {
+    background-color: #f8d7da;
+    color: #842029;
+}
+
+.woo-contifico-diagnostics .woo-contifico-diagnostics__status-tag.status-needs-attention {
+    background-color: #fff3cd;
+    color: #664d03;
 }
 
 .woo-contifico-diagnostics .woo-contifico-diagnostics__filters select {

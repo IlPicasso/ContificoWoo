@@ -47,6 +47,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'cb'             => '<input type="checkbox" />',
             'producto'       => __( 'Producto', 'woo-contifico' ),
             'tipo'           => __( 'Tipo', 'woo-contifico' ),
+            'estado'         => __( 'Estado', 'woo-contifico' ),
             'sku_actual'     => __( 'SKU actual', 'woo-contifico' ),
             'problema'       => __( 'Problema', 'woo-contifico' ),
             'sugerencia'     => __( 'Sugerencia', 'woo-contifico' ),
@@ -72,6 +73,18 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                 array_filter(
                     $items,
                     static function ( array $item ) use ( $filter ) : bool {
+                        if ( 'synced' === $filter ) {
+                            return isset( $item['sync_status'] ) && 'synced' === $item['sync_status'];
+                        }
+
+                        if ( 'needs_attention' === $filter ) {
+                            return isset( $item['sync_status'] ) && 'synced' !== $item['sync_status'];
+                        }
+
+                        if ( ! isset( $item['problem_types'] ) || ! is_array( $item['problem_types'] ) ) {
+                            return false;
+                        }
+
                         return in_array( $filter, $item['problem_types'], true );
                     }
                 )
@@ -177,6 +190,40 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
         }
 
         return esc_html( ucfirst( $type ) );
+    }
+
+    /**
+     * Render the sync status column.
+     *
+     * @param array<string,mixed> $item Current row item.
+     *
+     * @return string
+     */
+    public function column_estado( array $item ) : string {
+        $status = isset( $item['sync_status'] ) ? (string) $item['sync_status'] : '';
+        $class  = 'woo-contifico-diagnostics__status-tag';
+
+        switch ( $status ) {
+            case 'synced':
+                $class .= ' status-synced';
+                $label  = __( 'Sincronizado', 'woo-contifico' );
+                break;
+            case 'unmatched':
+                $class .= ' status-unmatched';
+                $label  = __( 'Sin coincidencia', 'woo-contifico' );
+                break;
+            case 'needs_attention':
+            default:
+                $class .= ' status-needs-attention';
+                $label  = __( 'Requiere revisión', 'woo-contifico' );
+                break;
+        }
+
+        if ( '' === $status ) {
+            return '&mdash;';
+        }
+
+        return sprintf( '<span class="%1$s">%2$s</span>', esc_attr( $class ), esc_html( $label ) );
     }
 
     /**
@@ -427,6 +474,8 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
     private function get_problem_filters() : array {
         return [
             'all'               => __( 'Todos los problemas', 'woo-contifico' ),
+            'synced'            => __( 'Sin incidencias (sincronizado)', 'woo-contifico' ),
+            'needs_attention'   => __( 'Requieren revisión', 'woo-contifico' ),
             'missing_sku'       => __( 'Sin SKU', 'woo-contifico' ),
             'duplicate_sku'     => __( 'SKU duplicado', 'woo-contifico' ),
             'no_contifico_match' => __( 'Sin coincidencia en Contífico', 'woo-contifico' ),
@@ -474,6 +523,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'parent_id'              => 0,
             'managing_stock'         => null,
             'variation_count'        => 0,
+            'sync_status'            => '',
         ];
 
         $entry = wp_parse_args( $entry, $defaults );
@@ -491,6 +541,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
         $entry['variation_count']        = (int) $entry['variation_count'];
 
         $entry['problem_types']       = $this->detect_problem_types( $entry );
+        $entry['sync_status']         = $this->determine_sync_status( $entry );
         $entry['severity']            = $this->determine_severity( $entry['problem_types'] );
         $entry['problem_messages']    = $this->build_problem_messages( $entry );
         $entry['suggestion_messages'] = $this->build_suggestion_messages( $entry );
@@ -554,6 +605,30 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
         }
 
         return 'ok';
+    }
+
+    /**
+     * Determine the sync status for the entry.
+     *
+     * @param array<string,mixed> $entry Diagnostics entry.
+     *
+     * @return string
+     */
+    private function determine_sync_status( array $entry ) : string {
+        $codigo_contifico = isset( $entry['codigo_contifico'] ) ? (string) $entry['codigo_contifico'] : '';
+        $problemas        = isset( $entry['problem_types'] ) && is_array( $entry['problem_types'] )
+            ? $entry['problem_types']
+            : [];
+
+        if ( '' === $codigo_contifico ) {
+            return 'unmatched';
+        }
+
+        if ( empty( $problemas ) ) {
+            return 'synced';
+        }
+
+        return 'needs_attention';
     }
 
     /**
