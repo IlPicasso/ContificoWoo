@@ -239,16 +239,75 @@
                 if ( false === $diagnostics_data ) {
                     $diagnostics_helper = new Woo_Contifico_Diagnostics( $this->contifico );
                     $diagnostics_data   = $diagnostics_helper->build_diagnostics();
+                } elseif ( is_array( $diagnostics_data ) && ! isset( $diagnostics_data['entries'] ) ) {
+                    $diagnostics_helper = new Woo_Contifico_Diagnostics( $this->contifico );
+                    $diagnostics_data   = $diagnostics_helper->build_diagnostics( true );
+                }
+
+                $diagnostics_entries  = [];
+                $diagnostics_summary  = [];
+                $diagnostics_refresh  = 0;
+
+                if ( is_array( $diagnostics_data ) && isset( $diagnostics_data['entries'] ) ) {
+                    $diagnostics_entries = is_array( $diagnostics_data['entries'] ) ? $diagnostics_data['entries'] : [];
+                    $diagnostics_summary = isset( $diagnostics_data['summary'] ) && is_array( $diagnostics_data['summary'] )
+                        ? $diagnostics_data['summary']
+                        : [];
+                    $diagnostics_refresh = isset( $diagnostics_data['generated_at'] ) ? (int) $diagnostics_data['generated_at'] : 0;
+                } elseif ( is_array( $diagnostics_data ) ) {
+                    $diagnostics_entries = $diagnostics_data;
                 }
 
                 if ( ! class_exists( 'Woo_Contifico_Diagnostics_Table' ) ) {
                     require_once plugin_dir_path( __DIR__ ) . 'class-woo-contifico-diagnostics-table.php';
                 }
 
-                $table = new Woo_Contifico_Diagnostics_Table( is_array( $diagnostics_data ) ? $diagnostics_data : [] );
+                $table = new Woo_Contifico_Diagnostics_Table( $diagnostics_entries );
 
                 $table->prepare_items();
                 ?>
+                <?php if ( ! empty( $diagnostics_summary ) ) : ?>
+                    <div class="woo-contifico-diagnostics__summary">
+                        <h3><?php esc_html_e( 'Resumen del diagnóstico', 'woo-contifico' ); ?></h3>
+                        <ul>
+                            <li>
+                                <strong><?php esc_html_e( 'Ítems detectados en Contífico', 'woo-contifico' ); ?>:</strong>
+                                <span><?php echo esc_html( number_format_i18n( (int) ( $diagnostics_summary['contifico_items'] ?? 0 ) ) ); ?></span>
+                            </li>
+                            <li>
+                                <strong><?php esc_html_e( 'Productos de WooCommerce analizados', 'woo-contifico' ); ?>:</strong>
+                                <span><?php echo esc_html( number_format_i18n( (int) ( $diagnostics_summary['woocommerce_products'] ?? 0 ) ) ); ?></span>
+                            </li>
+                            <li>
+                                <strong><?php esc_html_e( 'Variaciones de WooCommerce analizadas', 'woo-contifico' ); ?>:</strong>
+                                <span><?php echo esc_html( number_format_i18n( (int) ( $diagnostics_summary['woocommerce_variations'] ?? 0 ) ) ); ?></span>
+                            </li>
+                            <li>
+                                <strong><?php esc_html_e( 'Elementos evaluados en el diagnóstico', 'woo-contifico' ); ?>:</strong>
+                                <span><?php echo esc_html( number_format_i18n( (int) ( $diagnostics_summary['entries_total'] ?? 0 ) ) ); ?></span>
+                            </li>
+                            <li>
+                                <strong><?php esc_html_e( 'Coincidencias exactas encontradas', 'woo-contifico' ); ?>:</strong>
+                                <span><?php echo esc_html( number_format_i18n( (int) ( $diagnostics_summary['matched_entries'] ?? 0 ) ) ); ?></span>
+                            </li>
+                            <li>
+                                <strong><?php esc_html_e( 'Elementos con incidencias detectadas', 'woo-contifico' ); ?>:</strong>
+                                <span><?php echo esc_html( number_format_i18n( (int) ( $diagnostics_summary['entries_with_errors'] ?? 0 ) ) ); ?></span>
+                            </li>
+                        </ul>
+                        <?php if ( $diagnostics_refresh > 0 ) : ?>
+                            <p class="woo-contifico-diagnostics__summary-timestamp">
+                                <?php
+                                printf(
+                                    /* translators: %s: formatted date */
+                                    esc_html__( 'Última actualización: %s', 'woo-contifico' ),
+                                    esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $diagnostics_refresh ) )
+                                );
+                                ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
                 <form method="get">
                     <input type="hidden" name="page" value="woo-contifico" />
                     <input type="hidden" name="tab" value="diagnostico" />

@@ -30,7 +30,11 @@ class Woo_Contifico_Diagnostics {
      *
      * @param bool $force_refresh Optional. Whether to bypass the cached transient.
      *
-     * @return array<int,array<string,mixed>>
+     * @return array{
+     *     entries:array<int,array<string,mixed>>,
+     *     summary:array<string,int>,
+     *     generated_at:int
+     * }
      */
     public function build_diagnostics( bool $force_refresh = false ) : array {
         if ( ! $force_refresh ) {
@@ -46,6 +50,14 @@ class Woo_Contifico_Diagnostics {
         $contifico_by_sku     = $contifico_inventory['by_sku'];
         $diagnostics          = [];
         $sku_registry         = [];
+        $summary              = [
+            'woocommerce_products'   => 0,
+            'woocommerce_variations' => 0,
+            'entries_total'          => 0,
+            'matched_entries'        => 0,
+            'entries_with_errors'    => 0,
+            'contifico_items'        => $contifico_inventory['count'],
+        ];
         $woocommerce_products = wc_get_products(
             [
                 'limit'   => -1,
@@ -65,6 +77,8 @@ class Woo_Contifico_Diagnostics {
 
             $diagnostics[] = $entry;
             $index         = count( $diagnostics ) - 1;
+
+            ++$summary['woocommerce_products'];
 
             if ( '' !== $entry['sku_detectado'] ) {
                 $sku_registry[ $entry['sku_detectado'] ][] = $index;
@@ -91,6 +105,8 @@ class Woo_Contifico_Diagnostics {
                     $diagnostics[] = $variation_entry;
                     $variation_idx = count( $diagnostics ) - 1;
 
+                    ++$summary['woocommerce_variations'];
+
                     if ( '' !== $variation_entry['sku_detectado'] ) {
                         $sku_registry[ $variation_entry['sku_detectado'] ][] = $variation_idx;
                     }
@@ -102,15 +118,33 @@ class Woo_Contifico_Diagnostics {
         $diagnostics = $this->attach_contifico_matches( $diagnostics, $contifico_by_code, $contifico_by_sku );
         $diagnostics = $this->annotate_parent_variation_mismatches( $diagnostics );
 
-        set_transient( 'woo_contifico_diagnostics', $diagnostics, 10 * MINUTE_IN_SECONDS );
+        foreach ( $diagnostics as $entry ) {
+            ++$summary['entries_total'];
 
-        return $diagnostics;
+            if ( ! empty( $entry['codigo_contifico'] ) ) {
+                ++$summary['matched_entries'];
+            }
+
+            if ( ! empty( $entry['error_detectado'] ) ) {
+                ++$summary['entries_with_errors'];
+            }
+        }
+
+        $result = [
+            'entries'      => $diagnostics,
+            'summary'      => $summary,
+            'generated_at' => time(),
+        ];
+
+        set_transient( 'woo_contifico_diagnostics', $result, 10 * MINUTE_IN_SECONDS );
+
+        return $result;
     }
 
     /**
      * Load Contifico inventory and build quick lookup tables.
      *
-     * @return array{by_code:array<string,array>,by_sku:array<string,array<int,array>>>}
+     * @return array{by_code:array<string,array>,by_sku:array<string,array<int,array>>,count:int}
      */
     private function load_contifico_inventory() : array {
         $inventory = $this->contifico->get_products();
@@ -120,11 +154,14 @@ class Woo_Contifico_Diagnostics {
         }
         $by_code   = [];
         $by_sku    = [];
+        $count     = 0;
 
         foreach ( $inventory as $product ) {
             if ( ! is_array( $product ) ) {
                 continue;
             }
+
+            ++$count;
 
             $codigo = isset( $product['codigo'] ) ? (string) $product['codigo'] : '';
             $sku    = isset( $product['sku'] ) ? (string) $product['sku'] : $codigo;
@@ -147,6 +184,7 @@ class Woo_Contifico_Diagnostics {
         return [
             'by_code' => $by_code,
             'by_sku'  => $by_sku,
+            'count'   => $count,
         ];
     }
 
