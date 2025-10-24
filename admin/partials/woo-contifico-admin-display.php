@@ -291,8 +291,20 @@
                                 <span><?php echo esc_html( number_format_i18n( (int) ( $diagnostics_summary['matched_entries'] ?? 0 ) ) ); ?></span>
                             </li>
                             <li>
+                                <strong><?php esc_html_e( 'Elementos sincronizados sin incidencias', 'woo-contifico' ); ?>:</strong>
+                                <span><?php echo esc_html( number_format_i18n( (int) ( $diagnostics_summary['entries_synced'] ?? 0 ) ) ); ?></span>
+                            </li>
+                            <li>
+                                <strong><?php esc_html_e( 'Elementos que requieren revisión', 'woo-contifico' ); ?>:</strong>
+                                <span><?php echo esc_html( number_format_i18n( (int) ( $diagnostics_summary['entries_needing_attention'] ?? 0 ) ) ); ?></span>
+                            </li>
+                            <li>
                                 <strong><?php esc_html_e( 'Elementos con incidencias detectadas', 'woo-contifico' ); ?>:</strong>
                                 <span><?php echo esc_html( number_format_i18n( (int) ( $diagnostics_summary['entries_with_errors'] ?? 0 ) ) ); ?></span>
+                            </li>
+                            <li>
+                                <strong><?php esc_html_e( 'Elementos sin coincidencia en Contífico', 'woo-contifico' ); ?>:</strong>
+                                <span><?php echo esc_html( number_format_i18n( (int) ( $diagnostics_summary['entries_without_match'] ?? 0 ) ) ); ?></span>
                             </li>
                         </ul>
                         <?php if ( $diagnostics_refresh > 0 ) : ?>

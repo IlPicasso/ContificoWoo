@@ -51,12 +51,15 @@ class Woo_Contifico_Diagnostics {
         $diagnostics          = [];
         $sku_registry         = [];
         $summary              = [
-            'woocommerce_products'   => 0,
-            'woocommerce_variations' => 0,
-            'entries_total'          => 0,
-            'matched_entries'        => 0,
-            'entries_with_errors'    => 0,
-            'contifico_items'        => $contifico_inventory['count'],
+            'woocommerce_products'     => 0,
+            'woocommerce_variations'   => 0,
+            'entries_total'            => 0,
+            'matched_entries'          => 0,
+            'entries_with_errors'      => 0,
+            'entries_needing_attention' => 0,
+            'entries_synced'           => 0,
+            'entries_without_match'    => 0,
+            'contifico_items'          => $contifico_inventory['count'],
         ];
         $woocommerce_products = wc_get_products(
             [
@@ -121,14 +124,55 @@ class Woo_Contifico_Diagnostics {
         foreach ( $diagnostics as $entry ) {
             ++$summary['entries_total'];
 
-            if ( ! empty( $entry['codigo_contifico'] ) ) {
-                ++$summary['matched_entries'];
+            $codigo_contifico = isset( $entry['codigo_contifico'] ) ? (string) $entry['codigo_contifico'] : '';
+            $errores          = isset( $entry['error_detectado'] ) && is_array( $entry['error_detectado'] )
+                ? $entry['error_detectado']
+                : [];
+            $tipo             = isset( $entry['tipo'] ) ? (string) $entry['tipo'] : '';
+            $variaciones_sin  = isset( $entry['variaciones_sin_coincidencia'] ) && is_array( $entry['variaciones_sin_coincidencia'] )
+                ? $entry['variaciones_sin_coincidencia']
+                : [];
+            $maneja_stock     = array_key_exists( 'managing_stock', $entry ) ? $entry['managing_stock'] : null;
+            $variation_count  = isset( $entry['variation_count'] ) ? (int) $entry['variation_count'] : 0;
+            $requiere_revision = false;
+
+            if ( ! empty( $errores ) ) {
+                $requiere_revision = true;
             }
 
-            if ( ! empty( $entry['error_detectado'] ) ) {
+            if ( 'variable' === $tipo && ! empty( $variaciones_sin ) ) {
+                $requiere_revision = true;
+            }
+
+            if ( 'variation' === $tipo && false === $maneja_stock ) {
+                $requiere_revision = true;
+            }
+
+            if (
+                in_array( $tipo, [ 'simple', 'variable' ], true )
+                && false === $maneja_stock
+                && ( 'simple' === $tipo || $variation_count <= 0 )
+            ) {
+                $requiere_revision = true;
+            }
+
+            if ( '' !== $codigo_contifico ) {
+                ++$summary['matched_entries'];
+
+                if ( ! $requiere_revision ) {
+                    ++$summary['entries_synced'];
+                }
+            } else {
+                ++$summary['entries_without_match'];
+                $requiere_revision = true;
+            }
+
+            if ( ! empty( $errores ) ) {
                 ++$summary['entries_with_errors'];
             }
         }
+
+        $summary['entries_needing_attention'] = max( 0, $summary['entries_total'] - $summary['entries_synced'] );
 
         $result = [
             'entries'      => $diagnostics,
