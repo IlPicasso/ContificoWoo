@@ -270,12 +270,22 @@ class Woo_Contifico_Diagnostics {
      * @return array<string,mixed>
      */
     private function build_variation_entry( WC_Product_Variation $variation, WC_Product $parent ) : array {
-        $size_slug     = $this->find_size_slug( $variation );
-        $parent_sku    = (string) $parent->get_sku();
-        $candidate_sku = '';
+        $size_slug      = $this->find_size_slug( $variation );
+        $parent_sku     = (string) $parent->get_sku();
+        $variation_sku  = (string) $variation->get_sku();
+        $candidate_sku  = '';
+        $inferred_size  = '';
 
         if ( '' !== $parent_sku && '' !== $size_slug ) {
             $candidate_sku = sprintf( '%s/%s', $parent_sku, $size_slug );
+        }
+
+        if ( '' === $candidate_sku && '' !== $parent_sku ) {
+            $inferred_size = $this->infer_variation_suffix_from_sku( $variation_sku, $parent_sku );
+
+            if ( '' !== $inferred_size ) {
+                $candidate_sku = sprintf( '%s/%s', $parent_sku, $inferred_size );
+            }
         }
 
         $managing_stock = method_exists( $variation, 'managing_stock' )
@@ -295,6 +305,7 @@ class Woo_Contifico_Diagnostics {
             '_variation_meta'        => [
                 'candidate_sku' => $candidate_sku,
                 'size_slug'     => $size_slug,
+                'inferred_size' => $inferred_size,
             ],
         ];
     }
@@ -325,6 +336,39 @@ class Woo_Contifico_Diagnostics {
         }
 
         return '';
+    }
+
+    /**
+     * Infer a Contifico-ready size suffix from a variation SKU when attributes are unavailable.
+     *
+     * @param string $variation_sku Variation SKU.
+     * @param string $parent_sku    Parent SKU.
+     *
+     * @return string
+     */
+    private function infer_variation_suffix_from_sku( string $variation_sku, string $parent_sku ) : string {
+        if ( '' === $variation_sku || '' === $parent_sku ) {
+            return '';
+        }
+
+        if ( 0 !== strpos( $variation_sku, $parent_sku ) ) {
+            return '';
+        }
+
+        $suffix = substr( $variation_sku, strlen( $parent_sku ) );
+        $suffix = ltrim( $suffix );
+
+        if ( '' === $suffix ) {
+            return '';
+        }
+
+        $suffix = ltrim( $suffix, "-_/\t " );
+
+        if ( '' === $suffix ) {
+            return '';
+        }
+
+        return $suffix;
     }
 
     /**
