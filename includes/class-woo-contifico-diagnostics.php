@@ -366,7 +366,8 @@ class Woo_Contifico_Diagnostics {
      */
     private function attach_contifico_matches( array $diagnostics, array $contifico_by_code, array $contifico_by_sku ) : array {
         foreach ( $diagnostics as $index => $entry ) {
-            $matches              = [];
+            $actual_matches        = [];
+            $candidate_matches     = [];
             $coincidencias         = [];
             $sku_detectado         = $entry['sku_detectado'];
             $variation_meta        = isset( $entry['_variation_meta'] ) && is_array( $entry['_variation_meta'] )
@@ -376,11 +377,11 @@ class Woo_Contifico_Diagnostics {
 
             if ( '' !== $sku_detectado ) {
                 if ( isset( $contifico_by_code[ $sku_detectado ] ) ) {
-                    $matches[] = $contifico_by_code[ $sku_detectado ];
+                    $actual_matches[] = $contifico_by_code[ $sku_detectado ];
                 }
 
                 if ( isset( $contifico_by_sku[ $sku_detectado ] ) ) {
-                    $matches = array_merge( $matches, $contifico_by_sku[ $sku_detectado ] );
+                    $actual_matches = array_merge( $actual_matches, $contifico_by_sku[ $sku_detectado ] );
                 }
             }
 
@@ -388,18 +389,18 @@ class Woo_Contifico_Diagnostics {
                 $coincidencias[] = $candidate_from_talla;
 
                 if ( isset( $contifico_by_code[ $candidate_from_talla ] ) ) {
-                    $matches[] = $contifico_by_code[ $candidate_from_talla ];
+                    $candidate_matches[] = $contifico_by_code[ $candidate_from_talla ];
                 }
 
                 if ( isset( $contifico_by_sku[ $candidate_from_talla ] ) ) {
-                    $matches = array_merge( $matches, $contifico_by_sku[ $candidate_from_talla ] );
+                    $candidate_matches = array_merge( $candidate_matches, $contifico_by_sku[ $candidate_from_talla ] );
                 }
             }
 
-            if ( ! empty( $matches ) ) {
+            if ( ! empty( $actual_matches ) ) {
                 $codes = [];
 
-                foreach ( $matches as $match ) {
+                foreach ( $actual_matches as $match ) {
                     if ( ! is_array( $match ) ) {
                         continue;
                     }
@@ -419,8 +420,30 @@ class Woo_Contifico_Diagnostics {
                     $diagnostics[ $index ]['codigo_contifico']       = $codes[0];
                     $diagnostics[ $index ]['coincidencias_posibles'] = $codes;
                 }
-            } elseif ( ! empty( $coincidencias ) ) {
-                $diagnostics[ $index ]['coincidencias_posibles'] = array_values( array_unique( $coincidencias ) );
+            } else {
+                $codes = [];
+
+                foreach ( $candidate_matches as $match ) {
+                    if ( ! is_array( $match ) ) {
+                        continue;
+                    }
+
+                    $codigo = isset( $match['codigo'] ) ? (string) $match['codigo'] : '';
+
+                    if ( '' === $codigo || isset( $codes[ $codigo ] ) ) {
+                        continue;
+                    }
+
+                    $codes[ $codigo ] = $codigo;
+                }
+
+                if ( ! empty( $codes ) ) {
+                    $coincidencias = array_merge( $coincidencias, array_values( $codes ) );
+                }
+
+                if ( ! empty( $coincidencias ) ) {
+                    $diagnostics[ $index ]['coincidencias_posibles'] = array_values( array_unique( $coincidencias ) );
+                }
             }
 
             if ( isset( $diagnostics[ $index ]['_variation_meta'] ) ) {
