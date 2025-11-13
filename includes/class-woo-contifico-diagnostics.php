@@ -88,16 +88,25 @@ class Woo_Contifico_Diagnostics {
             }
 
             if ( $product->is_type( 'variable' ) ) {
-                $variation_data = function_exists( 'wc_get_product_variations' )
-                    ? wc_get_product_variations( $product->get_id(), [ 'limit' => -1 ] )
-                    : [];
+                $variation_ids = [];
 
-                foreach ( $variation_data as $variation_row ) {
-                    if ( empty( $variation_row['variation_id'] ) ) {
-                        continue;
+                if ( function_exists( 'wc_get_product_variations' ) ) {
+                    $variation_rows = wc_get_product_variations( $product->get_id(), [ 'limit' => -1 ] );
+
+                    foreach ( (array) $variation_rows as $variation_row ) {
+                        if ( empty( $variation_row['variation_id'] ) ) {
+                            continue;
+                        }
+
+                        $variation_ids[] = (int) $variation_row['variation_id'];
                     }
+                }
 
-                    $variation = wc_get_product( (int) $variation_row['variation_id'] );
+                $variation_ids = array_merge( $variation_ids, array_map( 'absint', (array) $product->get_children() ) );
+                $variation_ids = array_values( array_filter( array_unique( $variation_ids ) ) );
+
+                foreach ( $variation_ids as $variation_id ) {
+                    $variation = wc_get_product( $variation_id );
 
                     if ( ! $variation instanceof WC_Product_Variation ) {
                         continue;
