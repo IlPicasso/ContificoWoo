@@ -498,50 +498,24 @@ class Woo_Contifico_Diagnostics {
                 }
             }
 
-            if ( ! empty( $code_matches ) ) {
-                $codes = [];
+            $matched_codes = $this->collect_unique_codes( $code_matches );
 
-                foreach ( $code_matches as $match ) {
-                    if ( ! is_array( $match ) ) {
-                        continue;
-                    }
+            if ( empty( $matched_codes ) ) {
+                $sku_codes = $this->collect_unique_codes( $sku_only_matches );
 
-                    $codigo = isset( $match['codigo'] ) ? (string) $match['codigo'] : '';
-
-                    if ( '' === $codigo || isset( $codes[ $codigo ] ) ) {
-                        continue;
-                    }
-
-                    $codes[ $codigo ] = $codigo;
+                if ( 1 === count( $sku_codes ) ) {
+                    $matched_codes = $sku_codes;
                 }
+            }
 
-                if ( ! empty( $codes ) ) {
-                    $codes = array_values( $codes );
-
-                    $diagnostics[ $index ]['codigo_contifico']       = $codes[0];
-                    $diagnostics[ $index ]['coincidencias_posibles'] = $codes;
-                }
+            if ( ! empty( $matched_codes ) ) {
+                $diagnostics[ $index ]['codigo_contifico']       = $matched_codes[0];
+                $diagnostics[ $index ]['coincidencias_posibles'] = $matched_codes;
             } else {
-                $codes = [];
+                $suggestion_codes = $this->collect_unique_codes( array_merge( $sku_only_matches, $candidate_matches ) );
 
-                $suggestions = array_merge( $sku_only_matches, $candidate_matches );
-
-                foreach ( $suggestions as $match ) {
-                    if ( ! is_array( $match ) ) {
-                        continue;
-                    }
-
-                    $codigo = isset( $match['codigo'] ) ? (string) $match['codigo'] : '';
-
-                    if ( '' === $codigo || isset( $codes[ $codigo ] ) ) {
-                        continue;
-                    }
-
-                    $codes[ $codigo ] = $codigo;
-                }
-
-                if ( ! empty( $codes ) ) {
-                    $coincidencias = array_merge( $coincidencias, array_values( $codes ) );
+                if ( ! empty( $suggestion_codes ) ) {
+                    $coincidencias = array_merge( $coincidencias, $suggestion_codes );
                 }
 
                 if ( ! empty( $coincidencias ) ) {
@@ -615,5 +589,32 @@ class Woo_Contifico_Diagnostics {
         }
 
         return $diagnostics;
+    }
+
+    /**
+     * Extract the unique Contifico codes from a match list.
+     *
+     * @param array<int,mixed> $matches Match rows to inspect.
+     *
+     * @return array<int,string>
+     */
+    private function collect_unique_codes( array $matches ) : array {
+        $codes = [];
+
+        foreach ( $matches as $match ) {
+            if ( ! is_array( $match ) ) {
+                continue;
+            }
+
+            $codigo = isset( $match['codigo'] ) ? (string) $match['codigo'] : '';
+
+            if ( '' === $codigo || isset( $codes[ $codigo ] ) ) {
+                continue;
+            }
+
+            $codes[ $codigo ] = $codigo;
+        }
+
+        return array_values( $codes );
     }
 }
