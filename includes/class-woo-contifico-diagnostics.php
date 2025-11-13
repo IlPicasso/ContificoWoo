@@ -88,16 +88,25 @@ class Woo_Contifico_Diagnostics {
             }
 
             if ( $product->is_type( 'variable' ) ) {
-                $variation_data = function_exists( 'wc_get_product_variations' )
-                    ? wc_get_product_variations( $product->get_id(), [ 'limit' => -1 ] )
-                    : [];
+                $variation_ids = [];
 
-                foreach ( $variation_data as $variation_row ) {
-                    if ( empty( $variation_row['variation_id'] ) ) {
-                        continue;
+                if ( function_exists( 'wc_get_product_variations' ) ) {
+                    $variation_rows = wc_get_product_variations( $product->get_id(), [ 'limit' => -1 ] );
+
+                    foreach ( (array) $variation_rows as $variation_row ) {
+                        if ( empty( $variation_row['variation_id'] ) ) {
+                            continue;
+                        }
+
+                        $variation_ids[] = (int) $variation_row['variation_id'];
                     }
+                }
 
-                    $variation = wc_get_product( (int) $variation_row['variation_id'] );
+                $variation_ids = array_merge( $variation_ids, array_map( 'absint', (array) $product->get_children() ) );
+                $variation_ids = array_values( array_filter( array_unique( $variation_ids ) ) );
+
+                foreach ( $variation_ids as $variation_id ) {
+                    $variation = wc_get_product( $variation_id );
 
                     if ( ! $variation instanceof WC_Product_Variation ) {
                         continue;
@@ -410,7 +419,8 @@ class Woo_Contifico_Diagnostics {
      */
     private function attach_contifico_matches( array $diagnostics, array $contifico_by_code, array $contifico_by_sku ) : array {
         foreach ( $diagnostics as $index => $entry ) {
-            $actual_matches        = [];
+            $code_matches          = [];
+            $sku_only_matches      = [];
             $candidate_matches     = [];
             $coincidencias         = [];
             $sku_detectado         = $entry['sku_detectado'];
@@ -421,11 +431,27 @@ class Woo_Contifico_Diagnostics {
 
             if ( '' !== $sku_detectado ) {
                 if ( isset( $contifico_by_code[ $sku_detectado ] ) ) {
-                    $actual_matches[] = $contifico_by_code[ $sku_detectado ];
+                    $code_matches[] = $contifico_by_code[ $sku_detectado ];
                 }
 
                 if ( isset( $contifico_by_sku[ $sku_detectado ] ) ) {
-                    $actual_matches = array_merge( $actual_matches, $contifico_by_sku[ $sku_detectado ] );
+                    foreach ( $contifico_by_sku[ $sku_detectado ] as $match ) {
+                        if ( ! is_array( $match ) ) {
+                            continue;
+                        }
+
+                        $codigo = isset( $match['codigo'] ) ? (string) $match['codigo'] : '';
+
+                        if ( '' === $codigo ) {
+                            continue;
+                        }
+
+                        if ( $codigo === $sku_detectado ) {
+                            $code_matches[] = $match;
+                        } else {
+                            $sku_only_matches[] = $match;
+                        }
+                    }
                 }
             }
 
@@ -441,10 +467,10 @@ class Woo_Contifico_Diagnostics {
                 }
             }
 
-            if ( ! empty( $actual_matches ) ) {
+            if ( ! empty( $code_matches ) ) {
                 $codes = [];
 
-                foreach ( $actual_matches as $match ) {
+                foreach ( $code_matches as $match ) {
                     if ( ! is_array( $match ) ) {
                         continue;
                     }
@@ -467,7 +493,9 @@ class Woo_Contifico_Diagnostics {
             } else {
                 $codes = [];
 
-                foreach ( $candidate_matches as $match ) {
+                $suggestions = array_merge( $sku_only_matches, $candidate_matches );
+
+                foreach ( $suggestions as $match ) {
                     if ( ! is_array( $match ) ) {
                         continue;
                     }
