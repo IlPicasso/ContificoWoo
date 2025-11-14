@@ -487,8 +487,6 @@ class Woo_Contifico_Diagnostics {
             }
 
             if ( '' !== $candidate_from_talla ) {
-                $coincidencias[] = $candidate_from_talla;
-
                 if ( '' !== $candidate_key && isset( $contifico_by_code[ $candidate_key ] ) ) {
                     $candidate_matches[] = $contifico_by_code[ $candidate_key ];
                 }
