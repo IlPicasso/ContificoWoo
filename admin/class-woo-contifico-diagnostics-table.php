@@ -78,7 +78,14 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                         }
 
                         if ( 'needs_attention' === $filter ) {
-                            return isset( $item['sync_status'] ) && 'synced' !== $item['sync_status'];
+                            return (
+                                isset( $item['sync_status'] )
+                                && in_array(
+                                    $item['sync_status'],
+                                    [ 'needs_attention', 'unmatched' ],
+                                    true
+                                )
+                            );
                         }
 
                         if ( ! isset( $item['problem_types'] ) || ! is_array( $item['problem_types'] ) ) {
