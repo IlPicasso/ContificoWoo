@@ -90,6 +90,11 @@
     color: #842029;
 }
 
+.woo-contifico-diagnostics .woo-contifico-diagnostics__status-tag.status-parent {
+    background-color: #e7e5ff;
+    color: #2f1b96;
+}
+
 .woo-contifico-diagnostics .woo-contifico-diagnostics__status-tag.status-needs-attention {
     background-color: #fff3cd;
     color: #664d03;
