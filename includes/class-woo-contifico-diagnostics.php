@@ -88,16 +88,25 @@ class Woo_Contifico_Diagnostics {
             }
 
             if ( $product->is_type( 'variable' ) ) {
-                $variation_data = function_exists( 'wc_get_product_variations' )
-                    ? wc_get_product_variations( $product->get_id(), [ 'limit' => -1 ] )
-                    : [];
+                $variation_ids = [];
 
-                foreach ( $variation_data as $variation_row ) {
-                    if ( empty( $variation_row['variation_id'] ) ) {
-                        continue;
+                if ( function_exists( 'wc_get_product_variations' ) ) {
+                    $variation_rows = wc_get_product_variations( $product->get_id(), [ 'limit' => -1 ] );
+
+                    foreach ( (array) $variation_rows as $variation_row ) {
+                        if ( empty( $variation_row['variation_id'] ) ) {
+                            continue;
+                        }
+
+                        $variation_ids[] = (int) $variation_row['variation_id'];
                     }
+                }
 
-                    $variation = wc_get_product( (int) $variation_row['variation_id'] );
+                $variation_ids = array_merge( $variation_ids, array_map( 'absint', (array) $product->get_children() ) );
+                $variation_ids = array_values( array_filter( array_unique( $variation_ids ) ) );
+
+                foreach ( $variation_ids as $variation_id ) {
+                    $variation = wc_get_product( $variation_id );
 
                     if ( ! $variation instanceof WC_Product_Variation ) {
                         continue;
@@ -207,22 +216,24 @@ class Woo_Contifico_Diagnostics {
 
             ++$count;
 
-            $codigo = isset( $product['codigo'] ) ? (string) $product['codigo'] : '';
-            $sku    = isset( $product['sku'] ) ? (string) $product['sku'] : $codigo;
+            $codigo       = isset( $product['codigo'] ) ? (string) $product['codigo'] : '';
+            $sku          = isset( $product['sku'] ) ? (string) $product['sku'] : $codigo;
+            $codigo_index = $this->normalize_identifier( $codigo );
+            $sku_index    = $this->normalize_identifier( $sku );
 
-            if ( '' !== $codigo && ! isset( $by_code[ $codigo ] ) ) {
-                $by_code[ $codigo ] = $product;
+            if ( '' !== $codigo_index && ! isset( $by_code[ $codigo_index ] ) ) {
+                $by_code[ $codigo_index ] = $product;
             }
 
-            if ( '' === $sku ) {
+            if ( '' === $sku_index ) {
                 continue;
             }
 
-            if ( ! isset( $by_sku[ $sku ] ) ) {
-                $by_sku[ $sku ] = [];
+            if ( ! isset( $by_sku[ $sku_index ] ) ) {
+                $by_sku[ $sku_index ] = [];
             }
 
-            $by_sku[ $sku ][] = $product;
+            $by_sku[ $sku_index ][] = $product;
         }
 
         return [
@@ -251,7 +262,7 @@ class Woo_Contifico_Diagnostics {
             'post_id'                => $product->get_id(),
             'nombre'                 => $product->get_name(),
             'tipo'                   => $product->get_type(),
-            'sku_detectado'          => (string) $product->get_sku(),
+            'sku_detectado'          => trim( (string) $product->get_sku() ),
             'error_detectado'        => [],
             'codigo_contifico'       => '',
             'coincidencias_posibles' => [],
@@ -270,12 +281,22 @@ class Woo_Contifico_Diagnostics {
      * @return array<string,mixed>
      */
     private function build_variation_entry( WC_Product_Variation $variation, WC_Product $parent ) : array {
-        $size_slug     = $this->find_size_slug( $variation );
-        $parent_sku    = (string) $parent->get_sku();
-        $candidate_sku = '';
+        $size_slug      = $this->find_size_slug( $variation );
+        $parent_sku     = trim( (string) $parent->get_sku() );
+        $variation_sku  = trim( (string) $variation->get_sku() );
+        $candidate_sku  = '';
+        $inferred_size  = '';
 
         if ( '' !== $parent_sku && '' !== $size_slug ) {
             $candidate_sku = sprintf( '%s/%s', $parent_sku, $size_slug );
+        }
+
+        if ( '' === $candidate_sku && '' !== $parent_sku ) {
+            $inferred_size = $this->infer_variation_suffix_from_sku( $variation_sku, $parent_sku );
+
+            if ( '' !== $inferred_size ) {
+                $candidate_sku = sprintf( '%s/%s', $parent_sku, $inferred_size );
+            }
         }
 
         $managing_stock = method_exists( $variation, 'managing_stock' )
@@ -286,7 +307,7 @@ class Woo_Contifico_Diagnostics {
             'post_id'                => $variation->get_id(),
             'nombre'                 => $variation->get_name(),
             'tipo'                   => $variation->get_type(),
-            'sku_detectado'          => (string) $variation->get_sku(),
+            'sku_detectado'          => $variation_sku,
             'error_detectado'        => [],
             'codigo_contifico'       => '',
             'coincidencias_posibles' => [],
@@ -295,6 +316,7 @@ class Woo_Contifico_Diagnostics {
             '_variation_meta'        => [
                 'candidate_sku' => $candidate_sku,
                 'size_slug'     => $size_slug,
+                'inferred_size' => $inferred_size,
             ],
         ];
     }
@@ -325,6 +347,65 @@ class Woo_Contifico_Diagnostics {
         }
 
         return '';
+    }
+
+    /**
+     * Infer a Contifico-ready size suffix from a variation SKU when attributes are unavailable.
+     *
+     * @param string $variation_sku Variation SKU.
+     * @param string $parent_sku    Parent SKU.
+     *
+     * @return string
+     */
+    private function infer_variation_suffix_from_sku( string $variation_sku, string $parent_sku ) : string {
+        $variation_sku = trim( $variation_sku );
+        $parent_sku    = trim( $parent_sku );
+
+        if ( '' === $variation_sku || '' === $parent_sku ) {
+            return '';
+        }
+
+        if ( 0 !== strpos( $variation_sku, $parent_sku ) ) {
+            return '';
+        }
+
+        $suffix = substr( $variation_sku, strlen( $parent_sku ) );
+        $suffix = ltrim( $suffix );
+
+        if ( '' === $suffix ) {
+            return '';
+        }
+
+        $suffix = ltrim( $suffix, "-_/\t " );
+
+        if ( '' === $suffix ) {
+            return '';
+        }
+
+        return $suffix;
+    }
+
+    /**
+     * Normalize an identifier for consistent comparisons.
+     *
+     * @param string $value Identifier value.
+     *
+     * @return string
+     */
+    private function normalize_identifier( string $value ) : string {
+        $value = trim( $value );
+
+        if ( '' === $value ) {
+            return '';
+        }
+
+        if ( function_exists( 'mb_strtoupper' ) ) {
+            $value = mb_strtoupper( $value );
+        } else {
+            $value = strtoupper( $value );
+        }
+
+        return $value;
     }
 
     /**
@@ -366,61 +447,78 @@ class Woo_Contifico_Diagnostics {
      */
     private function attach_contifico_matches( array $diagnostics, array $contifico_by_code, array $contifico_by_sku ) : array {
         foreach ( $diagnostics as $index => $entry ) {
-            $matches              = [];
+            $code_matches          = [];
+            $sku_only_matches      = [];
+            $candidate_matches     = [];
             $coincidencias         = [];
             $sku_detectado         = $entry['sku_detectado'];
+            $sku_key               = $this->normalize_identifier( $sku_detectado );
             $variation_meta        = isset( $entry['_variation_meta'] ) && is_array( $entry['_variation_meta'] )
                 ? $entry['_variation_meta']
                 : [];
-            $candidate_from_talla = isset( $variation_meta['candidate_sku'] ) ? (string) $variation_meta['candidate_sku'] : '';
+            $candidate_from_talla  = isset( $variation_meta['candidate_sku'] ) ? (string) $variation_meta['candidate_sku'] : '';
+            $candidate_key         = $this->normalize_identifier( $candidate_from_talla );
 
-            if ( '' !== $sku_detectado ) {
-                if ( isset( $contifico_by_code[ $sku_detectado ] ) ) {
-                    $matches[] = $contifico_by_code[ $sku_detectado ];
+            if ( '' !== $sku_key ) {
+                if ( isset( $contifico_by_code[ $sku_key ] ) ) {
+                    $code_matches[] = $contifico_by_code[ $sku_key ];
                 }
 
-                if ( isset( $contifico_by_sku[ $sku_detectado ] ) ) {
-                    $matches = array_merge( $matches, $contifico_by_sku[ $sku_detectado ] );
+                if ( isset( $contifico_by_sku[ $sku_key ] ) ) {
+                    foreach ( $contifico_by_sku[ $sku_key ] as $match ) {
+                        if ( ! is_array( $match ) ) {
+                            continue;
+                        }
+
+                        $codigo = isset( $match['codigo'] ) ? (string) $match['codigo'] : '';
+                        $codigo_key = $this->normalize_identifier( $codigo );
+
+                        if ( '' === $codigo ) {
+                            continue;
+                        }
+
+                        if ( $codigo_key === $sku_key ) {
+                            $code_matches[] = $match;
+                        } else {
+                            $sku_only_matches[] = $match;
+                        }
+                    }
                 }
             }
 
             if ( '' !== $candidate_from_talla ) {
-                $coincidencias[] = $candidate_from_talla;
-
-                if ( isset( $contifico_by_code[ $candidate_from_talla ] ) ) {
-                    $matches[] = $contifico_by_code[ $candidate_from_talla ];
+                if ( '' !== $candidate_key && isset( $contifico_by_code[ $candidate_key ] ) ) {
+                    $candidate_matches[] = $contifico_by_code[ $candidate_key ];
                 }
 
-                if ( isset( $contifico_by_sku[ $candidate_from_talla ] ) ) {
-                    $matches = array_merge( $matches, $contifico_by_sku[ $candidate_from_talla ] );
+                if ( '' !== $candidate_key && isset( $contifico_by_sku[ $candidate_key ] ) ) {
+                    $candidate_matches = array_merge( $candidate_matches, $contifico_by_sku[ $candidate_key ] );
                 }
             }
 
-            if ( ! empty( $matches ) ) {
-                $codes = [];
+            $matched_codes = $this->collect_unique_codes( $code_matches );
 
-                foreach ( $matches as $match ) {
-                    if ( ! is_array( $match ) ) {
-                        continue;
-                    }
+            if ( empty( $matched_codes ) ) {
+                $sku_codes = $this->collect_unique_codes( $sku_only_matches );
 
-                    $codigo = isset( $match['codigo'] ) ? (string) $match['codigo'] : '';
+                if ( 1 === count( $sku_codes ) ) {
+                    $matched_codes = $sku_codes;
+                }
+            }
 
-                    if ( '' === $codigo || isset( $codes[ $codigo ] ) ) {
-                        continue;
-                    }
+            if ( ! empty( $matched_codes ) ) {
+                $diagnostics[ $index ]['codigo_contifico']       = $matched_codes[0];
+                $diagnostics[ $index ]['coincidencias_posibles'] = $matched_codes;
+            } else {
+                $suggestion_codes = $this->collect_unique_codes( array_merge( $sku_only_matches, $candidate_matches ) );
 
-                    $codes[ $codigo ] = $codigo;
+                if ( ! empty( $suggestion_codes ) ) {
+                    $coincidencias = array_merge( $coincidencias, $suggestion_codes );
                 }
 
-                if ( ! empty( $codes ) ) {
-                    $codes = array_values( $codes );
-
-                    $diagnostics[ $index ]['codigo_contifico']       = $codes[0];
-                    $diagnostics[ $index ]['coincidencias_posibles'] = $codes;
+                if ( ! empty( $coincidencias ) ) {
+                    $diagnostics[ $index ]['coincidencias_posibles'] = array_values( array_unique( $coincidencias ) );
                 }
-            } elseif ( ! empty( $coincidencias ) ) {
-                $diagnostics[ $index ]['coincidencias_posibles'] = array_values( array_unique( $coincidencias ) );
             }
 
             if ( isset( $diagnostics[ $index ]['_variation_meta'] ) ) {
@@ -489,5 +587,32 @@ class Woo_Contifico_Diagnostics {
         }
 
         return $diagnostics;
+    }
+
+    /**
+     * Extract the unique Contifico codes from a match list.
+     *
+     * @param array<int,mixed> $matches Match rows to inspect.
+     *
+     * @return array<int,string>
+     */
+    private function collect_unique_codes( array $matches ) : array {
+        $codes = [];
+
+        foreach ( $matches as $match ) {
+            if ( ! is_array( $match ) ) {
+                continue;
+            }
+
+            $codigo = isset( $match['codigo'] ) ? (string) $match['codigo'] : '';
+
+            if ( '' === $codigo || isset( $codes[ $codigo ] ) ) {
+                continue;
+            }
+
+            $codes[ $codigo ] = $codigo;
+        }
+
+        return array_values( $codes );
     }
 }
