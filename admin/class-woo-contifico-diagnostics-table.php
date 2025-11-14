@@ -295,8 +295,15 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
     public function column_acciones( array $item ) : string {
         $actions = [];
 
-        if ( ! empty( $item['post_id'] ) ) {
-            $edit_link = get_edit_post_link( (int) $item['post_id'] );
+        $target_id = ! empty( $item['post_id'] ) ? (int) $item['post_id'] : 0;
+        $type      = isset( $item['tipo'] ) ? (string) $item['tipo'] : '';
+
+        if ( 'variation' === $type && ! empty( $item['parent_id'] ) ) {
+            $target_id = (int) $item['parent_id'];
+        }
+
+        if ( $target_id > 0 ) {
+            $edit_link = get_edit_post_link( $target_id );
 
             if ( $edit_link ) {
                 $actions[] = sprintf(
