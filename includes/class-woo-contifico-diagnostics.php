@@ -129,6 +129,7 @@ class Woo_Contifico_Diagnostics {
         $diagnostics = $this->flag_duplicate_and_missing_skus( $diagnostics, $sku_registry );
         $diagnostics = $this->attach_contifico_matches( $diagnostics, $contifico_by_code, $contifico_by_sku );
         $diagnostics = $this->annotate_parent_variation_mismatches( $diagnostics );
+        $diagnostics = $this->mark_parent_placeholder_entries( $diagnostics );
 
         foreach ( $diagnostics as $entry ) {
             ++$summary['entries_total'];
@@ -143,6 +144,7 @@ class Woo_Contifico_Diagnostics {
                 : [];
             $maneja_stock     = array_key_exists( 'managing_stock', $entry ) ? $entry['managing_stock'] : null;
             $variation_count  = isset( $entry['variation_count'] ) ? (int) $entry['variation_count'] : 0;
+            $es_producto_madre = ! empty( $entry['is_parent_placeholder'] );
             $requiere_revision = false;
 
             if ( ! empty( $errores ) ) {
@@ -165,7 +167,7 @@ class Woo_Contifico_Diagnostics {
                 $requiere_revision = true;
             }
 
-            if ( '' !== $codigo_contifico ) {
+            if ( '' !== $codigo_contifico || $es_producto_madre ) {
                 ++$summary['matched_entries'];
 
                 if ( ! $requiere_revision ) {
@@ -269,6 +271,7 @@ class Woo_Contifico_Diagnostics {
             'variaciones_sin_coincidencia' => [],
             'managing_stock'         => $managing_stock,
             'variation_count'        => $variation_count,
+            'is_parent_placeholder'  => false,
         ];
     }
 
@@ -584,6 +587,63 @@ class Woo_Contifico_Diagnostics {
             $labels    = isset( $missing_by_parent[ $parent_id ] ) ? $missing_by_parent[ $parent_id ] : [];
 
             $diagnostics[ $index ]['variaciones_sin_coincidencia'] = array_values( array_unique( $labels ) );
+        }
+
+        return $diagnostics;
+    }
+
+    /**
+     * Mark parent products that intentionally rely on their variations' Contifico codes.
+     *
+     * @param array<int,array<string,mixed>> $diagnostics Diagnostics entries.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function mark_parent_placeholder_entries( array $diagnostics ) : array {
+        $matched_children = [];
+
+        foreach ( $diagnostics as $entry ) {
+            if ( ! isset( $entry['tipo'] ) || 'variation' !== $entry['tipo'] ) {
+                continue;
+            }
+
+            $parent_id = isset( $entry['parent_id'] ) ? (int) $entry['parent_id'] : 0;
+
+            if ( $parent_id <= 0 ) {
+                continue;
+            }
+
+            $codigo_contifico = isset( $entry['codigo_contifico'] ) ? (string) $entry['codigo_contifico'] : '';
+
+            if ( '' === $codigo_contifico ) {
+                continue;
+            }
+
+            $matched_children[ $parent_id ] = true;
+        }
+
+        foreach ( $diagnostics as $index => $entry ) {
+            if ( ! isset( $entry['tipo'] ) || 'variable' !== $entry['tipo'] ) {
+                continue;
+            }
+
+            $parent_id          = isset( $entry['post_id'] ) ? (int) $entry['post_id'] : 0;
+            $codigo_contifico   = isset( $entry['codigo_contifico'] ) ? (string) $entry['codigo_contifico'] : '';
+            $variation_count    = isset( $entry['variation_count'] ) ? (int) $entry['variation_count'] : 0;
+            $variaciones_sin    = isset( $entry['variaciones_sin_coincidencia'] ) && is_array( $entry['variaciones_sin_coincidencia'] )
+                ? $entry['variaciones_sin_coincidencia']
+                : [];
+            $has_matched_child  = $parent_id > 0 && isset( $matched_children[ $parent_id ] );
+            $is_placeholder     = (
+                '' === $codigo_contifico
+                && $variation_count > 0
+                && empty( $variaciones_sin )
+                && $has_matched_child
+            );
+
+            if ( $is_placeholder ) {
+                $diagnostics[ $index ]['is_parent_placeholder'] = true;
+            }
         }
 
         return $diagnostics;

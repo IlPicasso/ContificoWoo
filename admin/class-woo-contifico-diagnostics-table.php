@@ -212,6 +212,10 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                 $class .= ' status-unmatched';
                 $label  = __( 'Sin coincidencia', 'woo-contifico' );
                 break;
+            case 'parent_placeholder':
+                $class .= ' status-parent';
+                $label  = __( 'Producto madre', 'woo-contifico' );
+                break;
             case 'needs_attention':
             default:
                 $class .= ' status-needs-attention';
@@ -530,6 +534,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'parent_id'              => 0,
             'managing_stock'         => null,
             'variation_count'        => 0,
+            'is_parent_placeholder'  => false,
             'sync_status'            => '',
         ];
 
@@ -546,6 +551,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
         $entry['parent_id']              = (int) $entry['parent_id'];
         $entry['managing_stock']         = is_null( $entry['managing_stock'] ) ? null : (bool) $entry['managing_stock'];
         $entry['variation_count']        = (int) $entry['variation_count'];
+        $entry['is_parent_placeholder']  = (bool) $entry['is_parent_placeholder'];
 
         $entry['problem_types']       = $this->detect_problem_types( $entry );
         $entry['sync_status']         = $this->determine_sync_status( $entry );
@@ -628,6 +634,10 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             : [];
 
         if ( '' === $codigo_contifico ) {
+            if ( ! empty( $entry['is_parent_placeholder'] ) ) {
+                return 'parent_placeholder';
+            }
+
             return 'unmatched';
         }
 
@@ -748,6 +758,10 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                     $messages[] = __( 'Activa la opción "Gestionar inventario" en el producto y guarda los cambios antes de sincronizar.', 'woo-contifico' );
                     break;
             }
+        }
+
+        if ( ! empty( $entry['is_parent_placeholder'] ) ) {
+            $messages[] = __( 'Este producto madre usa únicamente los SKU de sus variaciones en Contífico.', 'woo-contifico' );
         }
 
         return array_values( array_filter( $messages ) );
