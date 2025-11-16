@@ -821,6 +821,7 @@ class Woo_Contifico
         # Register Ajax hooks
             $this->loader->add_action('wp_ajax_fetch_products', $plugin_admin, 'fetch_products');
             $this->loader->add_action('wp_ajax_woo_contifico_sync_single_product', $plugin_admin, 'sync_single_product');
+            $this->loader->add_action('wp_ajax_nopriv_woo_contifico_sync_single_product', $plugin_admin, 'sync_single_product');
             $this->loader->add_action('wp_ajax_woo_contifico_start_manual_sync', $plugin_admin, 'start_manual_sync');
             $this->loader->add_action('wp_ajax_woo_contifico_get_manual_sync_status', $plugin_admin, 'get_manual_sync_status');
             $this->loader->add_action('wp_ajax_woo_contifico_cancel_manual_sync', $plugin_admin, 'cancel_manual_sync');
