@@ -789,6 +789,7 @@ class Woo_Contifico
         # Styles and scripts
         $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_styles');
         $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts');
+        $this->loader->add_action('admin_post_woo_contifico_export_inventory_movements', $plugin_admin, 'export_inventory_movements');
 
         # Plugin settings link in plugins list table
         $plugin_basename = $this->plugin_name . '/' . $this->get_plugin_name();
