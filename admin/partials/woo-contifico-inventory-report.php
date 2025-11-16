@@ -8,7 +8,14 @@ if ( ! class_exists( 'WP_List_Table' ) ) {
 }
 
 if ( ! class_exists( 'Woo_Contifico_Inventory_Movements_Table' ) ) {
-        class Woo_Contifico_Inventory_Movements_Table extends WP_List_Table {
+class Woo_Contifico_Inventory_Movements_Table extends WP_List_Table {
+
+/**
+ * Raw rows to render in the list table.
+ *
+ * @var array[]
+ */
+protected $prepared_items = [];
 
                 public function __construct() {
                         parent::__construct( [
@@ -18,13 +25,17 @@ if ( ! class_exists( 'Woo_Contifico_Inventory_Movements_Table' ) ) {
                         ] );
                 }
 
-                public function prepare_items( array $items ) : void {
-                        $columns               = $this->get_columns();
-                        $hidden                = [];
-                        $sortable              = [];
-                        $this->_column_headers = [ $columns, $hidden, $sortable ];
-                        $this->items           = $items;
-                }
+public function set_table_items( array $items ) : void {
+$this->prepared_items = $items;
+}
+
+public function prepare_items() : void {
+$columns               = $this->get_columns();
+$hidden                = [];
+$sortable              = [];
+$this->_column_headers = [ $columns, $hidden, $sortable ];
+$this->items           = $this->prepared_items;
+}
 
                 public function get_columns() : array {
                         return [
@@ -77,7 +88,8 @@ $report           = $this->get_inventory_movements_report( $raw_filters );
 $filters          = $report['filters'];
 $product_choices  = $this->get_inventory_movement_product_choices();
 $table            = new Woo_Contifico_Inventory_Movements_Table();
-$table->prepare_items( $report['totals_by_product'] );
+$table->set_table_items( $report['totals_by_product'] );
+$table->prepare_items();
 $summary_totals   = $report['totals'];
 $chart_attributes = [
         'periods'  => $report['chart_data']['periods'],
