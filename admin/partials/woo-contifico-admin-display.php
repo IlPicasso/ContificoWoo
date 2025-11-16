@@ -14,11 +14,12 @@
         <a href="?page=woo-contifico&tab=contifico" class="nav-tab <?php echo $active_tab == 'contifico' ? 'nav-tab-active' : ''; ?>"><?php _e('Contífico', $this->plugin_name) ?></a>
         <a href="?page=woo-contifico&tab=emisor" class="nav-tab <?php echo $active_tab == 'emisor' ? 'nav-tab-active' : ''; ?>"><?php _e('Emisor', $this->plugin_name) ?></a>
         <a href="?page=woo-contifico&tab=establecimiento" class="nav-tab <?php echo $active_tab == 'establecimiento' ? 'nav-tab-active' : ''; ?>"><?php _e('Establecimiento', $this->plugin_name) ?></a>
-        <?php if ( $this->config_status['status'] && $is_active ) : ?>
-        <a href="?page=woo-contifico&tab=diagnostico" class="nav-tab <?php echo $active_tab == 'diagnostico' ? 'nav-tab-active' : ''; ?>"><?php _e( 'Diagnóstico de ítems', $this->plugin_name ); ?></a>
-        <a href="?page=woo-contifico&tab=sincronizar" class="nav-tab <?php echo $active_tab == 'sincronizar' ? 'nav-tab-active' : ''; ?>"><?php _e('Sincronización manual', $this->plugin_name) ?></a>
-        <a href="?page=woo-contifico&tab=historial" class="nav-tab <?php echo $active_tab == 'historial' ? 'nav-tab-active' : ''; ?>"><?php _e( 'Historial de sincronizaciones', $this->plugin_name ); ?></a>
-        <?php endif; ?>
+<?php if ( $this->config_status['status'] && $is_active ) : ?>
+<a href="?page=woo-contifico&tab=diagnostico" class="nav-tab <?php echo $active_tab == 'diagnostico' ? 'nav-tab-active' : ''; ?>"><?php _e( 'Diagnóstico de ítems', $this->plugin_name ); ?></a>
+<a href="?page=woo-contifico&tab=sincronizar" class="nav-tab <?php echo $active_tab == 'sincronizar' ? 'nav-tab-active' : ''; ?>"><?php _e('Sincronización manual', $this->plugin_name) ?></a>
+<a href="?page=woo-contifico&tab=historial" class="nav-tab <?php echo $active_tab == 'historial' ? 'nav-tab-active' : ''; ?>"><?php _e( 'Historial de sincronizaciones', $this->plugin_name ); ?></a>
+<a href="?page=woo-contifico&tab=movimientos" class="nav-tab <?php echo $active_tab == 'movimientos' ? 'nav-tab-active' : ''; ?>"><?php _e( 'Movimientos de inventario', $this->plugin_name ); ?></a>
+<?php endif; ?>
     </h2>
 
     <div class="container">
@@ -227,9 +228,13 @@
                     </table>
                 <?php endif; ?>
             </div>
-        <?php endif; ?>
+<?php endif; ?>
 
-        <?php if ( $this->config_status['status'] && $is_active && $active_tab === 'diagnostico' ) : ?>
+<?php if ( $this->config_status['status'] && $is_active && $active_tab === 'movimientos' ) : ?>
+<?php require_once plugin_dir_path( __FILE__ ) . 'woo-contifico-inventory-report.php'; ?>
+<?php endif; ?>
+
+<?php if ( $this->config_status['status'] && $is_active && $active_tab === 'diagnostico' ) : ?>
             <div class="woo-contifico-diagnostics">
                 <?php
                 settings_errors( 'woo_contifico_diagnostics' );
