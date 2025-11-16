@@ -25,7 +25,10 @@ class Woo_Contifico_Admin {
         private const SYNC_DEBUG_TRANSIENT_KEY    = 'woo_contifico_sync_debug_entries';
         private const SYNC_RESULT_TRANSIENT_KEY   = 'woo_sync_result';
         private const MANUAL_SYNC_STATE_OPTION    = 'woo_contifico_manual_sync_state';
-        private const MANUAL_SYNC_HISTORY_OPTION  = 'woo_contifico_manual_sync_history';
+private const MANUAL_SYNC_HISTORY_OPTION  = 'woo_contifico_manual_sync_history';
+private const INVENTORY_MOVEMENTS_STORAGE = 'woo_contifico_inventory_movements';
+private const INVENTORY_MOVEMENTS_TRANSIENT = 'woo_contifico_inventory_movements';
+private const INVENTORY_MOVEMENTS_MAX_ENTRIES = 250;
         private const MANUAL_SYNC_CANCEL_TRANSIENT = 'woo_contifico_manual_sync_cancel';
         private const MANUAL_SYNC_KEEPALIVE_HOOK    = 'woo_contifico_manual_sync_keepalive';
         private const PRODUCT_ID_META_KEY         = '_woo_contifico_product_id';
@@ -1670,20 +1673,527 @@ class Woo_Contifico_Admin {
          *
          * @return mixed
          */
-        private function normalize_manual_sync_data( $value ) {
+private function normalize_manual_sync_data( $value ) {
 
-                if ( is_object( $value ) ) {
-                        $value = get_object_vars( $value );
-                }
+if ( is_object( $value ) ) {
+$value = get_object_vars( $value );
+}
 
-                if ( is_array( $value ) ) {
-                        foreach ( $value as $key => $item ) {
-                                $value[ $key ] = $this->normalize_manual_sync_data( $item );
-                        }
-                }
+if ( is_array( $value ) ) {
+foreach ( $value as $key => $item ) {
+$value[ $key ] = $this->normalize_manual_sync_data( $item );
+}
+}
 
-                return $value;
-        }
+return $value;
+}
+
+/**
+ * Retrieve the cached inventory movements list.
+ *
+ * @since 4.3.1
+ */
+private function get_inventory_movements_storage() : array {
+
+$cached = get_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
+
+if ( false !== $cached && is_array( $cached ) ) {
+return $cached;
+}
+
+$entries    = get_option( self::INVENTORY_MOVEMENTS_STORAGE, [] );
+$entries    = $this->normalize_manual_sync_data( $entries );
+$processed  = [];
+
+if ( ! is_array( $entries ) ) {
+$entries = [];
+}
+
+foreach ( $entries as $entry ) {
+$entry = $this->normalize_inventory_movement_entry( $entry );
+
+if ( ! empty( $entry ) ) {
+$processed[] = $entry;
+}
+}
+
+set_transient( self::INVENTORY_MOVEMENTS_TRANSIENT, $processed, MINUTE_IN_SECONDS );
+
+return $processed;
+}
+
+/**
+ * Persist the inventory movements list.
+ *
+ * @since 4.3.1
+ */
+private function save_inventory_movements( array $entries ) : void {
+update_option( self::INVENTORY_MOVEMENTS_STORAGE, array_values( $entries ), false );
+delete_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
+}
+
+       /**
+        * Append multiple inventory movement entries.
+        *
+        * @since 4.3.1
+        */
+       private function append_inventory_movement_entries( array $entries ) : void {
+
+               if ( empty( $entries ) ) {
+                       return;
+               }
+
+               $current = $this->get_inventory_movements_storage();
+               $entries = array_map( [ $this, 'normalize_inventory_movement_entry' ], $entries );
+               $entries = array_filter( $entries );
+
+               if ( empty( $entries ) ) {
+                       return;
+               }
+
+               $current = array_merge( $entries, $current );
+
+               if ( count( $current ) > self::INVENTORY_MOVEMENTS_MAX_ENTRIES ) {
+                       $current = array_slice( $current, 0, self::INVENTORY_MOVEMENTS_MAX_ENTRIES );
+               }
+
+               $this->save_inventory_movements( $current );
+       }
+
+       /**
+        * Append a single inventory movement entry.
+        *
+        * @since 4.3.1
+        */
+       private function append_inventory_movement_entry( array $entry ) : void {
+               $this->append_inventory_movement_entries( [ $entry ] );
+       }
+
+       /**
+        * Normalize an inventory movement entry ensuring expected keys.
+        *
+        * @since 4.3.1
+        */
+       private function normalize_inventory_movement_entry( $entry ) : array {
+
+               $entry = $this->normalize_manual_sync_data( $entry );
+
+               if ( ! is_array( $entry ) ) {
+                       return [];
+               }
+
+               $timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : current_time( 'timestamp' );
+               $event     = isset( $entry['event_type'] ) && in_array( $entry['event_type'], [ 'ingreso', 'egreso' ], true ) ? $entry['event_type'] : 'egreso';
+               $status    = isset( $entry['status'] ) && in_array( $entry['status'], [ 'pending', 'success', 'error' ], true ) ? $entry['status'] : 'pending';
+               $sync_type = isset( $entry['sync_type'] ) && in_array( $entry['sync_type'], [ 'global', 'product' ], true ) ? $entry['sync_type'] : 'global';
+
+               $defaults = [
+                       'timestamp'        => $timestamp,
+                       'order_id'         => isset( $entry['order_id'] ) ? (int) $entry['order_id'] : 0,
+                       'event_type'       => $event,
+                       'product_id'       => isset( $entry['product_id'] ) ? (string) $entry['product_id'] : '',
+                       'wc_product_id'    => isset( $entry['wc_product_id'] ) ? (int) $entry['wc_product_id'] : 0,
+                       'sku'              => isset( $entry['sku'] ) ? (string) $entry['sku'] : '',
+                       'product_name'     => isset( $entry['product_name'] ) ? (string) $entry['product_name'] : '',
+                       'quantity'         => isset( $entry['quantity'] ) ? (float) $entry['quantity'] : 0.0,
+                       'warehouses'       => [
+                               'from' => [
+                                       'id'    => isset( $entry['warehouses']['from']['id'] ) ? (string) $entry['warehouses']['from']['id'] : '',
+                                       'label' => isset( $entry['warehouses']['from']['label'] ) ? (string) $entry['warehouses']['from']['label'] : '',
+                               ],
+                               'to'   => [
+                                       'id'    => isset( $entry['warehouses']['to']['id'] ) ? (string) $entry['warehouses']['to']['id'] : '',
+                                       'label' => isset( $entry['warehouses']['to']['label'] ) ? (string) $entry['warehouses']['to']['label'] : '',
+                               ],
+                       ],
+                       'order_status'     => isset( $entry['order_status'] ) ? (string) $entry['order_status'] : '',
+                       'order_trigger'    => isset( $entry['order_trigger'] ) ? (string) $entry['order_trigger'] : '',
+                       'context'          => isset( $entry['context'] ) ? (string) $entry['context'] : '',
+                       'order_source'     => isset( $entry['order_source'] ) ? (string) $entry['order_source'] : '',
+                       'order_item_id'    => isset( $entry['order_item_id'] ) ? (int) $entry['order_item_id'] : 0,
+                       'reference'        => isset( $entry['reference'] ) ? (string) $entry['reference'] : '',
+                       'error_message'    => isset( $entry['error_message'] ) ? (string) $entry['error_message'] : '',
+                       'status'           => $status,
+                       'sync_type'        => $sync_type,
+               ];
+
+               return $defaults;
+       }
+
+       /**
+        * Helper to build a normalized inventory movement entry from data.
+        *
+        * @since 4.3.1
+        */
+       private function build_inventory_movement_entry( array $data ) : array {
+               $data['timestamp'] = isset( $data['timestamp'] ) ? (int) $data['timestamp'] : current_time( 'timestamp' );
+
+               return $this->normalize_inventory_movement_entry( $data );
+       }
+
+       /**
+        * Update a list of entries with the final status returned by the API.
+        *
+        * @since 4.3.1
+        */
+       private function finalize_inventory_movement_entries( array $entries, string $status, string $reference = '', string $message = '' ) : array {
+               if ( ! in_array( $status, [ 'pending', 'success', 'error' ], true ) ) {
+                       $status = 'pending';
+               }
+
+               foreach ( $entries as &$entry ) {
+                       if ( ! is_array( $entry ) ) {
+                               continue;
+                       }
+
+                       $entry['status']    = $status;
+                       $entry['reference'] = $reference;
+
+                       if ( 'error' === $status ) {
+                               $entry['error_message'] = $message;
+                       } elseif ( 'success' === $status ) {
+                               $entry['error_message'] = '';
+                       }
+               }
+               unset( $entry );
+
+               return array_map( [ $this, 'normalize_inventory_movement_entry' ], $entries );
+       }
+
+	/**
+	 * Prepare sanitized filters for the inventory movement report.
+	 *
+	 * @since 4.3.1
+	 */
+	private function prepare_inventory_movement_filters( array $args ) : array {
+	$filters = wp_parse_args( $args, [
+	'start_date' => '',
+	'end_date'   => '',
+	'product_id' => 0,
+	'sku'        => '',
+	'period'     => 'day',
+	'scope'      => 'all',
+	] );
+
+	$filters['start_date'] = $this->sanitize_inventory_report_date( $filters['start_date'] );
+	$filters['end_date']   = $this->sanitize_inventory_report_date( $filters['end_date'] );
+	$filters['product_id'] = absint( $filters['product_id'] );
+	$filters['sku']        = strtoupper( sanitize_text_field( (string) $filters['sku'] ) );
+	$filters['period']     = in_array( $filters['period'], [ 'day', 'week', 'month' ], true ) ? $filters['period'] : 'day';
+	$filters['scope']      = in_array( $filters['scope'], [ 'all', 'global', 'product' ], true ) ? $filters['scope'] : 'all';
+
+	$filters['start_timestamp'] = '' !== $filters['start_date'] ? strtotime( $filters['start_date'] . ' 00:00:00' ) : null;
+	$filters['end_timestamp']   = '' !== $filters['end_date'] ? strtotime( $filters['end_date'] . ' 23:59:59' ) : null;
+
+	return $filters;
+	}
+
+	/**
+	 * Sanitize incoming date values for the inventory report filters.
+	 *
+	 * @since 4.3.1
+	 */
+	private function sanitize_inventory_report_date( $value ) : string {
+	$value = trim( (string) $value );
+
+	if ( '' === $value ) {
+	return '';
+	}
+
+	$timestamp = strtotime( $value );
+
+	if ( ! $timestamp ) {
+	return '';
+	}
+
+	return gmdate( 'Y-m-d', $timestamp );
+	}
+
+	/**
+	 * Generate a summarized inventory movement report including totals and raw entries.
+	 *
+	 * @since 4.3.1
+	 */
+	public function get_inventory_movements_report( array $args = [] ) : array {
+	$filters          = $this->prepare_inventory_movement_filters( $args );
+	$entries          = $this->get_inventory_movements_storage();
+	$filtered_entries = [];
+	$totals           = [ 'ingresos' => 0.0, 'egresos' => 0.0, 'balance' => 0.0 ];
+	$period_totals    = [];
+	$product_totals   = [];
+
+	foreach ( $entries as $entry ) {
+	$timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
+
+	if ( $filters['start_timestamp'] && $timestamp < $filters['start_timestamp'] ) {
+	continue;
+	}
+
+	if ( $filters['end_timestamp'] && $timestamp > $filters['end_timestamp'] ) {
+	continue;
+	}
+
+	if ( $filters['product_id'] && $filters['product_id'] !== (int) $entry['wc_product_id'] ) {
+	continue;
+	}
+
+	if ( '' !== $filters['sku'] && strtoupper( (string) $entry['sku'] ) !== $filters['sku'] ) {
+	continue;
+	}
+
+	if ( 'all' !== $filters['scope'] && $filters['scope'] !== $entry['sync_type'] ) {
+	continue;
+	}
+
+	$filtered_entries[] = $entry;
+
+	$quantity = isset( $entry['quantity'] ) ? (float) $entry['quantity'] : 0.0;
+	$event    = isset( $entry['event_type'] ) ? $entry['event_type'] : 'egreso';
+
+	if ( 'ingreso' === $event ) {
+	$totals['ingresos'] += $quantity;
+	} else {
+	$totals['egresos'] += $quantity;
+	}
+
+	list( $period_key, $period_label ) = $this->resolve_inventory_movement_period_key( $timestamp, $filters['period'] );
+
+	if ( ! isset( $period_totals[ $period_key ] ) ) {
+	$period_totals[ $period_key ] = [
+	'key'      => $period_key,
+	'label'    => $period_label,
+	'ingresos' => 0.0,
+	'egresos'  => 0.0,
+	'balance'  => 0.0,
+	];
+	}
+
+	if ( 'ingreso' === $event ) {
+	$period_totals[ $period_key ]['ingresos'] += $quantity;
+	} else {
+	$period_totals[ $period_key ]['egresos']  += $quantity;
+	}
+
+	$period_totals[ $period_key ]['balance'] = $period_totals[ $period_key ]['ingresos'] - $period_totals[ $period_key ]['egresos'];
+
+	$product_key = $entry['wc_product_id'] . ':' . strtoupper( (string) $entry['sku'] );
+
+	if ( ! isset( $product_totals[ $product_key ] ) ) {
+	$product_totals[ $product_key ] = [
+	'wc_product_id' => $entry['wc_product_id'],
+	'product_id'    => $entry['product_id'],
+	'product_name'  => $entry['product_name'],
+	'sku'           => $entry['sku'],
+	'ingresos'      => 0.0,
+	'egresos'       => 0.0,
+	'balance'       => 0.0,
+	'last_movement' => $timestamp,
+	];
+	}
+
+	if ( 'ingreso' === $event ) {
+	$product_totals[ $product_key ]['ingresos'] += $quantity;
+	} else {
+	$product_totals[ $product_key ]['egresos']  += $quantity;
+	}
+
+	$product_totals[ $product_key ]['balance']       = $product_totals[ $product_key ]['ingresos'] - $product_totals[ $product_key ]['egresos'];
+	$product_totals[ $product_key ]['last_movement'] = max( $product_totals[ $product_key ]['last_movement'], $timestamp );
+	}
+
+	usort( $filtered_entries, static function ( $a, $b ) {
+	return ( $b['timestamp'] ?? 0 ) <=> ( $a['timestamp'] ?? 0 );
+	} );
+
+	$totals['balance'] = $totals['ingresos'] - $totals['egresos'];
+
+	usort( $period_totals, static function ( $a, $b ) {
+	return strcmp( $a['key'], $b['key'] );
+	} );
+
+	usort( $product_totals, static function ( $a, $b ) {
+	return ( $b['last_movement'] ?? 0 ) <=> ( $a['last_movement'] ?? 0 );
+	} );
+
+	$chart_periods = [];
+
+	foreach ( $period_totals as $period_total ) {
+	$chart_periods[] = [
+	'label'    => $period_total['label'],
+	'ingresos' => $period_total['ingresos'],
+	'egresos'  => $period_total['egresos'],
+	];
+	}
+
+	$chart_products = array_slice( $product_totals, 0, 10 );
+
+	return [
+	'filters'           => $filters,
+	'entries'           => $filtered_entries,
+	'totals'            => $totals,
+	'totals_by_period'  => $period_totals,
+	'totals_by_product' => $product_totals,
+	'chart_data'        => [
+	'periods'  => $chart_periods,
+	'products' => $chart_products,
+	],
+	];
+	}
+
+	/**
+	 * Export the inventory movement report as CSV or JSON.
+	 *
+	 * @since 4.3.1
+	 */
+	public function export_inventory_movements() : void {
+	if ( ! current_user_can( 'manage_woocommerce' ) ) {
+	wp_die( esc_html__( 'No tienes permisos suficientes para descargar este informe.', 'woo-contifico' ) );
+	}
+
+	$nonce = isset( $_GET['nonce'] ) ? sanitize_text_field( wp_unslash( $_GET['nonce'] ) ) : '';
+
+	if ( ! wp_verify_nonce( $nonce, 'woo_contifico_export_inventory_movements' ) ) {
+	wp_die( esc_html__( 'Solicitud no válida.', 'woo-contifico' ) );
+	}
+
+	$format  = isset( $_GET['format'] ) ? sanitize_key( wp_unslash( $_GET['format'] ) ) : 'csv';
+	$filters = [
+	'start_date' => isset( $_GET['start_date'] ) ? sanitize_text_field( wp_unslash( $_GET['start_date'] ) ) : '',
+	'end_date'   => isset( $_GET['end_date'] ) ? sanitize_text_field( wp_unslash( $_GET['end_date'] ) ) : '',
+	'product_id' => isset( $_GET['product_id'] ) ? absint( wp_unslash( $_GET['product_id'] ) ) : 0,
+	'sku'        => isset( $_GET['sku'] ) ? sanitize_text_field( wp_unslash( $_GET['sku'] ) ) : '',
+	'period'     => isset( $_GET['period'] ) ? sanitize_key( wp_unslash( $_GET['period'] ) ) : 'day',
+	'scope'      => isset( $_GET['scope'] ) ? sanitize_key( wp_unslash( $_GET['scope'] ) ) : 'all',
+	];
+
+	$report = $this->get_inventory_movements_report( $filters );
+
+	if ( 'json' === $format ) {
+	wp_send_json( [
+	'filters'           => $report['filters'],
+	'totals'            => $report['totals'],
+	'entries'           => $report['entries'],
+	'totals_by_product' => $report['totals_by_product'],
+	] );
+	}
+
+	nocache_headers();
+	$filename = sprintf( 'woo-contifico-inventory-movements-%s.csv', gmdate( 'Ymd-His' ) );
+	header( 'Content-Type: text/csv; charset=utf-8' );
+	header( 'Content-Disposition: attachment; filename=' . $filename );
+	header( 'Pragma: no-cache' );
+	header( 'Expires: 0' );
+
+	$output = fopen( 'php://output', 'w' );
+
+	$headers = [
+	__( 'Fecha', 'woo-contifico' ),
+	__( 'Evento', 'woo-contifico' ),
+	__( 'Orden', 'woo-contifico' ),
+	__( 'Producto', 'woo-contifico' ),
+	__( 'SKU', 'woo-contifico' ),
+	__( 'Cantidad', 'woo-contifico' ),
+	__( 'Bodega origen', 'woo-contifico' ),
+	__( 'Bodega destino', 'woo-contifico' ),
+	__( 'Estado', 'woo-contifico' ),
+	__( 'Referencia API', 'woo-contifico' ),
+	__( 'Mensaje', 'woo-contifico' ),
+	];
+
+	fputcsv( $output, $headers );
+
+	foreach ( $report['entries'] as $entry ) {
+	fputcsv( $output, [
+	wp_date( 'Y-m-d H:i:s', (int) $entry['timestamp'] ),
+	isset( $entry['event_type'] ) ? $entry['event_type'] : '',
+	isset( $entry['order_id'] ) ? (int) $entry['order_id'] : 0,
+	isset( $entry['product_name'] ) ? $entry['product_name'] : '',
+	isset( $entry['sku'] ) ? $entry['sku'] : '',
+	isset( $entry['quantity'] ) ? (float) $entry['quantity'] : 0,
+	isset( $entry['warehouses']['from']['label'] ) ? $entry['warehouses']['from']['label'] : '',
+	isset( $entry['warehouses']['to']['label'] ) ? $entry['warehouses']['to']['label'] : '',
+	isset( $entry['status'] ) ? $entry['status'] : 'pending',
+	isset( $entry['reference'] ) ? $entry['reference'] : '',
+	isset( $entry['error_message'] ) ? $entry['error_message'] : '',
+	] );
+	}
+
+	fclose( $output );
+	exit;
+	}
+
+	/**
+	 * Resolve the grouping key and label based on the selected period granularity.
+	 *
+	 * @since 4.3.1
+	 */
+	private function resolve_inventory_movement_period_key( int $timestamp, string $period ) : array {
+	switch ( $period ) {
+	case 'week':
+	$key   = wp_date( 'o-\WW', $timestamp );
+	$label = sprintf(
+	/* translators: 1: ISO week number. 2: year. */
+	__( 'Semana %1$s · %2$s', 'woo-contifico' ),
+	wp_date( 'W', $timestamp ),
+	wp_date( 'Y', $timestamp )
+	);
+	break;
+	case 'month':
+	$key   = wp_date( 'Y-m', $timestamp );
+	$label = wp_date( _x( 'F Y', 'inventory report month label', 'woo-contifico' ), $timestamp );
+	break;
+	case 'day':
+	default:
+	$key   = wp_date( 'Y-m-d', $timestamp );
+	$label = wp_date( get_option( 'date_format', 'Y-m-d' ), $timestamp );
+	break;
+	}
+
+	return [ $key, $label ];
+	}
+
+	/**
+	 * Build a list of product choices discovered in the movement log.
+	 *
+	 * @since 4.3.1
+	 */
+	private function get_inventory_movement_product_choices() : array {
+	$choices = [];
+
+	foreach ( $this->get_inventory_movements_storage() as $entry ) {
+	$wc_product_id = isset( $entry['wc_product_id'] ) ? (int) $entry['wc_product_id'] : 0;
+
+	if ( ! $wc_product_id ) {
+	continue;
+	}
+
+	if ( isset( $choices[ $wc_product_id ] ) ) {
+	continue;
+	}
+
+	$label = $entry['product_name'];
+
+	if ( '' === $label ) {
+	$label = sprintf( __( 'Producto #%d', 'woo-contifico' ), $wc_product_id );
+	}
+
+	if ( ! empty( $entry['sku'] ) ) {
+	$label .= sprintf( ' (%s)', $entry['sku'] );
+	}
+
+	$choices[ $wc_product_id ] = [
+	'id'    => $wc_product_id,
+	'label' => $label,
+	'sku'   => $entry['sku'],
+	];
+	}
+
+	uasort( $choices, static function ( $a, $b ) {
+	return strcmp( $a['label'], $b['label'] );
+	} );
+
+	return array_values( $choices );
+	}
 
         /**
          * Reset the environment before running a manual synchronization.
@@ -3614,36 +4124,78 @@ class Woo_Contifico_Admin {
 				'pos'               => $this->woo_contifico->settings["{$env}_api_token"],
 			];
 
-			try {
-				/** @var WC_Order_item_Product $item */
-				foreach ( $order->get_items() as $item ) {
-					$wc_product = $item->get_product();
-					$sku        = $wc_product->get_sku();
-					$product_id = $this->contifico->get_product_id( $sku );
+$status        = 'pending';
+$reference_code = '';
+$error_message  = '';
+$movement_entries = [];
 
-					$transfer_stock['detalles'][] = [
-						'producto_id' => $product_id,
-						'cantidad'    => $item->get_quantity(),
-					];
-				}
+try {
+/** @var WC_Order_Item_Product $item */
+foreach ( $order->get_items() as $item ) {
+$wc_product = $item->get_product();
 
-				$result = $this->contifico->transfer_stock( json_encode( $transfer_stock ) );
-                                $order->add_order_note( sprintf(
-                                                __( '<b>Contífico: </b><br> Inventario trasladado a la bodega web %s', $this->plugin_name ),
-                                                $result['codigo']
-                                        )
-                                );
-                                $order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( true ) );
-                                $order->save();
-			}
-			catch ( Exception $exception ) {
-				$order->add_order_note( sprintf(
-						__( '<b>Contífico retornó un error al transferir inventario a la bodega web</b><br>%s', $this->plugin_name ),
-						$exception->getMessage()
-					)
-				);
-			}
-		}
+if ( ! $wc_product ) {
+continue;
+}
+
+$sku        = (string) $wc_product->get_sku();
+$product_id = $this->contifico->get_product_id( $sku );
+$quantity   = (float) $item->get_quantity();
+
+$transfer_stock['detalles'][] = [
+'producto_id' => $product_id,
+'cantidad'    => $quantity,
+];
+
+$movement_entries[] = $this->build_inventory_movement_entry( [
+'order_id'      => $order_id,
+'event_type'    => 'egreso',
+'product_id'    => $product_id,
+'wc_product_id' => $wc_product->get_id(),
+'sku'           => $sku,
+'product_name'  => $wc_product->get_name(),
+'quantity'      => $quantity,
+'warehouses'    => [
+'from' => [ 'id' => (string) $id_origin_warehouse, 'label' => $this->woo_contifico->settings['bodega'] ?? '' ],
+'to'   => [ 'id' => (string) $id_destination_warehouse, 'label' => $this->woo_contifico->settings['bodega_facturacion'] ?? '' ],
+],
+'order_status'  => $order->get_status(),
+'order_trigger' => 'woocommerce_reduce_order_stock',
+'context'       => 'transfer',
+'order_source'  => 'order',
+'order_item_id' => $item->get_id(),
+'sync_type'     => 'global',
+] );
+}
+
+if ( ! empty( $transfer_stock['detalles'] ) ) {
+$result        = $this->contifico->transfer_stock( json_encode( $transfer_stock ) );
+$reference_code = isset( $result['codigo'] ) ? (string) $result['codigo'] : '';
+$status         = 'success';
+$order->add_order_note( sprintf(
+__( '<b>Contífico: </b><br> Inventario trasladado a la bodega web %s', $this->plugin_name ),
+$reference_code
+)
+);
+$order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( true ) );
+$order->save();
+}
+}
+catch ( Exception $exception ) {
+$status        = 'error';
+$error_message = $exception->getMessage();
+$order->add_order_note( sprintf(
+__( '<b>Contífico retornó un error al transferir inventario a la bodega web</b><br>%s', $this->plugin_name ),
+$error_message
+)
+);
+}
+
+if ( ! empty( $movement_entries ) ) {
+$movement_entries = $this->finalize_inventory_movement_entries( $movement_entries, $status, $reference_code, $error_message );
+$this->append_inventory_movement_entries( $movement_entries );
+}
+}
 	}
 
 	/**
@@ -3696,57 +4248,98 @@ class Woo_Contifico_Admin {
 				'pos'               => $this->woo_contifico->settings["{$env}_api_token"],
 			];
 
-			# Get items to restore
-			$items = empty( $refund_id ) ? $order->get_items() : $refund->get_items();
-			if( empty($items) && !empty($refund) ) {
-				$items = $order->get_items();
-				$refund = null;
-			}
+# Get items to restore
+$items = empty( $refund_id ) ? $order->get_items() : $refund->get_items();
+if( empty($items) && !empty($refund) ) {
+$items = $order->get_items();
+$refund = null;
+}
 
-			try {
-				/** @var WC_Order_item_Product $item */
-				foreach ( $items as $item ) {
-					$wc_product = $item->get_product();
-					$sku        = $wc_product->get_sku();
-					$price      = $wc_product->get_price();
-					$product_id = $this->contifico->get_product_id( $sku );
+$status          = 'pending';
+$reference_code   = '';
+$error_message    = '';
+$movement_entries = [];
+$trigger          = empty( $refund_id ) ? 'woocommerce_restore_order_stock' : 'woocommerce_order_refunded';
+$order_source     = empty( $refund_id ) ? 'order' : 'refund';
 
-					if ( empty( $refund ) ) {
-						$item_stock_reduced = $item->get_meta( '_reduced_stock', true );
-						$item_quantity      = empty( $item_stock_reduced ) ? $item->get_quantity() : $item_stock_reduced;
-					} else {
-						$item_quantity = abs( $item->get_quantity() );
-					}
+try {
+/** @var WC_Order_Item_Product $item */
+foreach ( $items as $item ) {
+$wc_product = $item->get_product();
 
-					$restore_stock['detalles'][] = [
-						'producto_id' => $product_id,
-						'precio'      => $price,
-						'cantidad'    => $item_quantity,
-					];
-				}
+if ( ! $wc_product ) {
+continue;
+}
 
-				if ( ! empty( $restore_stock['detalles'] ) ) {
-					$result = $this->contifico->transfer_stock( json_encode( $restore_stock ) );
-					$order->add_order_note( sprintf(
-							__( '<b>Contífico: </b><br> Inventario restaurado a la bodega principal debido a %s: %s', $this->plugin_name ),
-							empty( $refund ) ?
-								empty($refund_id) ? 'cancelación de la orden' : "reembolso #{$refund_id}"
-								: "reembolso total o parcial #{$refund_id}",
-							$result['codigo']
-						)
-					);
-				}
-			}
-			catch ( Exception $exception ) {
-				$order->add_order_note( sprintf(
-						__( '<b>Contífico retornó un error al restituir inventario a la bodega principal</b><br>%s', $this->plugin_name ),
-						$exception->getMessage()
-					)
-				);
-			}
-		}
+$sku        = (string) $wc_product->get_sku();
+$price      = $wc_product->get_price();
+$product_id = $this->contifico->get_product_id( $sku );
 
-	}
+if ( empty( $refund ) ) {
+$item_stock_reduced = $item->get_meta( '_reduced_stock', true );
+$item_quantity      = empty( $item_stock_reduced ) ? $item->get_quantity() : $item_stock_reduced;
+} else {
+$item_quantity = abs( $item->get_quantity() );
+}
+
+$restore_stock['detalles'][] = [
+'producto_id' => $product_id,
+'precio'      => $price,
+'cantidad'    => $item_quantity,
+];
+
+$movement_entries[] = $this->build_inventory_movement_entry( [
+'order_id'      => $order_id,
+'event_type'    => 'ingreso',
+'product_id'    => $product_id,
+'wc_product_id' => $wc_product->get_id(),
+'sku'           => $sku,
+'product_name'  => $wc_product->get_name(),
+'quantity'      => (float) $item_quantity,
+'warehouses'    => [
+'from' => [ 'id' => (string) $id_origin_warehouse, 'label' => $this->woo_contifico->settings['bodega_facturacion'] ?? '' ],
+'to'   => [ 'id' => (string) $id_destination_warehouse, 'label' => $this->woo_contifico->settings['bodega'] ?? '' ],
+],
+'order_status'  => $order->get_status(),
+'order_trigger' => $trigger,
+'context'       => 'restore',
+'order_source'  => $order_source,
+'order_item_id' => $item->get_id(),
+'sync_type'     => 'global',
+] );
+}
+
+if ( ! empty( $restore_stock['detalles'] ) ) {
+$result        = $this->contifico->transfer_stock( json_encode( $restore_stock ) );
+$reference_code = isset( $result['codigo'] ) ? (string) $result['codigo'] : '';
+$status         = 'success';
+$order->add_order_note( sprintf(
+__( '<b>Contífico: </b><br> Inventario restaurado a la bodega principal debido a %s: %s', $this->plugin_name ),
+empty( $refund ) ?
+empty($refund_id) ? 'cancelación de la orden' : "reembolso #{$refund_id}"
+: "reembolso total o parcial #{$refund_id}",
+$reference_code
+)
+);
+}
+}
+catch ( Exception $exception ) {
+$status        = 'error';
+$error_message = $exception->getMessage();
+$order->add_order_note( sprintf(
+__( '<b>Contífico retornó un error al restituir inventario a la bodega principal</b><br>%s', $this->plugin_name ),
+$error_message
+)
+);
+}
+
+if ( ! empty( $movement_entries ) ) {
+$movement_entries = $this->finalize_inventory_movement_entries( $movement_entries, $status, $reference_code, $error_message );
+$this->append_inventory_movement_entries( $movement_entries );
+}
+}
+
+}
 
 	/**
 	 * Validate integration data before saving
