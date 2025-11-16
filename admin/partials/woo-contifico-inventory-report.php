@@ -25,11 +25,11 @@ protected $prepared_items = [];
                         ] );
                 }
 
-public function set_table_items( array $items ) : void {
+public function set_table_items( array $items ) {
 $this->prepared_items = $items;
 }
 
-public function prepare_items() : void {
+public function prepare_items() {
 $columns               = $this->get_columns();
 $hidden                = [];
 $sortable              = [];
