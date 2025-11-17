@@ -4582,6 +4582,11 @@ empty($refund_id) ? 'cancelación de la orden' : "reembolso #{$refund_id}"
 $reference_code
 )
 );
+$order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( false ) );
+$order->add_order_note(
+__( '<b>Contífico: </b><br> Inventario marcado como disponible nuevamente en la bodega principal.', $this->plugin_name )
+);
+$order->save();
 }
 }
 catch ( Exception $exception ) {
