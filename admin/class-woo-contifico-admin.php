@@ -2187,8 +2187,27 @@ return $value;
                 return '';
         }
 
-       /**
-        * Update a list of entries with the final status returned by the API.
+        /**
+         * Format the annotation displayed when a MultiLoca location is available.
+         *
+         * @since 4.4.0
+         *
+         * @param array $context
+         * @return string
+         */
+        private function format_inventory_location_annotation( array $context ) : string {
+                $location_label = isset( $context['location_label'] ) ? (string) $context['location_label'] : '';
+                $is_mapped      = isset( $context['mapped'] ) ? (bool) $context['mapped'] : false;
+
+                if ( '' === $location_label || ! $is_mapped ) {
+                        return '';
+                }
+
+                return ' ' . sprintf( __( '(Ubicación MultiLoca: %s)', $this->plugin_name ), $location_label );
+        }
+
+/**
+ * Update a list of entries with the final status returned by the API.
         *
         * @since 4.3.1
         */
@@ -4594,11 +4613,10 @@ $filters = [
                                 'pos'               => $this->woo_contifico->settings["{$env}_api_token"],
                         ];
 
-                        if ( $origin_context['mapped'] && '' !== $origin_context['location_label'] ) {
-                                $transfer_stock['descripcion'] .= ' ' . sprintf(
-                                        __( '(Ubicación MultiLoca: %s)', $this->plugin_name ),
-                                        $origin_context['location_label']
-                                );
+                        $origin_location_annotation = $this->format_inventory_location_annotation( $origin_context );
+
+                        if ( '' !== $origin_location_annotation ) {
+                                $transfer_stock['descripcion'] .= $origin_location_annotation;
                         }
 
 $status        = 'pending';
@@ -4653,11 +4671,16 @@ if ( ! empty( $transfer_stock['detalles'] ) ) {
 $result        = $this->contifico->transfer_stock( json_encode( $transfer_stock ) );
 $reference_code = isset( $result['codigo'] ) ? (string) $result['codigo'] : '';
 $status         = 'success';
-$order->add_order_note( sprintf(
+$order_note = sprintf(
 __( '<b>Contífico: </b><br> Inventario trasladado a la bodega web %s', $this->plugin_name ),
 $reference_code
-)
 );
+
+if ( '' !== $origin_location_annotation ) {
+$order_note .= $origin_location_annotation;
+}
+
+$order->add_order_note( $order_note );
 $order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( true ) );
 $order->save();
 }
@@ -4665,11 +4688,16 @@ $order->save();
 catch ( Exception $exception ) {
 $status        = 'error';
 $error_message = $exception->getMessage();
-$order->add_order_note( sprintf(
+$order_note = sprintf(
 __( '<b>Contífico retornó un error al transferir inventario a la bodega web</b><br>%s', $this->plugin_name ),
 $error_message
-)
 );
+
+if ( '' !== $origin_location_annotation ) {
+$order_note .= $origin_location_annotation;
+}
+
+$order->add_order_note( $order_note );
 }
 
 if ( ! empty( $movement_entries ) ) {
@@ -4733,11 +4761,10 @@ $this->append_inventory_movement_entries( $movement_entries );
                                 'pos'               => $this->woo_contifico->settings["{$env}_api_token"],
                         ];
 
-                        if ( $destination_context['mapped'] && '' !== $destination_context['location_label'] ) {
-                                $restore_stock['descripcion'] .= ' ' . sprintf(
-                                        __( '(Ubicación MultiLoca: %s)', $this->plugin_name ),
-                                        $destination_context['location_label']
-                                );
+                        $destination_location_annotation = $this->format_inventory_location_annotation( $destination_context );
+
+                        if ( '' !== $destination_location_annotation ) {
+                                $restore_stock['descripcion'] .= $destination_location_annotation;
                         }
 
 # Get items to restore
@@ -4809,29 +4836,43 @@ if ( ! empty( $restore_stock['detalles'] ) ) {
 $result        = $this->contifico->transfer_stock( json_encode( $restore_stock ) );
 $reference_code = isset( $result['codigo'] ) ? (string) $result['codigo'] : '';
 $status         = 'success';
-$order->add_order_note( sprintf(
+$order_note = sprintf(
 __( '<b>Contífico: </b><br> Inventario restaurado a la bodega principal debido a %s: %s', $this->plugin_name ),
 empty( $refund ) ?
 empty($refund_id) ? 'cancelación de la orden' : "reembolso #{$refund_id}"
 : "reembolso total o parcial #{$refund_id}",
 $reference_code
-)
 );
+
+if ( '' !== $destination_location_annotation ) {
+$order_note .= $destination_location_annotation;
+}
+
+$order->add_order_note( $order_note );
 $order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( false ) );
-$order->add_order_note(
-__( '<b>Contífico: </b><br> Inventario marcado como disponible nuevamente en la bodega principal.', $this->plugin_name )
-);
+$availability_note = __( '<b>Contífico: </b><br> Inventario marcado como disponible nuevamente en la bodega principal.', $this->plugin_name );
+
+if ( '' !== $destination_location_annotation ) {
+$availability_note .= $destination_location_annotation;
+}
+
+$order->add_order_note( $availability_note );
 $order->save();
 }
 }
 catch ( Exception $exception ) {
 $status        = 'error';
 $error_message = $exception->getMessage();
-$order->add_order_note( sprintf(
+$order_note = sprintf(
 __( '<b>Contífico retornó un error al restituir inventario a la bodega principal</b><br>%s', $this->plugin_name ),
 $error_message
-)
 );
+
+if ( '' !== $destination_location_annotation ) {
+$order_note .= $destination_location_annotation;
+}
+
+$order->add_order_note( $order_note );
 }
 
 if ( ! empty( $movement_entries ) ) {
@@ -5308,6 +5349,16 @@ $this->append_inventory_movement_entries( $movement_entries );
 
 		$total_con_impuestos = round($subtotal_impuestos,2) + round($subtotal_0,2) + $iva_global;
 
+		$invoice_warehouse_code = isset( $this->woo_contifico->settings['bodega_facturacion'] ) ? (string) $this->woo_contifico->settings['bodega_facturacion'] : '';
+		$invoice_warehouse_id   = '';
+
+		if ( '' !== $invoice_warehouse_code ) {
+			$invoice_warehouse_id = (string) ( $this->contifico->get_id_bodega( $invoice_warehouse_code ) ?? '' );
+		}
+
+		$invoice_location_context    = $this->resolve_order_location_inventory_context( $order, $invoice_warehouse_code, $invoice_warehouse_id );
+		$invoice_location_annotation = $this->format_inventory_location_annotation( $invoice_location_context );
+
 		# Generate document number
 		if ( 'FAC' === $this->woo_contifico->settings['tipo_documento'] ) {
 			try {
@@ -5320,6 +5371,12 @@ $this->append_inventory_movement_entries( $movement_entries );
 		}
 		else {
 			$documento = date( 'Ymd' ) . $order_id;
+		}
+
+		$document_description = sprintf( __( 'Referencia: Orden %d', $this->plugin_name ), $order_id);
+
+		if ( '' !== $invoice_location_annotation ) {
+			$document_description .= $invoice_location_annotation;
 		}
 
 		$data = [
@@ -5347,7 +5404,7 @@ $this->append_inventory_movement_entries( $movement_entries );
 				'email'         => $this->woo_contifico->settings['emisor_email'],
 				'es_extranjero' => $extranjero,
 			],
-			'descripcion'    => sprintf( __( 'Referencia: Orden %d', $this->plugin_name ), $order_id),
+			'descripcion'    => $document_description,
 			'subtotal_0'     => round( $subtotal_0, 2 ),
 			'subtotal_12'    => round( $subtotal_impuestos, 2 ),
 			'iva'            => round( $iva_global, 2 ),
@@ -5405,44 +5462,60 @@ $this->append_inventory_movement_entries( $movement_entries );
 				if ( 'FAC' === $this->woo_contifico->settings['tipo_documento'] ) {
 					$this->secuencial_rollback();
 				}
-				$order->add_order_note(sprintf(
+				$order_note = sprintf(
 					__( 'Contífico retornó errores en la petición. La respuesta del servidor es: %s', $this->plugin_name ),
 					$json_error
-				));
+				);
+
+				if ( '' !== $invoice_location_annotation ) {
+					$order_note .= $invoice_location_annotation;
+				}
+
+				$order->add_order_note( $order_note );
 			}
 			else {
                                 $order->update_meta_data( '_id_factura', $documento_electronico['id'] );
                                 $order->update_meta_data( '_numero_factura', $documento_electronico['documento'] );
                                 $order->save();
-				$order_note = __( 'El documento fue generado correctamente.<br><br>', $this->plugin_name );
-				switch( $this->woo_contifico->settings['tipo_documento'] ) {
-					case 'FAC':
-						$order_note .= sprintf(
+$order_note = __( 'El documento fue generado correctamente.<br><br>', $this->plugin_name );
+switch( $this->woo_contifico->settings['tipo_documento'] ) {
+case 'FAC':
+$order_note .= sprintf(
 							__( 'El número de la factura es: %s', $this->plugin_name ),
 							$documento_electronico['documento']
 						);
 						break;
 					case 'PRE':
-						$order_note .= sprintf(
-							__( 'El número de la pre factura es: %s', $this->plugin_name ),
-							$documento_electronico['documento']
-						);
-				}
-				$order->add_order_note( $order_note, 1 );
+$order_note .= sprintf(
+__( 'El número de la pre factura es: %s', $this->plugin_name ),
+$documento_electronico['documento']
+);
+}
+
+if ( '' !== $invoice_location_annotation ) {
+$order_note .= $invoice_location_annotation;
+}
+
+$order->add_order_note( $order_note, 1 );
 			}
 		}
 		catch (Exception $exception) {
 			if ( 'FAC' === $this->woo_contifico->settings['tipo_documento'] ) {
 				$this->secuencial_rollback();
 			}
-			$order->add_order_note( sprintf(
-					__('<b>Contífico retornó un error</b><br>%s', $this->plugin_name),
-					$exception->getMessage()
-				)
-			);
-		}
+$order_note = sprintf(
+                                __('<b>Contífico retornó un error</b><br>%s', $this->plugin_name),
+                                $exception->getMessage()
+                        );
 
-	}
+                if ( '' !== $invoice_location_annotation ) {
+                        $order_note .= $invoice_location_annotation;
+                }
+
+                $order->add_order_note( $order_note );
+        }
+
+}
 
 	/**
 	 *  Add fields to admin area.
