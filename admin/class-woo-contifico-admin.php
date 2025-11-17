@@ -22,14 +22,15 @@ if ( ! class_exists( 'Woo_Contifico_Diagnostics_Table' ) ) {
  */
 class Woo_Contifico_Admin {
 
-        private const SYNC_DEBUG_TRANSIENT_KEY    = 'woo_contifico_sync_debug_entries';
-        private const SYNC_RESULT_TRANSIENT_KEY   = 'woo_sync_result';
-        private const MANUAL_SYNC_STATE_OPTION    = 'woo_contifico_manual_sync_state';
-private const MANUAL_SYNC_HISTORY_OPTION  = 'woo_contifico_manual_sync_history';
-private const INVENTORY_MOVEMENTS_STORAGE = 'woo_contifico_inventory_movements';
-private const INVENTORY_MOVEMENTS_TRANSIENT = 'woo_contifico_inventory_movements';
-private const INVENTORY_MOVEMENTS_MAX_ENTRIES = 250;
-private const INVENTORY_MOVEMENTS_HISTORY_RUNS = 'woo_contifico_inventory_movements_history_runs';
+	private const SYNC_DEBUG_TRANSIENT_KEY    = 'woo_contifico_sync_debug_entries';
+	private const SYNC_RESULT_TRANSIENT_KEY   = 'woo_sync_result';
+	private const MANUAL_SYNC_STATE_OPTION    = 'woo_contifico_manual_sync_state';
+	private const MANUAL_SYNC_HISTORY_OPTION  = 'woo_contifico_manual_sync_history';
+	private const INVENTORY_MOVEMENTS_STORAGE = 'woo_contifico_inventory_movements';
+	private const INVENTORY_MOVEMENTS_TRANSIENT = 'woo_contifico_inventory_movements';
+	private const INVENTORY_MOVEMENTS_MAX_ENTRIES = 250;
+	private const INVENTORY_MOVEMENTS_HISTORY_RUNS = 'woo_contifico_inventory_movements_history_runs';
+	private const MAX_INVOICE_SEQUENTIAL_RETRIES = 5;
         private const MANUAL_SYNC_CANCEL_TRANSIENT = 'woo_contifico_manual_sync_cancel';
         private const MANUAL_SYNC_KEEPALIVE_HOOK    = 'woo_contifico_manual_sync_keepalive';
         private const PRODUCT_ID_META_KEY         = '_woo_contifico_product_id';
@@ -5069,8 +5070,13 @@ $this->append_inventory_movement_entries( $movement_entries );
 
 		# Generate document number
 		if ( 'FAC' === $this->woo_contifico->settings['tipo_documento'] ) {
-			$secuencial = str_pad( $this->get_secuencial(), 9, '0', STR_PAD_LEFT );
-			$documento = $this->woo_contifico->settings["{$env}_establecimiento_punto"] . '-' . $this->woo_contifico->settings["{$env}_establecimiento_codigo"] . '-' . $secuencial;
+			try {
+				[ $secuencial, $documento ] = $this->generate_unique_document_number( $order, $env );
+			}
+			catch ( Exception $exception ) {
+				$order->add_order_note( $exception->getMessage() );
+				return;
+			}
 		}
 		else {
 			$documento = date( 'Ymd' ) . $order_id;
@@ -5186,6 +5192,9 @@ $this->append_inventory_movement_entries( $movement_entries );
 			}
 		}
 		catch (Exception $exception) {
+			if ( 'FAC' === $this->woo_contifico->settings['tipo_documento'] ) {
+				$this->secuencial_rollback();
+			}
 			$order->add_order_note( sprintf(
 					__('<b>Contífico retornó un error</b><br>%s', $this->plugin_name),
 					$exception->getMessage()
@@ -5416,6 +5425,67 @@ $this->append_inventory_movement_entries( $movement_entries );
 
 		return update_option( 'woo_contifico_pos_settings', $pos ) ? $pos["{$env}_secuencial_factura"] : null;
 	}
+
+	/**
+	 * Generate a unique document number for invoices.
+	 *
+	 * @since 4.3.0
+	 *
+	 * @param \WC_Order $order
+	 * @param string    $env
+	 * @return array{0:string,1:string}
+	 * @throws Exception
+	 */
+	private function generate_unique_document_number( \WC_Order $order, string $env ): array {
+		$attempts = 0;
+
+		do {
+			$secuencial_value = $this->get_secuencial();
+			if ( null === $secuencial_value ) {
+				throw new Exception( __( 'No se pudo obtener el secuencial para la factura.', $this->plugin_name ) );
+			}
+
+			$secuencial = str_pad( $secuencial_value, 9, '0', STR_PAD_LEFT );
+			$documento = $this->woo_contifico->settings["{$env}_establecimiento_punto"] . '-' . $this->woo_contifico->settings["{$env}_establecimiento_codigo"] . '-' . $secuencial;
+
+			if ( ! $this->invoice_document_exists( $documento ) ) {
+				return [ $secuencial, $documento ];
+			}
+
+			$order->add_order_note(
+				sprintf(
+					__( 'El número de factura %s ya existe. Se intentará con el siguiente secuencial.', $this->plugin_name ),
+					$documento
+				)
+			);
+			$attempts++;
+		} while ( $attempts < self::MAX_INVOICE_SEQUENTIAL_RETRIES );
+
+		throw new Exception( __( 'No se pudo generar un número de factura único. Revise la configuración del punto de venta.', $this->plugin_name ) );
+	}
+
+	/**
+	 * Check if the given document number already exists in WooCommerce orders.
+	 *
+	 * @since 4.3.0
+	 *
+	 * @param string $documento
+	 * @return bool
+	 */
+        private function invoice_document_exists( string $documento ): bool {
+                global $wpdb;
+
+                $meta_table = $wpdb->postmeta;
+                $invoice_exists = $wpdb->get_var(
+                        $wpdb->prepare(
+                                "SELECT post_id FROM {$meta_table} WHERE meta_key = %s AND meta_value = %s LIMIT 1",
+                                '_numero_factura',
+                                $documento
+                        )
+                );
+
+                return null !== $invoice_exists;
+        }
 
 	/**
 	 * An error has occurred, revert to last number
