@@ -260,18 +260,26 @@ class Woo_Contifico_Diagnostics {
             ? count( (array) $product->get_children() )
             : 0;
 
+        $empty_attributes = $this->find_attributes_without_values( $product );
+        $error_detectado  = [];
+
+        if ( ! empty( $empty_attributes ) ) {
+            $error_detectado[] = 'attribute_without_values';
+        }
+
         return [
             'post_id'                => $product->get_id(),
             'nombre'                 => $product->get_name(),
             'tipo'                   => $product->get_type(),
             'sku_detectado'          => trim( (string) $product->get_sku() ),
-            'error_detectado'        => [],
+            'error_detectado'        => $error_detectado,
             'codigo_contifico'       => '',
             'coincidencias_posibles' => [],
             'variaciones_sin_coincidencia' => [],
             'managing_stock'         => $managing_stock,
             'variation_count'        => $variation_count,
             'is_parent_placeholder'  => false,
+            'empty_attributes'       => $empty_attributes,
         ];
     }
 
@@ -316,12 +324,80 @@ class Woo_Contifico_Diagnostics {
             'coincidencias_posibles' => [],
             'parent_id'              => $parent->get_id(),
             'managing_stock'         => $managing_stock,
+            'empty_attributes'       => [],
             '_variation_meta'        => [
                 'candidate_sku' => $candidate_sku,
                 'size_slug'     => $size_slug,
                 'inferred_size' => $inferred_size,
             ],
         ];
+    }
+
+    /**
+     * Detect attributes defined without values in the product.
+     *
+     * @param WC_Product $product Product instance.
+     *
+     * @return array<int,string>
+     */
+    private function find_attributes_without_values( WC_Product $product ) : array {
+        if ( ! method_exists( $product, 'get_attributes' ) ) {
+            return [];
+        }
+
+        $attributes = $product->get_attributes();
+
+        if ( empty( $attributes ) ) {
+            return [];
+        }
+
+        $empty = [];
+
+        foreach ( $attributes as $attribute ) {
+            if ( ! $attribute instanceof WC_Product_Attribute ) {
+                continue;
+            }
+
+            $options = (array) $attribute->get_options();
+            $options = array_map(
+                static function ( $value ) {
+                    if ( is_string( $value ) ) {
+                        $value = trim( $value );
+                    }
+
+                    return $value;
+                },
+                $options
+            );
+            $options = array_filter(
+                $options,
+                static function ( $value ) {
+                    if ( is_string( $value ) ) {
+                        return '' !== $value;
+                    }
+
+                    return ! empty( $value );
+                }
+            );
+
+            if ( ! empty( $options ) ) {
+                continue;
+            }
+
+            $label = wc_attribute_label( $attribute->get_name(), $product );
+
+            if ( '' === $label ) {
+                $label = (string) $attribute->get_name();
+            }
+
+            if ( '' === $label ) {
+                continue;
+            }
+
+            $empty[] = $label;
+        }
+
+        return array_values( array_unique( $empty ) );
     }
 
     /**

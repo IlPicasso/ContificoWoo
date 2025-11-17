@@ -500,6 +500,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'child_no_contifico_match' => __( 'Variaciones sin coincidencia', 'woo-contifico' ),
             'variation_stock_disabled'  => __( 'Variación sin manejo de inventario', 'woo-contifico' ),
             'product_stock_disabled'    => __( 'Producto sin manejo de inventario', 'woo-contifico' ),
+            'attribute_without_values'  => __( 'Atributos sin valores', 'woo-contifico' ),
         ];
     }
 
@@ -543,6 +544,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'variation_count'        => 0,
             'is_parent_placeholder'  => false,
             'sync_status'            => '',
+            'empty_attributes'       => [],
         ];
 
         $entry = wp_parse_args( $entry, $defaults );
@@ -559,6 +561,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
         $entry['managing_stock']         = is_null( $entry['managing_stock'] ) ? null : (bool) $entry['managing_stock'];
         $entry['variation_count']        = (int) $entry['variation_count'];
         $entry['is_parent_placeholder']  = (bool) $entry['is_parent_placeholder'];
+        $entry['empty_attributes']       = array_values( array_filter( array_map( 'sanitize_text_field', (array) $entry['empty_attributes'] ) ) );
 
         $entry['problem_types']       = $this->detect_problem_types( $entry );
         $entry['sync_status']         = $this->determine_sync_status( $entry );
@@ -620,7 +623,12 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             return 'critical';
         }
 
-        if ( array_intersect( [ 'no_contifico_match', 'child_no_contifico_match', 'variation_stock_disabled', 'product_stock_disabled' ], $types ) ) {
+        if (
+            array_intersect(
+                [ 'no_contifico_match', 'child_no_contifico_match', 'variation_stock_disabled', 'product_stock_disabled', 'attribute_without_values' ],
+                $types
+            )
+        ) {
             return 'warning';
         }
 
@@ -723,6 +731,21 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                 case 'product_stock_disabled':
                     $messages[] = __( 'El producto no tiene habilitado el manejo de inventario, por lo que no se sincronizará el stock.', 'woo-contifico' );
                     break;
+                case 'attribute_without_values':
+                    $labels = isset( $entry['empty_attributes'] ) ? (array) $entry['empty_attributes'] : [];
+                    $labels = array_filter( array_map( 'esc_html', $labels ) );
+
+                    if ( empty( $labels ) ) {
+                        $messages[] = __( 'Hay atributos definidos sin valores, lo que genera selecciones vacías en la página del producto.', 'woo-contifico' );
+                        break;
+                    }
+
+                    $messages[] = sprintf(
+                        /* translators: %s: comma-separated list of attributes. */
+                        __( 'Los siguientes atributos no tienen valores configurados: %s.', 'woo-contifico' ),
+                        implode( ', ', $labels )
+                    );
+                    break;
             }
         }
 
@@ -763,6 +786,9 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                     break;
                 case 'product_stock_disabled':
                     $messages[] = __( 'Activa la opción "Gestionar inventario" en el producto y guarda los cambios antes de sincronizar.', 'woo-contifico' );
+                    break;
+                case 'attribute_without_values':
+                    $messages[] = __( 'Edita el producto y agrega valores a los atributos listados para evitar opciones vacías.', 'woo-contifico' );
                     break;
             }
         }
