@@ -29,6 +29,7 @@ private const MANUAL_SYNC_HISTORY_OPTION  = 'woo_contifico_manual_sync_history';
 private const INVENTORY_MOVEMENTS_STORAGE = 'woo_contifico_inventory_movements';
 private const INVENTORY_MOVEMENTS_TRANSIENT = 'woo_contifico_inventory_movements';
 private const INVENTORY_MOVEMENTS_MAX_ENTRIES = 250;
+private const INVENTORY_MOVEMENTS_HISTORY_RUNS = 'woo_contifico_inventory_movements_history_runs';
         private const MANUAL_SYNC_CANCEL_TRANSIENT = 'woo_contifico_manual_sync_cancel';
         private const MANUAL_SYNC_KEEPALIVE_HOOK    = 'woo_contifico_manual_sync_keepalive';
         private const PRODUCT_ID_META_KEY         = '_woo_contifico_product_id';
@@ -1693,44 +1694,130 @@ return $value;
  *
  * @since 4.3.1
  */
-private function get_inventory_movements_storage() : array {
+        private function get_inventory_movements_storage() : array {
 
-$cached = get_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
+                $cached = get_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
 
-if ( false !== $cached && is_array( $cached ) ) {
-return $cached;
-}
+                if ( false !== $cached && is_array( $cached ) ) {
+                        return $cached;
+                }
 
-$entries    = get_option( self::INVENTORY_MOVEMENTS_STORAGE, [] );
-$entries    = $this->normalize_manual_sync_data( $entries );
-$processed  = [];
+                $entries   = get_option( self::INVENTORY_MOVEMENTS_STORAGE, [] );
+                $entries   = $this->normalize_manual_sync_data( $entries );
+                $processed = [];
 
-if ( ! is_array( $entries ) ) {
-$entries = [];
-}
+                if ( ! is_array( $entries ) ) {
+                        $entries = [];
+                }
 
-foreach ( $entries as $entry ) {
-$entry = $this->normalize_inventory_movement_entry( $entry );
+                foreach ( $entries as $entry ) {
+                        $entry = $this->normalize_inventory_movement_entry( $entry );
 
-if ( ! empty( $entry ) ) {
-$processed[] = $entry;
-}
-}
+                        if ( ! empty( $entry ) ) {
+                                $processed[] = $entry;
+                        }
+                }
 
-set_transient( self::INVENTORY_MOVEMENTS_TRANSIENT, $processed, MINUTE_IN_SECONDS );
+                $processed = $this->maybe_backfill_inventory_movements_from_history( $processed );
 
-return $processed;
-}
+                set_transient( self::INVENTORY_MOVEMENTS_TRANSIENT, $processed, MINUTE_IN_SECONDS );
+
+                return $processed;
+        }
 
 /**
  * Persist the inventory movements list.
  *
  * @since 4.3.1
  */
-private function save_inventory_movements( array $entries ) : void {
-update_option( self::INVENTORY_MOVEMENTS_STORAGE, array_values( $entries ), false );
-delete_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
-}
+        private function save_inventory_movements( array $entries ) : void {
+                update_option( self::INVENTORY_MOVEMENTS_STORAGE, array_values( $entries ), false );
+                delete_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
+        }
+
+/**
+ * Retrieve the list of manual sync run IDs already converted into inventory movements.
+ *
+ * @since 4.3.1
+ */
+        private function get_inventory_movement_history_runs() : array {
+
+                $runs = get_option( self::INVENTORY_MOVEMENTS_HISTORY_RUNS, [] );
+
+                if ( ! is_array( $runs ) ) {
+                        return [];
+                }
+
+                return $runs;
+        }
+
+/**
+ * Persist the list of manual sync run IDs converted into movements.
+ *
+ * @since 4.3.1
+ */
+        private function save_inventory_movement_history_runs( array $runs ) : void {
+
+                if ( count( $runs ) > 50 ) {
+                        $runs = array_slice( $runs, -50, null, true );
+                }
+
+                update_option( self::INVENTORY_MOVEMENTS_HISTORY_RUNS, $runs, false );
+        }
+
+/**
+ * Convert manual sync history rows into movement entries when needed.
+ *
+ * @since 4.3.1
+ */
+        private function maybe_backfill_inventory_movements_from_history( array $current_entries ) : array {
+
+                $history = $this->get_manual_sync_history_option();
+
+                if ( empty( $history ) ) {
+                        return $current_entries;
+                }
+
+                $processed_runs = $this->get_inventory_movement_history_runs();
+                $new_entries    = [];
+                $updated_runs   = $processed_runs;
+
+                foreach ( $history as $entry ) {
+                        $entry  = $this->normalize_manual_sync_data( $entry );
+                        $run_id = isset( $entry['id'] ) ? (string) $entry['id'] : '';
+
+                        if ( '' === $run_id || isset( $processed_runs[ $run_id ] ) ) {
+                                continue;
+                        }
+
+                        $movements_for_run = $this->build_inventory_movements_from_history_entry( $entry );
+
+                        if ( ! empty( $movements_for_run ) ) {
+                                $new_entries = array_merge( $movements_for_run, $new_entries );
+                        }
+
+                        $updated_runs[ $run_id ] = current_time( 'timestamp' );
+                }
+
+                if ( empty( $new_entries ) ) {
+                        if ( $updated_runs !== $processed_runs ) {
+                                $this->save_inventory_movement_history_runs( $updated_runs );
+                        }
+
+                        return $current_entries;
+                }
+
+                $current_entries = array_merge( $new_entries, $current_entries );
+
+                if ( count( $current_entries ) > self::INVENTORY_MOVEMENTS_MAX_ENTRIES ) {
+                        $current_entries = array_slice( $current_entries, 0, self::INVENTORY_MOVEMENTS_MAX_ENTRIES );
+                }
+
+                $this->save_inventory_movements( $current_entries );
+                $this->save_inventory_movement_history_runs( $updated_runs );
+
+                return $current_entries;
+        }
 
        /**
         * Append multiple inventory movement entries.
@@ -1830,6 +1917,162 @@ delete_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
 
                return $this->normalize_inventory_movement_entry( $data );
        }
+
+       /**
+        * Build an inventory entry for manual/global product synchronization.
+        *
+        * @since 4.3.1
+        */
+        private function build_manual_sync_inventory_movement_entry( array $product_entry, array $changes, string $sync_scope ) : ?array {
+
+                if ( empty( $changes['stock_updated'] ) ) {
+                        return null;
+                }
+
+                if ( ! isset( $product_entry['product'] ) || ! is_a( $product_entry['product'], 'WC_Product' ) ) {
+                        return null;
+                }
+
+                $previous_stock = isset( $changes['previous_stock'] ) ? $changes['previous_stock'] : null;
+                $new_stock      = isset( $changes['new_stock'] ) ? $changes['new_stock'] : null;
+
+                if ( null === $previous_stock || null === $new_stock ) {
+                        return null;
+                }
+
+                $delta = (float) $new_stock - (float) $previous_stock;
+
+                if ( 0.0 === $delta ) {
+                        return null;
+                }
+
+                $wc_product = $product_entry['product'];
+                $event_type = $delta > 0 ? 'ingreso' : 'egreso';
+                $quantity   = abs( $delta );
+                $warehouses = $this->resolve_manual_sync_movement_warehouses( $event_type, $sync_scope );
+
+                return $this->build_inventory_movement_entry( [
+                        'event_type'   => $event_type,
+                        'product_id'   => isset( $product_entry['id'] ) ? (string) $product_entry['id'] : '',
+                        'wc_product_id'=> $wc_product->get_id(),
+                        'sku'          => (string) $wc_product->get_sku(),
+                        'product_name' => $wc_product->get_name(),
+                        'quantity'     => $quantity,
+                        'warehouses'   => $warehouses,
+                        'context'      => 'manual_sync',
+                        'order_source' => 'manual_sync_' . $sync_scope,
+                        'order_trigger'=> 'manual_sync',
+                        'status'       => 'success',
+                        'sync_type'    => in_array( $sync_scope, [ 'global', 'product' ], true ) ? $sync_scope : 'global',
+                ] );
+        }
+
+        /**
+         * Build inventory movement entries from stored manual sync history updates.
+         *
+         * @since 4.3.1
+         */
+        private function build_inventory_movements_from_history_entry( array $history_entry ) : array {
+
+                $updates = isset( $history_entry['updates'] ) && is_array( $history_entry['updates'] ) ? $history_entry['updates'] : [];
+
+                if ( empty( $updates ) ) {
+                        return [];
+                }
+
+                $timestamp    = $this->resolve_manual_sync_history_timestamp( $history_entry );
+                $run_status   = isset( $history_entry['status'] ) ? (string) $history_entry['status'] : 'completed';
+                $entry_status = 'failed' === $run_status ? 'error' : 'success';
+                $movements    = [];
+
+                foreach ( $updates as $update ) {
+                        $update = $this->normalize_manual_sync_data( $update );
+
+                        if ( ! isset( $update['changes']['stock'] ) || ! is_array( $update['changes']['stock'] ) ) {
+                                continue;
+                        }
+
+                        $stock_change   = $update['changes']['stock'];
+                        $previous_stock = isset( $stock_change['previous'] ) ? (float) $stock_change['previous'] : null;
+                        $current_stock  = isset( $stock_change['current'] ) ? (float) $stock_change['current'] : null;
+
+                        if ( null === $previous_stock || null === $current_stock ) {
+                                continue;
+                        }
+
+                        if ( $previous_stock === $current_stock ) {
+                                continue;
+                        }
+
+                        $delta      = $current_stock - $previous_stock;
+                        $event_type = $delta > 0 ? 'ingreso' : 'egreso';
+
+                        $movements[] = $this->build_inventory_movement_entry( [
+                                'timestamp'     => $timestamp,
+                                'event_type'    => $event_type,
+                                'product_id'    => isset( $update['contifico_id'] ) ? (string) $update['contifico_id'] : '',
+                                'wc_product_id' => isset( $update['product_id'] ) ? (int) $update['product_id'] : 0,
+                                'sku'           => isset( $update['sku'] ) ? (string) $update['sku'] : '',
+                                'product_name'  => isset( $update['product_name'] ) ? (string) $update['product_name'] : '',
+                                'quantity'      => abs( $delta ),
+                                'warehouses'    => $this->resolve_manual_sync_movement_warehouses( $event_type, 'global' ),
+                                'context'       => 'manual_sync',
+                                'order_source'  => 'manual_sync_history',
+                                'order_trigger' => 'manual_sync_summary',
+                                'status'        => $entry_status,
+                                'sync_type'     => 'global',
+                        ] );
+                }
+
+                return $movements;
+        }
+
+        /**
+         * Resolve the timestamp to use for history-derived inventory movements.
+         *
+         * @since 4.3.1
+         */
+        private function resolve_manual_sync_history_timestamp( array $history_entry ) : int {
+
+                foreach ( [ 'finished_at', 'started_at' ] as $field ) {
+                        if ( ! empty( $history_entry[ $field ] ) ) {
+                                $timestamp = strtotime( (string) $history_entry[ $field ] );
+
+                                if ( $timestamp ) {
+                                        return $timestamp;
+                                }
+                        }
+                }
+
+                return current_time( 'timestamp' );
+        }
+
+        /**
+         * Reuse the warehouse labels for manual sync movements.
+         *
+         * @since 4.3.1
+         */
+        private function resolve_manual_sync_movement_warehouses( string $event_type, string $sync_scope ) : array {
+
+                $sync_scope = in_array( $sync_scope, [ 'global', 'product' ], true ) ? $sync_scope : 'global';
+                $scope_label = 'product' === $sync_scope
+                        ? __( 'Sincronización por producto', 'woo-contifico' )
+                        : __( 'Sincronización global', 'woo-contifico' );
+                $contifico_label   = sprintf( __( 'Contífico (%s)', 'woo-contifico' ), $scope_label );
+                $woocommerce_label = __( 'WooCommerce', 'woo-contifico' );
+
+                if ( 'ingreso' === $event_type ) {
+                        return [
+                                'from' => [ 'id' => 'contifico-sync', 'label' => $contifico_label ],
+                                'to'   => [ 'id' => 'woocommerce', 'label' => $woocommerce_label ],
+                        ];
+                }
+
+                return [
+                        'from' => [ 'id' => 'woocommerce', 'label' => $woocommerce_label ],
+                        'to'   => [ 'id' => 'contifico-sync', 'label' => $contifico_label ],
+                ];
+        }
 
        /**
         * Update a list of entries with the final status returned by the API.
@@ -2674,8 +2917,9 @@ delete_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
                                 }
 
                                 # Update new stock and price
-                                $product_stock_cache = [];
-                                $warehouse_id_cache  = [];
+                                $product_stock_cache        = [];
+                                $warehouse_id_cache         = [];
+                                $inventory_movement_entries = [];
 
                                 foreach ( $products as $product ) {
 
@@ -2698,6 +2942,16 @@ delete_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
                                                 $updates_map[ $summary_key ] = $summary_entry;
                                         }
 
+                                        $movement_entry = $this->build_manual_sync_inventory_movement_entry( $product, $changes, 'global' );
+
+                                        if ( null !== $movement_entry ) {
+                                                $inventory_movement_entries[] = $movement_entry;
+                                        }
+
+                                }
+
+                                if ( ! empty( $inventory_movement_entries ) ) {
+                                        $this->append_inventory_movement_entries( $inventory_movement_entries );
                                 }
 
                                 $result['updates'] = $updates_map;
@@ -3050,6 +3304,12 @@ delete_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
                         $default_warehouse,
                         true
                 );
+
+                $movement_entry = $this->build_manual_sync_inventory_movement_entry( $product_entry, $changes, 'product' );
+
+                if ( null !== $movement_entry ) {
+                        $this->append_inventory_movement_entry( $movement_entry );
+                }
 
                 $message = __( 'El producto se sincronizó correctamente y no registró cambios.', 'woo-contifico' );
 
