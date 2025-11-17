@@ -309,6 +309,107 @@ class Woo_Contifico_MultiLocation_Compatibility {
     }
 
     /**
+     * Retrieve the human-readable label for a given location identifier.
+     *
+     * @since 4.4.0
+     *
+     * @param string|int $location_id Location identifier.
+     *
+     * @return string
+     */
+    public function get_location_label( $location_id ) : string {
+        $location_id = trim( (string) $location_id );
+
+        if ( '' === $location_id ) {
+            return '';
+        }
+
+        $locations = $this->get_locations();
+
+        if ( isset( $locations[ $location_id ] ) ) {
+            return $this->extract_location_label_from_entry( $locations[ $location_id ] );
+        }
+
+        foreach ( $locations as $entry ) {
+            $entry_id = $this->extract_location_identifier_from_entry( $entry );
+
+            if ( '' === $entry_id ) {
+                continue;
+            }
+
+            if ( $entry_id === $location_id ) {
+                return $this->extract_location_label_from_entry( $entry );
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Extract a location identifier from a MultiLoca entry payload.
+     *
+     * @param mixed $entry Location entry data.
+     *
+     * @return string
+     */
+    protected function extract_location_identifier_from_entry( $entry ) : string {
+        if ( is_array( $entry ) ) {
+            return isset( $entry['id'] )
+                ? (string) $entry['id']
+                : (string) ( $entry['location_id'] ?? '' );
+        }
+
+        if ( is_object( $entry ) ) {
+            if ( isset( $entry->id ) ) {
+                return (string) $entry->id;
+            }
+
+            if ( isset( $entry->location_id ) ) {
+                return (string) $entry->location_id;
+            }
+
+            if ( isset( $entry->ID ) ) {
+                return (string) $entry->ID;
+            }
+        }
+
+        return trim( (string) $entry );
+    }
+
+    /**
+     * Resolve a readable label for a location entry.
+     *
+     * @param mixed $entry Location entry data.
+     *
+     * @return string
+     */
+    protected function extract_location_label_from_entry( $entry ) : string {
+        if ( is_array( $entry ) ) {
+            $label = $entry['name'] ?? $entry['title'] ?? $entry['slug'] ?? '';
+
+            if ( '' !== $label ) {
+                return wp_strip_all_tags( (string) $label );
+            }
+
+            return wp_strip_all_tags( (string) ( $entry['id'] ?? $entry['location_id'] ?? '' ) );
+        }
+
+        if ( is_object( $entry ) ) {
+            $label = $entry->name ?? $entry->title ?? $entry->post_title ?? '';
+
+            if ( '' !== $label ) {
+                return wp_strip_all_tags( (string) $label );
+            }
+
+            return wp_strip_all_tags(
+                (string) ( $entry->id ?? $entry->location_id ?? $entry->ID ?? '' )
+            );
+        }
+
+        return wp_strip_all_tags( (string) $entry );
+    }
+
+    /**
      * Retrieve locations from the registered taxonomy when available.
      *
      * @return array
