@@ -82,11 +82,13 @@ $raw_filters = [
         'sku'        => isset( $_GET['sku'] ) ? sanitize_text_field( wp_unslash( $_GET['sku'] ) ) : '',
         'period'     => isset( $_GET['period'] ) ? sanitize_key( wp_unslash( $_GET['period'] ) ) : 'day',
         'scope'      => isset( $_GET['scope'] ) ? sanitize_key( wp_unslash( $_GET['scope'] ) ) : 'all',
+        'location'   => isset( $_GET['location'] ) ? sanitize_text_field( wp_unslash( $_GET['location'] ) ) : '',
 ];
 
 $report           = $this->get_inventory_movements_report( $raw_filters );
 $filters          = $report['filters'];
 $product_choices  = $this->get_inventory_movement_product_choices();
+$location_choices = $this->get_inventory_movement_location_choices();
 $table            = new Woo_Contifico_Inventory_Movements_Table();
 $table->set_table_items( $report['totals_by_product'] );
 $table->prepare_items();
@@ -106,6 +108,7 @@ $export_base     = [
         'sku'        => $filters['sku'],
         'period'     => $filters['period'],
         'scope'      => $filters['scope'],
+        'location'   => $filters['location'],
 ];
 $csv_url  = esc_url( add_query_arg( array_merge( $export_base, [ 'format' => 'csv' ] ), admin_url( 'admin-post.php' ) ) );
 $json_url = esc_url( add_query_arg( array_merge( $export_base, [ 'format' => 'json' ] ), admin_url( 'admin-post.php' ) ) );
@@ -149,6 +152,15 @@ $json_url = esc_url( add_query_arg( array_merge( $export_base, [ 'format' => 'js
                                         <option value="0"><?php esc_html_e( 'Todos los productos', 'woo-contifico' ); ?></option>
                                         <?php foreach ( $product_choices as $choice ) : ?>
                                                 <option value="<?php echo esc_attr( $choice['id'] ); ?>" <?php selected( $filters['product_id'], $choice['id'] ); ?>><?php echo esc_html( $choice['label'] ); ?></option>
+                                        <?php endforeach; ?>
+                                </select>
+                        </label>
+                        <label>
+                                <?php esc_html_e( 'Ubicación', 'woo-contifico' ); ?>
+                                <select name="location">
+                                        <option value=""><?php esc_html_e( 'Todas las ubicaciones', 'woo-contifico' ); ?></option>
+                                        <?php foreach ( $location_choices as $choice ) : ?>
+                                                <option value="<?php echo esc_attr( $choice['id'] ); ?>" <?php selected( $filters['location'], $choice['id'] ); ?>><?php echo esc_html( $choice['label'] ); ?></option>
                                         <?php endforeach; ?>
                                 </select>
                         </label>
@@ -199,6 +211,7 @@ $json_url = esc_url( add_query_arg( array_merge( $export_base, [ 'format' => 'js
                                                 <th><?php esc_html_e( 'Evento', 'woo-contifico' ); ?></th>
                                                 <th><?php esc_html_e( 'Producto / SKU', 'woo-contifico' ); ?></th>
                                                 <th><?php esc_html_e( 'Cantidad', 'woo-contifico' ); ?></th>
+                                                <th><?php esc_html_e( 'Ubicación', 'woo-contifico' ); ?></th>
                                                 <th><?php esc_html_e( 'Bodegas', 'woo-contifico' ); ?></th>
                                                 <th><?php esc_html_e( 'Estado', 'woo-contifico' ); ?></th>
                                         </tr>
@@ -214,6 +227,25 @@ $json_url = esc_url( add_query_arg( array_merge( $export_base, [ 'format' => 'js
                                                                 <small><?php echo esc_html( $entry['sku'] ?? '' ); ?></small>
                                                         </td>
                                                         <td><?php echo esc_html( number_format_i18n( (float) ( $entry['quantity'] ?? 0 ) ) ); ?></td>
+                                                        <td>
+                                                                <?php
+                                                                $location_label = $entry['location']['label'] ?? '';
+                                                                $location_id    = $entry['location']['id'] ?? '';
+                                                                $location_value = $location_label;
+
+                                                                if ( '' === $location_value ) {
+                                                                        $location_value = $location_id;
+                                                                } elseif ( '' !== $location_id && $location_id !== $location_label ) {
+                                                                        $location_value = sprintf( '%s (%s)', $location_label, $location_id );
+                                                                }
+
+                                                                if ( '' === $location_value ) {
+                                                                        $location_value = '—';
+                                                                }
+
+                                                                echo '<small>' . esc_html( $location_value ) . '</small>';
+                                                                ?>
+                                                        </td>
                                                         <td>
                                                                 <small><?php echo esc_html( sprintf( '%s → %s', $entry['warehouses']['from']['label'] ?? '', $entry['warehouses']['to']['label'] ?? '' ) ); ?></small>
                                                         </td>
