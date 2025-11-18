@@ -34,6 +34,7 @@ class Woo_Contifico_Admin {
         private const MANUAL_SYNC_CANCEL_TRANSIENT = 'woo_contifico_manual_sync_cancel';
         private const MANUAL_SYNC_KEEPALIVE_HOOK    = 'woo_contifico_manual_sync_keepalive';
         private const PRODUCT_ID_META_KEY         = '_woo_contifico_product_id';
+        private const ORDER_ITEM_WAREHOUSE_META_KEY = '_woo_contifico_source_warehouse';
 
 	/**
 	 * The ID of this plugin.
@@ -115,15 +116,43 @@ class Woo_Contifico_Admin {
 	 */
 	protected $log_route;
 
-	/**
-	 * Initialize the class and set its properties.
-	 *
-	 * @param string $plugin_name The name of this plugin.
-	 * @param string $version The version of this plugin.
-	 *
-	 * @since    1.0.0
-	 */
-	public function __construct( $plugin_name, $version ) {
+        /**
+         * Cache of preferred warehouse codes configured by the admin.
+         *
+         * @var array|null
+         */
+        private $preferred_warehouse_codes = null;
+
+        /**
+         * Cache of product stock grouped by Contífico warehouse ID when evaluating preferred warehouses.
+         *
+         * @var array
+         */
+        private $preferred_warehouse_stock_cache = [];
+
+        /**
+         * Tracks how much stock from each warehouse has been allocated per order when resolving preferences.
+         *
+         * @var array
+         */
+        private $preferred_warehouse_allocations = [];
+
+        /**
+         * Cache that indicates whether an order is using store pickup.
+         *
+         * @var array
+         */
+        private $order_pickup_cache = [];
+
+        /**
+         * Initialize the class and set its properties.
+         *
+         * @param string $plugin_name The name of this plugin.
+         * @param string $version The version of this plugin.
+         *
+         * @since    1.0.0
+         */
+        public function __construct( $plugin_name, $version ) {
 		$this->plugin_name   = $plugin_name;
 		$this->version       = $version;
 		$this->woo_contifico = new Woo_Contifico( false );
@@ -2091,7 +2120,320 @@ return $value;
          * @return array{id:string,code:string,label:string,location_id:string,location_label:string,mapped:bool}
          */
         private function resolve_order_location_inventory_context( WC_Order $order, string $default_code, string $default_id ) : array {
-                $context = [
+                $location_id = '';
+
+                if (
+                        $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
+                        && $this->woo_contifico->multilocation->is_active()
+                ) {
+                        $location_id = (string) $this->woo_contifico->multilocation->get_order_location( $order );
+                }
+
+                return $this->resolve_location_inventory_context_from_identifier( $location_id, $default_code, $default_id );
+        }
+
+        /**
+         * Resolve the Contífico warehouse context for a specific order item.
+         *
+         * @since 4.4.0
+         */
+        private function resolve_order_item_location_inventory_context( WC_Order $order, WC_Order_Item $item, string $default_code, string $default_id ) : array {
+                $location_id = '';
+
+                if (
+                        $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
+                        && $this->woo_contifico->multilocation->is_active()
+                ) {
+                        if ( method_exists( $this->woo_contifico->multilocation, 'get_order_item_location' ) ) {
+                                $location_id = (string) $this->woo_contifico->multilocation->get_order_item_location( $item );
+                        }
+
+                        if ( '' === $location_id ) {
+                                $location_id = (string) $this->woo_contifico->multilocation->get_order_location( $order );
+                        }
+                }
+
+                $context = $this->resolve_location_inventory_context_from_identifier( $location_id, $default_code, $default_id );
+
+                return $this->maybe_apply_preferred_warehouse_context( $context, $order, $item );
+        }
+
+        /**
+         * Detect whether an order is using the store pickup option.
+         *
+         * @since 4.4.0
+         */
+        private function order_has_store_pickup( WC_Order $order ) : bool {
+                $order_id = $order->get_id();
+
+                if ( isset( $this->order_pickup_cache[ $order_id ] ) ) {
+                        return (bool) $this->order_pickup_cache[ $order_id ];
+                }
+
+                $is_pickup = false;
+                $shipping_methods = $order->get_shipping_methods();
+
+                if ( ! empty( $shipping_methods ) ) {
+                        foreach ( $shipping_methods as $shipping_item ) {
+                                if ( ! is_a( $shipping_item, 'WC_Order_Item_Shipping' ) ) {
+                                        continue;
+                                }
+
+                                $method_id    = strtolower( (string) $shipping_item->get_method_id() );
+                                $method_title = '';
+
+                                if ( method_exists( $shipping_item, 'get_method_title' ) ) {
+                                        $method_title = strtolower( (string) $shipping_item->get_method_title() );
+                                } else {
+                                        $method_title = strtolower( (string) $shipping_item->get_name() );
+                                }
+
+                                if (
+                                        false !== strpos( $method_id, 'local_pickup' )
+                                        || false !== strpos( $method_id, 'store_pickup' )
+                                        || false !== strpos( $method_id, 'retiro' )
+                                        || false !== strpos( $method_id, 'pickup' )
+                                        || false !== strpos( $method_title, 'retiro' )
+                                        || false !== strpos( $method_title, 'tienda' )
+                                        || false !== strpos( $method_title, 'recoger' )
+                                ) {
+                                        $is_pickup = true;
+                                        break;
+                                }
+                        }
+                }
+
+                $this->order_pickup_cache[ $order_id ] = $is_pickup;
+
+                return $is_pickup;
+        }
+
+        /**
+         * Retrieve the configured list of preferred warehouse codes in order of priority.
+         *
+         * @since 4.4.0
+         */
+        private function get_preferred_warehouse_codes() : array {
+                if ( null !== $this->preferred_warehouse_codes ) {
+                        return $this->preferred_warehouse_codes;
+                }
+
+                $codes   = [];
+                $options = [ 'bodega', 'bodega_secundaria', 'bodega_terciaria' ];
+
+                foreach ( $options as $setting_key ) {
+                        if ( ! isset( $this->woo_contifico->settings[ $setting_key ] ) ) {
+                                continue;
+                        }
+
+                        $code = strtoupper( trim( (string) $this->woo_contifico->settings[ $setting_key ] ) );
+
+                        if ( '' === $code ) {
+                                continue;
+                        }
+
+                        if ( in_array( $code, $codes, true ) ) {
+                                continue;
+                        }
+
+                        $codes[] = $code;
+                }
+
+                $this->preferred_warehouse_codes = $codes;
+
+                return $this->preferred_warehouse_codes;
+        }
+
+        /**
+         * Retrieve and cache the stock by warehouse for a Contífico product ID.
+         *
+         * @since 4.4.0
+         */
+        private function get_product_stock_for_preferred_allocation( string $product_id ) : array {
+                $product_id = trim( $product_id );
+
+                if ( '' === $product_id ) {
+                        return [];
+                }
+
+                if ( isset( $this->preferred_warehouse_stock_cache[ $product_id ] ) ) {
+                        return $this->preferred_warehouse_stock_cache[ $product_id ];
+                }
+
+                $stock = $this->contifico->get_product_stock_by_warehouses( $product_id );
+
+                if ( ! is_array( $stock ) ) {
+                        $stock = [];
+                }
+
+                $this->preferred_warehouse_stock_cache[ $product_id ] = $stock;
+
+                return $this->preferred_warehouse_stock_cache[ $product_id ];
+        }
+
+        /**
+         * Persist the origin warehouse code for an order item so refunds/cancellations honor the same source.
+         *
+         * @since 4.4.0
+         */
+        private function persist_order_item_origin_warehouse( WC_Order_Item $item, string $warehouse_code ) : void {
+                if ( ! is_a( $item, 'WC_Order_Item_Product' ) ) {
+                        return;
+                }
+
+                $warehouse_code = strtoupper( trim( $warehouse_code ) );
+
+                if ( '' === $warehouse_code ) {
+                        return;
+                }
+
+                $current = (string) $item->get_meta( self::ORDER_ITEM_WAREHOUSE_META_KEY, true );
+
+                if ( $current === $warehouse_code ) {
+                        return;
+                }
+
+                if ( $item->get_id() > 0 ) {
+                        $item->update_meta_data( self::ORDER_ITEM_WAREHOUSE_META_KEY, $warehouse_code );
+                        $item->save();
+                } else {
+                        $item->add_meta_data( self::ORDER_ITEM_WAREHOUSE_META_KEY, $warehouse_code, true );
+                }
+        }
+
+        /**
+         * Override the resolved inventory context with a specific warehouse code.
+         *
+         * @since 4.4.0
+         */
+        private function override_inventory_context_with_warehouse_code( array $context, string $warehouse_code ) : array {
+                $warehouse_code = strtoupper( trim( $warehouse_code ) );
+
+                if ( '' === $warehouse_code ) {
+                        return $context;
+                }
+
+                $warehouse_id = (string) ( $this->contifico->get_id_bodega( $warehouse_code ) ?? '' );
+
+                if ( '' === $warehouse_id ) {
+                        return $context;
+                }
+
+                $context['id']    = $warehouse_id;
+                $context['code']  = $warehouse_code;
+                $context['label'] = $warehouse_code;
+                $context['mapped']= true;
+
+                return $context;
+        }
+
+        /**
+         * Apply the preferred warehouse allocation logic to an inventory context.
+         *
+         * @since 4.4.0
+         */
+        private function maybe_apply_preferred_warehouse_context( array $context, WC_Order $order, WC_Order_Item $item ) : array {
+                if ( ! is_a( $item, 'WC_Order_Item_Product' ) ) {
+                        return $context;
+                }
+
+                if ( $this->order_has_store_pickup( $order ) ) {
+                        return $context;
+                }
+
+                $preferred_codes = $this->get_preferred_warehouse_codes();
+
+                if ( empty( $preferred_codes ) ) {
+                        return $context;
+                }
+
+                $stored_code = (string) $item->get_meta( self::ORDER_ITEM_WAREHOUSE_META_KEY, true );
+
+                if ( '' !== $stored_code ) {
+                        return $this->override_inventory_context_with_warehouse_code( $context, $stored_code );
+                }
+
+                $wc_product = $item->get_product();
+
+                if ( ! $wc_product ) {
+                        return $context;
+                }
+
+                $sku        = (string) $wc_product->get_sku();
+                $product_id = $this->contifico->get_product_id( $sku );
+
+                if ( '' === $product_id ) {
+                        $product_id = (string) $wc_product->get_meta( self::PRODUCT_ID_META_KEY, true );
+                }
+
+                if ( '' === $product_id ) {
+                        return $context;
+                }
+
+                $quantity = abs( (float) $item->get_quantity() );
+
+                if ( $quantity <= 0 ) {
+                        $quantity = 1.0;
+                }
+
+                $stock_by_warehouse = $this->get_product_stock_for_preferred_allocation( $product_id );
+                $order_id           = $order->get_id();
+                $best_partial       = null;
+                $best_partial_room  = 0.0;
+
+                foreach ( $preferred_codes as $code ) {
+                        $warehouse_id = (string) ( $this->contifico->get_id_bodega( $code ) ?? '' );
+
+                        if ( '' === $warehouse_id ) {
+                                continue;
+                        }
+
+                        if ( ! isset( $stock_by_warehouse[ $warehouse_id ] ) ) {
+                                continue;
+                        }
+
+                        $available = (float) $stock_by_warehouse[ $warehouse_id ];
+                        $allocated = isset( $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] )
+                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ]
+                                : 0.0;
+
+                        $remaining = $available - $allocated;
+
+                        if ( $remaining >= $quantity ) {
+                                $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] = $allocated + $quantity;
+                                $this->persist_order_item_origin_warehouse( $item, $code );
+
+                                return $this->override_inventory_context_with_warehouse_code( $context, $code );
+                        }
+
+                        if ( $remaining > 0 && $remaining > $best_partial_room ) {
+                                $best_partial_room = $remaining;
+                                $best_partial      = [ 'code' => $code, 'warehouse_id' => $warehouse_id ];
+                        }
+                }
+
+                if ( $best_partial ) {
+                        $warehouse_id = $best_partial['warehouse_id'];
+                        $current      = isset( $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] )
+                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ]
+                                : 0.0;
+
+                        $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] = $current + min( $quantity, $best_partial_room );
+                        $this->persist_order_item_origin_warehouse( $item, $best_partial['code'] );
+
+                        return $this->override_inventory_context_with_warehouse_code( $context, $best_partial['code'] );
+                }
+
+                return $context;
+        }
+
+        /**
+         * Build a normalized context array for Contífico inventory calls.
+         *
+         * @since 4.4.0
+         */
+        private function build_default_inventory_context( string $default_code, string $default_id ) : array {
+                return [
                         'id'             => $default_id,
                         'code'           => $default_code,
                         'label'          => $default_code,
@@ -2099,6 +2441,19 @@ return $value;
                         'location_label' => '',
                         'mapped'         => false,
                 ];
+        }
+
+        /**
+         * Resolve the Contífico identifiers mapped to a MultiLoca location.
+         *
+         * @since 4.4.0
+         */
+        private function resolve_location_inventory_context_from_identifier( string $location_id, string $default_code, string $default_id ) : array {
+                $context = $this->build_default_inventory_context( $default_code, $default_id );
+
+                if ( '' === $location_id ) {
+                        return $context;
+                }
 
                 if ( ! ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) ) {
                         return $context;
@@ -2108,22 +2463,16 @@ return $value;
                         return $context;
                 }
 
-                $location_id = (string) $this->woo_contifico->multilocation->get_order_location( $order );
-
-                if ( '' === $location_id ) {
-                        return $context;
-                }
-
-                $location_label = '';
+                $context['location_id'] = $location_id;
+                $location_label         = '';
 
                 if ( method_exists( $this->woo_contifico->multilocation, 'get_location_label' ) ) {
                         $location_label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
                 }
 
-                $warehouse_code = $this->resolve_location_warehouse_code( $location_id );
-
-                $context['location_id']    = $location_id;
                 $context['location_label'] = $location_label;
+
+                $warehouse_code = $this->resolve_location_warehouse_code( $location_id );
 
                 if ( '' === $warehouse_code ) {
                         return $context;
@@ -2138,22 +2487,73 @@ return $value;
                 $context['id']     = $warehouse_id;
                 $context['code']   = $warehouse_code;
                 $context['mapped'] = true;
-
-                if ( '' !== $location_label ) {
-                        $context['label'] = sprintf( '%s (%s)', $warehouse_code, $location_label );
-                } else {
-                        $context['label'] = $warehouse_code;
-                }
+                $context['label']  = '' !== $location_label ? sprintf( '%s (%s)', $warehouse_code, $location_label ) : $warehouse_code;
 
                 return $context;
         }
 
         /**
-         * Find the Contífico warehouse code configured for a MultiLoca location.
+         * Build a human readable label for inventory notes based on the context.
          *
          * @since 4.4.0
          */
-        private function resolve_location_warehouse_code( string $location_id ) : string {
+        private function describe_inventory_location_for_note( array $context ) : string {
+                $location_label = isset( $context['location_label'] ) ? (string) $context['location_label'] : '';
+
+                if ( '' !== $location_label ) {
+                        return $location_label;
+                }
+
+                $warehouse_label = isset( $context['label'] ) ? (string) $context['label'] : '';
+
+                if ( '' !== $warehouse_label ) {
+                        return $warehouse_label;
+                }
+
+                return __( 'Ubicación predeterminada', 'woo-contifico' );
+        }
+
+        /**
+         * Group order items by their resolved location context.
+         *
+         * @since 4.4.0
+         */
+        private function group_order_items_by_location_context( WC_Order $order, array $items, string $default_code, string $default_id ) : array {
+                $groups = [];
+
+foreach ( $items as $item ) {
+if ( ! is_a( $item, 'WC_Order_Item_Product' ) ) {
+continue;
+}
+
+$wc_product = $item->get_product();
+
+if ( ! $wc_product ) {
+continue;
+}
+
+$context  = $this->resolve_order_item_location_inventory_context( $order, $item, $default_code, $default_id );
+$group_id = sprintf( '%s|%s', $context['id'], $context['location_id'] );
+
+if ( ! isset( $groups[ $group_id ] ) ) {
+$groups[ $group_id ] = [
+'context' => $context,
+'items'   => [],
+];
+}
+
+$groups[ $group_id ]['items'][] = $item;
+}
+
+return $groups;
+}
+
+/**
+ * Find the Contífico warehouse code configured for a MultiLoca location.
+ *
+ * @since 4.4.0
+ */
+private function resolve_location_warehouse_code( string $location_id ) : string {
                 $location_id = trim( $location_id );
 
                 if ( '' === $location_id ) {
@@ -4573,42 +4973,42 @@ $filters = [
                         isset($this->woo_contifico->settings['bodega_facturacion']) &&
                         !empty($this->woo_contifico->settings['bodega_facturacion'])
                 ) {
-                        $origin_code              = isset( $this->woo_contifico->settings['bodega'] ) ? (string) $this->woo_contifico->settings['bodega'] : '';
-                        $destination_code         = isset( $this->woo_contifico->settings['bodega_facturacion'] ) ? (string) $this->woo_contifico->settings['bodega_facturacion'] : '';
-                        $default_origin_id        = (string) ( $this->contifico->get_id_bodega( $origin_code ) ?? '' );
-                        $origin_context           = $this->resolve_order_location_inventory_context( $order, $origin_code, $default_origin_id );
-                        $id_origin_warehouse      = $origin_context['id'];
-                        $id_destination_warehouse = (string) ( $this->contifico->get_id_bodega( $destination_code ) ?? '' );
-                        $env                 = ( (int) $this->woo_contifico->settings['ambiente'] === WOO_CONTIFICO_TEST ) ? 'test' : 'prod';
-                        $transfer_stock      = [
-                                'tipo'              => 'TRA',
-                                'fecha'             => date( 'd/m/Y' ),
-                                'bodega_id'         => $id_origin_warehouse,
-                                'bodega_destino_id' => $id_destination_warehouse,
-                                'detalles'          => [],
-                                'descripcion'       => sprintf(
-                                        __( 'Referencia: Tienda online Orden %d', $this->plugin_name ),
-                                        $order_id
-                                ),
-                                'codigo_interno'    => null,
-                                'pos'               => $this->woo_contifico->settings["{$env}_api_token"],
-                        ];
+$origin_code              = isset( $this->woo_contifico->settings['bodega'] ) ? (string) $this->woo_contifico->settings['bodega'] : '';
+$destination_code         = isset( $this->woo_contifico->settings['bodega_facturacion'] ) ? (string) $this->woo_contifico->settings['bodega_facturacion'] : '';
+$default_origin_id        = (string) ( $this->contifico->get_id_bodega( $origin_code ) ?? '' );
+$id_destination_warehouse = (string) ( $this->contifico->get_id_bodega( $destination_code ) ?? '' );
+$env                      = ( (int) $this->woo_contifico->settings['ambiente'] === WOO_CONTIFICO_TEST ) ? 'test' : 'prod';
+$movement_entries         = [];
+$grouped_items            = $this->group_order_items_by_location_context( $order, $order->get_items(), $origin_code, $default_origin_id );
+$processed_groups         = 0;
+$successful_groups        = 0;
 
-                        if ( $origin_context['mapped'] && '' !== $origin_context['location_label'] ) {
-                                $transfer_stock['descripcion'] .= ' ' . sprintf(
-                                        __( '(Ubicación MultiLoca: %s)', $this->plugin_name ),
-                                        $origin_context['location_label']
-                                );
-                        }
+foreach ( $grouped_items as $group ) {
+$group_context = $group['context'];
+$transfer_stock = [
+'tipo'              => 'TRA',
+'fecha'             => date( 'd/m/Y' ),
+'bodega_id'         => $group_context['id'],
+'bodega_destino_id' => $id_destination_warehouse,
+'detalles'          => [],
+'descripcion'       => sprintf(
+__( 'Referencia: Tienda online Orden %d', $this->plugin_name ),
+$order_id
+),
+'codigo_interno'    => null,
+'pos'               => $this->woo_contifico->settings["{$env}_api_token"],
+];
 
-$status        = 'pending';
-$reference_code = '';
-$error_message  = '';
-$movement_entries = [];
+if ( $group_context['mapped'] && '' !== $group_context['location_label'] ) {
+$transfer_stock['descripcion'] .= ' ' . sprintf(
+__( '(Ubicación MultiLoca: %s)', $this->plugin_name ),
+$group_context['location_label']
+);
+}
 
-try {
-/** @var WC_Order_Item_Product $item */
-foreach ( $order->get_items() as $item ) {
+$group_entries = [];
+
+foreach ( $group['items'] as $item ) {
 $wc_product = $item->get_product();
 
 if ( ! $wc_product ) {
@@ -4624,7 +5024,7 @@ $transfer_stock['detalles'][] = [
 'cantidad'    => $quantity,
 ];
 
-$movement_entries[] = $this->build_inventory_movement_entry( [
+$group_entries[] = $this->build_inventory_movement_entry( [
 'order_id'      => $order_id,
 'event_type'    => 'egreso',
 'product_id'    => $product_id,
@@ -4633,7 +5033,7 @@ $movement_entries[] = $this->build_inventory_movement_entry( [
 'product_name'  => $wc_product->get_name(),
 'quantity'      => $quantity,
 'warehouses'    => [
-'from' => [ 'id' => (string) $id_origin_warehouse, 'label' => $origin_context['label'] ],
+'from' => [ 'id' => (string) $group_context['id'], 'label' => $group_context['label'] ],
 'to'   => [ 'id' => (string) $id_destination_warehouse, 'label' => $destination_code ],
 ],
 'order_status'  => $order->get_status(),
@@ -4643,41 +5043,64 @@ $movement_entries[] = $this->build_inventory_movement_entry( [
 'order_item_id' => $item->get_id(),
 'sync_type'     => 'global',
 'location'      => [
-        'id'    => $origin_context['location_id'],
-        'label' => $origin_context['location_label'],
+'id'    => $group_context['location_id'],
+'label' => $group_context['location_label'],
 ],
 ] );
 }
 
-if ( ! empty( $transfer_stock['detalles'] ) ) {
+if ( empty( $transfer_stock['detalles'] ) ) {
+continue;
+}
+
+$processed_groups++;
+$status         = 'pending';
+$reference_code  = '';
+$error_message   = '';
+$location_label  = $this->describe_inventory_location_for_note( $group_context );
+
+try {
 $result        = $this->contifico->transfer_stock( json_encode( $transfer_stock ) );
 $reference_code = isset( $result['codigo'] ) ? (string) $result['codigo'] : '';
 $status         = 'success';
+$successful_groups++;
 $order->add_order_note( sprintf(
-__( '<b>Contífico: </b><br> Inventario trasladado a la bodega web %s', $this->plugin_name ),
+__( '<b>Contífico: </b><br> Inventario trasladado desde %1$s a la bodega web. Código: %2$s', $this->plugin_name ),
+$location_label,
 $reference_code
-)
-);
-$order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( true ) );
-$order->save();
-}
-}
-catch ( Exception $exception ) {
+) );
+} catch ( Exception $exception ) {
 $status        = 'error';
 $error_message = $exception->getMessage();
 $order->add_order_note( sprintf(
-__( '<b>Contífico retornó un error al transferir inventario a la bodega web</b><br>%s', $this->plugin_name ),
+__( '<b>Contífico retornó un error al transferir inventario desde %1$s</b><br>%2$s', $this->plugin_name ),
+$location_label,
 $error_message
-)
+) );
+}
+
+if ( ! empty( $group_entries ) ) {
+$movement_entries = array_merge(
+$movement_entries,
+$this->finalize_inventory_movement_entries( $group_entries, $status, $reference_code, $error_message )
 );
+}
+}
+
+if ( $processed_groups > 0 && $successful_groups === $processed_groups ) {
+$order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( true ) );
+$order->save();
 }
 
 if ( ! empty( $movement_entries ) ) {
-$movement_entries = $this->finalize_inventory_movement_entries( $movement_entries, $status, $reference_code, $error_message );
 $this->append_inventory_movement_entries( $movement_entries );
 }
+
+if ( $order_id ) {
+unset( $this->preferred_warehouse_allocations[ $order_id ] );
 }
-	}
+}
+}
 
 	/**
 	 * Restore stock from the web warehouse to the main one
@@ -4716,29 +5139,7 @@ $this->append_inventory_movement_entries( $movement_entries );
                         $destination_code         = isset( $this->woo_contifico->settings['bodega'] ) ? (string) $this->woo_contifico->settings['bodega'] : '';
                         $id_origin_warehouse      = (string) ( $this->contifico->get_id_bodega( $origin_code ) ?? '' );
                         $default_destination_id   = (string) ( $this->contifico->get_id_bodega( $destination_code ) ?? '' );
-                        $destination_context      = $this->resolve_order_location_inventory_context( $order, $destination_code, $default_destination_id );
-                        $id_destination_warehouse = $destination_context['id'];
-                        $env                      = ( (int) $this->woo_contifico->settings['ambiente'] === WOO_CONTIFICO_TEST ) ? 'test' : 'prod';
-                        $restore_stock            = [
-                                'tipo'              => 'TRA',
-                                'fecha'             => date( 'd/m/Y' ),
-                                'bodega_id'         => $id_origin_warehouse,
-                                'bodega_destino_id' => $id_destination_warehouse,
-                                'detalles'          => [],
-                                'descripcion'       => sprintf(
-                                        __( 'Referencia: Tienda online reembolso Orden %d', $this->plugin_name ),
-                                        $order_id
-                                ),
-                                'codigo_interno'    => null,
-                                'pos'               => $this->woo_contifico->settings["{$env}_api_token"],
-                        ];
-
-                        if ( $destination_context['mapped'] && '' !== $destination_context['location_label'] ) {
-                                $restore_stock['descripcion'] .= ' ' . sprintf(
-                                        __( '(Ubicación MultiLoca: %s)', $this->plugin_name ),
-                                        $destination_context['location_label']
-                                );
-                        }
+$env = ( (int) $this->woo_contifico->settings['ambiente'] === WOO_CONTIFICO_TEST ) ? 'test' : 'prod';
 
 # Get items to restore
 $items = empty( $refund_id ) ? $order->get_items() : $refund->get_items();
@@ -4747,16 +5148,41 @@ $items = $order->get_items();
 $refund = null;
 }
 
-$status          = 'pending';
-$reference_code   = '';
-$error_message    = '';
-$movement_entries = [];
-$trigger          = empty( $refund_id ) ? 'woocommerce_restore_order_stock' : 'woocommerce_order_refunded';
-$order_source     = empty( $refund_id ) ? 'order' : 'refund';
+$movement_entries  = [];
+$trigger           = empty( $refund_id ) ? 'woocommerce_restore_order_stock' : 'woocommerce_order_refunded';
+$order_source      = empty( $refund_id ) ? 'order' : 'refund';
+$reason_label      = empty( $refund )
+? ( empty( $refund_id ) ? 'cancelación de la orden' : "reembolso #{$refund_id}" )
+: "reembolso total o parcial #{$refund_id}";
+$grouped_items     = $this->group_order_items_by_location_context( $order, $items, $destination_code, $default_destination_id );
+$processed_groups  = 0;
+$successful_groups = 0;
 
-try {
-/** @var WC_Order_Item_Product $item */
-foreach ( $items as $item ) {
+foreach ( $grouped_items as $group ) {
+$group_context  = $group['context'];
+$group_entries  = [];
+$restore_stock  = [
+'tipo'              => 'TRA',
+'fecha'             => date( 'd/m/Y' ),
+'bodega_id'         => $id_origin_warehouse,
+'bodega_destino_id' => $group_context['id'],
+'detalles'          => [],
+'descripcion'       => sprintf(
+__( 'Referencia: Tienda online reembolso Orden %d', $this->plugin_name ),
+$order_id
+),
+'codigo_interno'    => null,
+'pos'               => $this->woo_contifico->settings["{$env}_api_token"],
+];
+
+if ( $group_context['mapped'] && '' !== $group_context['location_label'] ) {
+$restore_stock['descripcion'] .= ' ' . sprintf(
+__( '(Ubicación MultiLoca: %s)', $this->plugin_name ),
+$group_context['location_label']
+);
+}
+
+foreach ( $group['items'] as $item ) {
 $wc_product = $item->get_product();
 
 if ( ! $wc_product ) {
@@ -4766,6 +5192,7 @@ continue;
 $sku        = (string) $wc_product->get_sku();
 $price      = $wc_product->get_price();
 $product_id = $this->contifico->get_product_id( $sku );
+$item_quantity = 0.0;
 
 if ( empty( $refund ) ) {
 $item_stock_reduced = $item->get_meta( '_reduced_stock', true );
@@ -4774,23 +5201,29 @@ $item_quantity      = empty( $item_stock_reduced ) ? $item->get_quantity() : $it
 $item_quantity = abs( $item->get_quantity() );
 }
 
+$item_quantity = (float) $item_quantity;
+
+if ( 0.0 === $item_quantity ) {
+continue;
+}
+
 $restore_stock['detalles'][] = [
 'producto_id' => $product_id,
 'precio'      => $price,
 'cantidad'    => $item_quantity,
 ];
 
-$movement_entries[] = $this->build_inventory_movement_entry( [
+$group_entries[] = $this->build_inventory_movement_entry( [
 'order_id'      => $order_id,
 'event_type'    => 'ingreso',
 'product_id'    => $product_id,
 'wc_product_id' => $wc_product->get_id(),
 'sku'           => $sku,
 'product_name'  => $wc_product->get_name(),
-'quantity'      => (float) $item_quantity,
+'quantity'      => $item_quantity,
 'warehouses'    => [
 'from' => [ 'id' => (string) $id_origin_warehouse, 'label' => $origin_code ],
-'to'   => [ 'id' => (string) $id_destination_warehouse, 'label' => $destination_context['label'] ],
+'to'   => [ 'id' => (string) $group_context['id'], 'label' => $group_context['label'] ],
 ],
 'order_status'  => $order->get_status(),
 'order_trigger' => $trigger,
@@ -4799,44 +5232,65 @@ $movement_entries[] = $this->build_inventory_movement_entry( [
 'order_item_id' => $item->get_id(),
 'sync_type'     => 'global',
 'location'      => [
-        'id'    => $destination_context['location_id'],
-        'label' => $destination_context['location_label'],
+'id'    => $group_context['location_id'],
+'label' => $group_context['location_label'],
 ],
 ] );
 }
 
-if ( ! empty( $restore_stock['detalles'] ) ) {
+if ( empty( $restore_stock['detalles'] ) ) {
+continue;
+}
+
+$processed_groups++;
+$status         = 'pending';
+$reference_code  = '';
+$error_message   = '';
+$location_label  = $this->describe_inventory_location_for_note( $group_context );
+
+try {
 $result        = $this->contifico->transfer_stock( json_encode( $restore_stock ) );
 $reference_code = isset( $result['codigo'] ) ? (string) $result['codigo'] : '';
 $status         = 'success';
+$successful_groups++;
 $order->add_order_note( sprintf(
-__( '<b>Contífico: </b><br> Inventario restaurado a la bodega principal debido a %s: %s', $this->plugin_name ),
-empty( $refund ) ?
-empty($refund_id) ? 'cancelación de la orden' : "reembolso #{$refund_id}"
-: "reembolso total o parcial #{$refund_id}",
+__( '<b>Contífico: </b><br> Inventario restaurado hacia %1$s debido a %2$s. Código: %3$s', $this->plugin_name ),
+$location_label,
+$reason_label,
 $reference_code
-)
+) );
+} catch ( Exception $exception ) {
+$status        = 'error';
+$error_message = $exception->getMessage();
+$order->add_order_note( sprintf(
+__( '<b>Contífico retornó un error al restituir inventario hacia %1$s</b><br>%2$s', $this->plugin_name ),
+$location_label,
+$error_message
+) );
+}
+
+if ( ! empty( $group_entries ) ) {
+$movement_entries = array_merge(
+$movement_entries,
+$this->finalize_inventory_movement_entries( $group_entries, $status, $reference_code, $error_message )
 );
+}
+}
+
+if ( $processed_groups > 0 && $successful_groups === $processed_groups ) {
 $order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( false ) );
 $order->add_order_note(
 __( '<b>Contífico: </b><br> Inventario marcado como disponible nuevamente en la bodega principal.', $this->plugin_name )
 );
 $order->save();
 }
-}
-catch ( Exception $exception ) {
-$status        = 'error';
-$error_message = $exception->getMessage();
-$order->add_order_note( sprintf(
-__( '<b>Contífico retornó un error al restituir inventario a la bodega principal</b><br>%s', $this->plugin_name ),
-$error_message
-)
-);
-}
 
 if ( ! empty( $movement_entries ) ) {
-$movement_entries = $this->finalize_inventory_movement_entries( $movement_entries, $status, $reference_code, $error_message );
 $this->append_inventory_movement_entries( $movement_entries );
+}
+
+if ( $order_id ) {
+unset( $this->preferred_warehouse_allocations[ $order_id ] );
 }
 }
 

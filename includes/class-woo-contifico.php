@@ -375,14 +375,30 @@ class Woo_Contifico
 		                'type' => 'title',
 		                'label' => __('<h3>Manejo de bodegas</h3>', $this->plugin_name),
 	                ],
-	                [
-		                'id' => 'bodega',
-		                'label' => __('Bodega principal', $this->plugin_name),
-		                'description' => __('<br>Código de la bodega desde donde se sincroniza el inventario.<br> Si se usan dos bodegas, esta será la bodega de inventario.', $this->plugin_name),
-		                'required' => true,
-		                'type' => 'text',
-		                'size' => 10
-	                ],
+                        [
+                                'id' => 'bodega',
+                                'label' => __('Bodega principal', $this->plugin_name),
+                                'description' => __('<br>Código de la bodega desde donde se sincroniza el inventario.<br> Si se usan dos bodegas, esta será la bodega de inventario.', $this->plugin_name),
+                                'required' => true,
+                                'type' => 'text',
+                                'size' => 10
+                        ],
+                        [
+                                'id' => 'bodega_secundaria',
+                                'label' => __('Bodega secundaria', $this->plugin_name),
+                                'description' => __('<br>Se utilizará como respaldo cuando la bodega principal no tenga stock disponible al trasladar pedidos.', $this->plugin_name),
+                                'required' => false,
+                                'type' => 'text',
+                                'size' => 10
+                        ],
+                        [
+                                'id' => 'bodega_terciaria',
+                                'label' => __('Bodega terciaria', $this->plugin_name),
+                                'description' => __('<br>Se utilizará como tercera opción para completar pedidos cuando la bodega principal y la secundaria no tengan stock.', $this->plugin_name),
+                                'required' => false,
+                                'type' => 'text',
+                                'size' => 10
+                        ],
                         [
                                 'id' => 'bodega_facturacion',
                                 'label' => __('Bodega de facturación', $this->plugin_name),
@@ -894,8 +910,11 @@ class Woo_Contifico
 	    $this->loader->add_action('woocommerce_checkout_process', $plugin_public, 'validate_user_account_data');
 	    $this->loader->add_action('woocommerce_save_account_details_errors', $plugin_public, 'validate_user_account_data');
 
-	    # Update order metadata
-	    $this->loader->add_action('woocommerce_checkout_update_order_meta', $plugin_public, 'checkout_update_order_meta');
+# Update order metadata
+$this->loader->add_action('woocommerce_checkout_update_order_meta', $plugin_public, 'checkout_update_order_meta');
+
+# Capture MultiLoca location per order item
+$this->loader->add_action('woocommerce_checkout_create_order_line_item', $plugin_public, 'capture_order_item_location_meta', 20, 4);
 
 	    # Display tax fields on account page
 	    $this->loader->add_action('woocommerce_edit_account_form', $plugin_public, 'print_user_frontend_fields');
