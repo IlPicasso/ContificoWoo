@@ -16,11 +16,11 @@
  * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
  * Text Domain:       woo-contifico
  * Domain Path:       /languages
- * Requires at least: 5.8
- * Tested up to:      6.5
- * Requires PHP:      7.4
- * WC requires at least: 5.8
- * WC tested up to:   8.7
+ * Requires at least: 5.0
+ * Tested up to:      5.9
+ * Requires PHP:      7.2
+ * WC requires at least: 5.0
+ * WC tested up to:   6.4
  */
 
 # If this file is called directly, abort.
@@ -40,15 +40,15 @@ define( 'WOO_CONTIFICO_VERSION', '4.1.3' );
 
 # GitHub repository metadata for auto-updates
 if ( ! defined( 'WOO_CONTIFICO_REPO_OWNER' ) ) {
-	define( 'WOO_CONTIFICO_REPO_OWNER', apply_filters( 'woo_contifico_repo_owner', 'IlPicasso' ) );
+        define( 'WOO_CONTIFICO_REPO_OWNER', apply_filters( 'woo_contifico_repo_owner', 'otakupahp' ) );
 }
 
 if ( ! defined( 'WOO_CONTIFICO_REPO_NAME' ) ) {
-	define( 'WOO_CONTIFICO_REPO_NAME', apply_filters( 'woo_contifico_repo_name', 'ContificoWoo' ) );
+        define( 'WOO_CONTIFICO_REPO_NAME', apply_filters( 'woo_contifico_repo_name', 'ContificoWoo' ) );
 }
 
 if ( ! defined( 'WOO_CONTIFICO_REPO_BRANCH' ) ) {
-	define( 'WOO_CONTIFICO_REPO_BRANCH', apply_filters( 'woo_contifico_repo_branch', 'main' ) );
+        define( 'WOO_CONTIFICO_REPO_BRANCH', apply_filters( 'woo_contifico_repo_branch', 'main' ) );
 }
 
 if ( ! defined( 'WOO_CONTIFICO_REPO_ACCESS_TOKEN' ) ) {
