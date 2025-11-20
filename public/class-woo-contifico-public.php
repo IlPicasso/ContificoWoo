@@ -318,6 +318,33 @@ class Woo_Contifico_Public {
 	}
 
 	/**
+	 * Persist the MultiLoca location associated with each order item.
+	 *
+	 * @since 4.4.0
+	 */
+	public function capture_order_item_location_meta( $item, $cart_item_key, $values, $order ) {
+		if ( ! ( $item instanceof WC_Order_Item ) ) {
+			return;
+		}
+
+		$order_instance = $order instanceof WC_Order ? $order : ( method_exists( $item, 'get_order' ) ? $item->get_order() : null );
+
+		if ( ! ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) ) {
+			return;
+		}
+
+		if ( ! $this->woo_contifico->multilocation->is_active() ) {
+			return;
+		}
+
+		if ( ! method_exists( $this->woo_contifico->multilocation, 'store_order_item_location_from_checkout_values' ) ) {
+			return;
+		}
+
+		$this->woo_contifico->multilocation->store_order_item_location_from_checkout_values( $item, (array) $values, $order_instance );
+	}
+
+	/**
 	 * Add fields to my account area.
 	 *
 	 * @return  void
