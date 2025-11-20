@@ -9,8 +9,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class Woo_Contifico_MultiLocation_Compatibility {
 
-    /**
-     * Holds the MultiLoca Lite plugin instance when available.
+private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location';
+
+/**
+ * Holds the MultiLoca Lite plugin instance when available.
      *
      * @var object|null
      */
@@ -782,8 +784,214 @@ class Woo_Contifico_MultiLocation_Compatibility {
     }
 
     /**
-     * Update the stock of a product for a given location.
+     * Retrieve the location identifier associated with a specific order item.
      *
+     * @since 4.4.0
+     *
+     * @param WC_Order_Item $item Order item instance.
+     *
+     * @return string
+     */
+    public function get_order_item_location( $item ) : string {
+        if ( ! $this->is_active() ) {
+            return '';
+        }
+
+        if ( ! is_object( $item ) || ! is_a( $item, 'WC_Order_Item' ) ) {
+            return '';
+        }
+
+        foreach ( $this->get_order_item_location_meta_keys() as $meta_key ) {
+            $meta_value = $item->get_meta( $meta_key, true );
+            $meta_value = $this->sanitize_order_item_location_id( $meta_value );
+
+            if ( '' === $meta_value ) {
+                continue;
+            }
+
+            if ( self::ORDER_ITEM_LOCATION_META_KEY !== $meta_key ) {
+                $this->persist_order_item_location_meta( $item, $meta_value );
+            }
+
+            return $meta_value;
+        }
+
+        $order = method_exists( $item, 'get_order' ) ? $item->get_order() : null;
+
+        $refunded_item_id = 0;
+        if ( method_exists( $item, 'get_meta' ) ) {
+            $refunded_item_id = absint( $item->get_meta( '_refunded_item_id', true ) );
+        }
+
+        if ( $refunded_item_id > 0 && $order && method_exists( $order, 'get_item' ) ) {
+            $refunded_item = $order->get_item( $refunded_item_id );
+
+            if ( $refunded_item && is_a( $refunded_item, 'WC_Order_Item' ) ) {
+                $refunded_location = $this->sanitize_order_item_location_id( $refunded_item->get_meta( self::ORDER_ITEM_LOCATION_META_KEY, true ) );
+
+                if ( '' !== $refunded_location ) {
+                    $this->persist_order_item_location_meta( $item, $refunded_location );
+
+                    return $refunded_location;
+                }
+
+                if ( $refunded_item->get_id() !== $item->get_id() ) {
+                    $refunded_location = $this->sanitize_order_item_location_id( $this->get_order_item_location( $refunded_item ) );
+
+                    if ( '' !== $refunded_location ) {
+                        $this->persist_order_item_location_meta( $item, $refunded_location );
+
+                        return $refunded_location;
+                    }
+                }
+            }
+        }
+
+        if ( $order && is_a( $order, 'WC_Order' ) ) {
+            $location_id = $this->sanitize_order_item_location_id( $this->get_order_location( $order ) );
+
+            if ( '' !== $location_id ) {
+                $this->persist_order_item_location_meta( $item, $location_id );
+
+                return $location_id;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Persist the detected location identifier as order item metadata.        return '';
+    }
+
+    /**
+     * Persist the detected location identifier as order item metadata.
+     *
+     * @since 4.4.0
+     */
+    protected function persist_order_item_location_meta( $item, string $location_id ) : void {
+        if ( ! is_object( $item ) || ! is_a( $item, 'WC_Order_Item' ) ) {
+            return;
+        }
+
+        $location_id = $this->sanitize_order_item_location_id( $location_id );
+
+        if ( '' === $location_id ) {
+            return;
+        }
+
+        $current = $this->sanitize_order_item_location_id( $item->get_meta( self::ORDER_ITEM_LOCATION_META_KEY, true ) );
+
+        if ( $current === $location_id ) {
+            return;
+        }
+
+        if ( $item->get_id() > 0 ) {
+            $item->update_meta_data( self::ORDER_ITEM_LOCATION_META_KEY, $location_id );
+            $item->save();
+        } else {
+            $item->add_meta_data( self::ORDER_ITEM_LOCATION_META_KEY, $location_id, true );
+        }
+    }
+
+    /**
+     * Capture the location identifier for an order item using checkout data.
+     *
+     * @since 4.4.0
+     *
+     * @param WC_Order_Item      $item   Order item instance.
+     * @param array              $values Cart item values passed by WooCommerce.
+     * @param WC_Order|int|null  $order  Optional order context.
+     *
+     * @return void
+     */
+    public function store_order_item_location_from_checkout_values( $item, array $values, $order = null ) : void {
+        if ( ! $this->is_active() ) {
+            return;
+        }
+
+        if ( ! is_object( $item ) || ! is_a( $item, 'WC_Order_Item' ) ) {
+            return;
+        }
+
+        $location_id = $this->extract_location_from_order_item_values( $values );
+
+        if ( '' === $location_id && $order && is_a( $order, 'WC_Order' ) ) {
+            $location_id = $this->sanitize_order_item_location_id( $this->get_order_location( $order ) );
+        }
+
+        if ( '' === $location_id ) {
+            return;
+        }
+
+        $this->persist_order_item_location_meta( $item, $location_id );
+    }
+
+    /**
+     * Extract a MultiLoca location identifier from a cart item data array.
+     *
+     * @since 4.4.0
+     */
+    protected function extract_location_from_order_item_values( array $values ) : string {
+        $location_keys = [
+            'multiloca_location',
+            '_multiloca_location',
+            '_multiloca_location_id',
+            'multiloca_location_id',
+            'location_id',
+            'location',
+            'wcmlim_location_id',
+            'wcmlim_location',
+        ];
+
+        foreach ( $location_keys as $key ) {
+            if ( isset( $values[ $key ] ) ) {
+                $location = $this->sanitize_order_item_location_id( $values[ $key ] );
+
+                if ( '' !== $location ) {
+                    return $location;
+                }
+            }
+        }
+
+        $filtered = apply_filters( 'woo_contifico_multilocation_order_item_checkout_location', '', $values );
+        $filtered = $this->sanitize_order_item_location_id( $filtered );
+
+        return $filtered;
+    }
+
+    /**
+     * Normalize raw identifiers pulled from order or cart context.
+     *
+     * @since 4.4.0
+     */
+    protected function sanitize_order_item_location_id( $location_id ) : string {
+        if ( is_scalar( $location_id ) ) {
+            $location_id = trim( (string) $location_id );
+        } else {
+            $location_id = '';
+        }
+
+        return $location_id;
+    }
+
+    /**
+     * Return the metadata keys that may contain item level locations.
+     *
+     * @since 4.4.0
+     */
+protected function get_order_item_location_meta_keys() : array {
+return [
+self::ORDER_ITEM_LOCATION_META_KEY,
+'_multiloca_location',
+'_multiloca_location_id',
+'multiloca_location',
+];
+}
+
+/**
+ * Update the stock of a product for a given location.
+ *
      * @param int         $product_id Product ID.
      * @param string|int  $location_id Location identifier.
      * @param float|int   $quantity Quantity to set.
