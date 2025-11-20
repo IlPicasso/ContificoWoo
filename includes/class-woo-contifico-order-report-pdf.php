@@ -11,37 +11,37 @@ class Woo_Contifico_Order_Report_Pdf {
         $this->add_page();
     }
 
-    public function add_title( $text ) {
+    public function add_title( string $text ) : void {
         $this->add_wrapped_text( $text, 16, 28 );
         $this->add_spacer( 6 );
     }
 
-    public function add_subheading( $text ) {
+    public function add_subheading( string $text ) : void {
         $this->add_wrapped_text( $text, 13, 20 );
     }
 
-    private function add_wrapped_text( $text, $font_size, $line_height ) {
+    private function add_wrapped_text( string $text, int $font_size, int $line_height ) : void {
         foreach ( $this->wrap_text( $text ) as $line ) {
             $this->add_line( $line, $font_size, $line_height );
         }
     }
 
-    public function add_text_line( $text, $font_size = 11, $line_height = 14 ) {
+    public function add_text_line( string $text, int $font_size = 11, int $line_height = 14 ) : void {
         foreach ( $this->wrap_text( $text ) as $line ) {
             $this->add_line( $line, $font_size, $line_height );
         }
     }
 
-    public function add_list_item( $text ) {
+    public function add_list_item( string $text ) : void {
         $this->add_text_line( '- ' . $text );
     }
 
-    public function add_spacer( $height = 10 ) {
+    public function add_spacer( int $height = 10 ) : void {
         $this->ensure_space( $height );
         $this->current_y -= $height;
     }
 
-    public function render() {
+    public function render() : string {
         $objects  = [];
         $offsets  = [];
         $next_id  = 1;
@@ -98,13 +98,13 @@ class Woo_Contifico_Order_Report_Pdf {
         return $pdf;
     }
 
-    private function add_page() {
+    private function add_page() : void {
         $this->pages[]     = [];
         $this->current_page = count( $this->pages ) - 1;
         $this->current_y    = 780;
     }
 
-    private function add_line( $text, $font_size, $line_height ) {
+    private function add_line( string $text, int $font_size, int $line_height ) : void {
         if ( '' === trim( $text ) ) {
             $this->add_spacer( $line_height );
             return;
@@ -117,7 +117,7 @@ class Woo_Contifico_Order_Report_Pdf {
         $this->current_y -= $line_height;
     }
 
-    private function wrap_text( $text ) {
+    private function wrap_text( string $text ) : array {
         $text    = $this->normalize_text( $text );
         $chunks  = preg_split( "/\r?\n/", $text );
         $results = [];
@@ -137,19 +137,19 @@ class Woo_Contifico_Order_Report_Pdf {
         return $results ?: [ '' ];
     }
 
-    private function ensure_space( $height ) {
+    private function ensure_space( int $height ) : void {
         if ( $this->current_y - $height < 40 ) {
             $this->add_page();
         }
     }
 
-    private function normalize_text( $text ) {
+    private function normalize_text( string $text ) : string {
         $text = preg_replace( "/[\t\r]+/", ' ', $text );
         $text = preg_replace( "/\s+/", ' ', $text );
         return trim( $text );
     }
 
-    private function escape_text( $text ) {
+    private function escape_text( string $text ) : string {
         if ( function_exists( 'iconv' ) ) {
             $converted = @iconv( 'UTF-8', 'ISO-8859-1//TRANSLIT', $text );
             if ( false !== $converted ) {
