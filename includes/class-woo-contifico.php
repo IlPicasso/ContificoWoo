@@ -375,14 +375,30 @@ class Woo_Contifico
 		                'type' => 'title',
 		                'label' => __('<h3>Manejo de bodegas</h3>', $this->plugin_name),
 	                ],
-	                [
-		                'id' => 'bodega',
-		                'label' => __('Bodega principal', $this->plugin_name),
-		                'description' => __('<br>Código de la bodega desde donde se sincroniza el inventario.<br> Si se usan dos bodegas, esta será la bodega de inventario.', $this->plugin_name),
-		                'required' => true,
-		                'type' => 'text',
-		                'size' => 10
-	                ],
+                        [
+                                'id' => 'bodega',
+                                'label' => __('Bodega principal', $this->plugin_name),
+                                'description' => __('<br>Código de la bodega desde donde se sincroniza el inventario.<br> Si se usan dos bodegas, esta será la bodega de inventario.', $this->plugin_name),
+                                'required' => true,
+                                'type' => 'text',
+                                'size' => 10
+                        ],
+                        [
+                                'id' => 'bodega_secundaria',
+                                'label' => __('Bodega secundaria', $this->plugin_name),
+                                'description' => __('<br>Se utilizará como respaldo cuando la bodega principal no tenga stock disponible al trasladar pedidos.', $this->plugin_name),
+                                'required' => false,
+                                'type' => 'text',
+                                'size' => 10
+                        ],
+                        [
+                                'id' => 'bodega_terciaria',
+                                'label' => __('Bodega terciaria', $this->plugin_name),
+                                'description' => __('<br>Se utilizará como tercera opción para completar pedidos cuando la bodega principal y la secundaria no tengan stock.', $this->plugin_name),
+                                'required' => false,
+                                'type' => 'text',
+                                'size' => 10
+                        ],
                         [
                                 'id' => 'bodega_facturacion',
                                 'label' => __('Bodega de facturación', $this->plugin_name),
@@ -718,10 +734,15 @@ class Woo_Contifico
 	     */
 	    require_once WOO_CONTIFICO_PATH . 'includes/class-woo-contifico-i18n.php';
 
-	    /**
-	     * The class responsible for defining all actions that occur in the admin area.
-	     */
-	    require_once WOO_CONTIFICO_PATH . 'admin/class-woo-contifico-admin.php';
+        /**
+         * Helpers for PDF generation.
+         */
+        require_once WOO_CONTIFICO_PATH . 'includes/class-woo-contifico-order-report-pdf.php';
+
+        /**
+         * The class responsible for defining all actions that occur in the admin area.
+         */
+        require_once WOO_CONTIFICO_PATH . 'admin/class-woo-contifico-admin.php';
 
 	    /**
 	     * The class responsible for defining all actions that occur in the public-facing
@@ -790,6 +811,7 @@ class Woo_Contifico
         $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_styles');
         $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts');
         $this->loader->add_action('admin_post_woo_contifico_export_inventory_movements', $plugin_admin, 'export_inventory_movements');
+        $this->loader->add_action('admin_post_woo_contifico_order_pdf', $plugin_admin, 'download_order_inventory_report');
 
         # Plugin settings link in plugins list table
         $plugin_basename = $this->plugin_name . '/' . $this->get_plugin_name();
@@ -846,7 +868,8 @@ class Woo_Contifico
 	    $this->loader->add_action('edit_user_profile', $plugin_admin, 'print_user_admin_fields', 30);
 
 	    # Hooks to display and update tax info in order edit page
-	    $this->loader->add_action('woocommerce_admin_order_data_after_billing_address', $plugin_admin, 'display_admin_order_meta', 10, 1);
+        $this->loader->add_action('woocommerce_admin_order_data_after_billing_address', $plugin_admin, 'display_admin_order_meta', 10, 1);
+        $this->loader->add_action('woocommerce_admin_order_data_after_order_details', $plugin_admin, 'render_order_pdf_download_button', 20, 1);
 	    $this->loader->add_action('woocommerce_process_shop_order_meta', $plugin_admin, 'save_order_meta_fields');
 
 	    # Hooks to update user meta with Tax Id and Type (in checkout and account pages)
@@ -894,8 +917,11 @@ class Woo_Contifico
 	    $this->loader->add_action('woocommerce_checkout_process', $plugin_public, 'validate_user_account_data');
 	    $this->loader->add_action('woocommerce_save_account_details_errors', $plugin_public, 'validate_user_account_data');
 
-	    # Update order metadata
-	    $this->loader->add_action('woocommerce_checkout_update_order_meta', $plugin_public, 'checkout_update_order_meta');
+# Update order metadata
+$this->loader->add_action('woocommerce_checkout_update_order_meta', $plugin_public, 'checkout_update_order_meta');
+
+# Capture MultiLoca location per order item
+$this->loader->add_action('woocommerce_checkout_create_order_line_item', $plugin_public, 'capture_order_item_location_meta', 20, 4);
 
 	    # Display tax fields on account page
 	    $this->loader->add_action('woocommerce_edit_account_form', $plugin_public, 'print_user_frontend_fields');
