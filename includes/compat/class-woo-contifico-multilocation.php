@@ -980,14 +980,16 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
      *
      * @since 4.4.0
      */
-protected function get_order_item_location_meta_keys() : array {
-return [
-self::ORDER_ITEM_LOCATION_META_KEY,
-'_multiloca_location',
-'_multiloca_location_id',
-'multiloca_location',
-];
-}
+    protected function get_order_item_location_meta_keys() : array {
+        return [
+            self::ORDER_ITEM_LOCATION_META_KEY,
+            '_multiloca_location',
+            '_multiloca_location_id',
+            'multiloca_location',
+            'wcmlim_location_id',
+            'wcmlim_location',
+        ];
+    }
 
 /**
  * Update the stock of a product for a given location.
