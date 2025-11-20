@@ -5177,6 +5177,12 @@ if ( $processed_groups > 0 && $successful_groups === $processed_groups ) {
 $order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( true ) );
 $order->save();
 }
+}
+
+if ( $processed_groups > 0 && $successful_groups === $processed_groups ) {
+$order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( true ) );
+$order->save();
+}
 
 if ( ! empty( $movement_entries ) ) {
 $this->append_inventory_movement_entries( $movement_entries );
@@ -5199,38 +5205,37 @@ unset( $this->preferred_warehouse_allocations[ $order_id ] );
 	 * @param int|WC_Order $order_id
 	 * @param int $refund_id
 	 */
-	public function restore_contifico_stock( $order_id, $refund_id = 0 ) {
+public function restore_contifico_stock( $order_id, $refund_id = 0 ) {
 
-		# Get order data
-		if ( is_a( $order_id, 'WC_Order' ) ) {
-			$order    = $order_id;
-			$order_id = $order->get_id();
-		} else {
-			$order = wc_get_order( $order_id );
-		}
+# Get order data
+if ( is_a( $order_id, 'WC_Order' ) ) {
+$order    = $order_id;
+$order_id = $order->get_id();
+} else {
+$order = wc_get_order( $order_id );
+}
 
-		# Transfer stock from the provisional web warehouse if is configured
-                if(
-                        wc_string_to_bool( $order->get_meta( '_woo_contifico_stock_reduced', true ) ) &&
-                        isset($this->woo_contifico->settings['bodega_facturacion'])
-                ) {
+# Transfer stock from the provisional web warehouse if is configured
+if (
+wc_string_to_bool( $order->get_meta( '_woo_contifico_stock_reduced', true ) ) &&
+isset( $this->woo_contifico->settings['bodega_facturacion'] )
+) {
+# Get refund data
+$refund = null;
+if ( ! empty( $refund_id ) ) {
+$refund = new WC_Order_Refund( $refund_id );
+}
 
-			# Ger refund data
-			$refund = null;
-			if ( ! empty( $refund_id ) ) {
-				$refund = new WC_Order_Refund( $refund_id );
-			}
-
-                        $origin_code              = isset( $this->woo_contifico->settings['bodega_facturacion'] ) ? (string) $this->woo_contifico->settings['bodega_facturacion'] : '';
-                        $destination_code         = isset( $this->woo_contifico->settings['bodega'] ) ? (string) $this->woo_contifico->settings['bodega'] : '';
-                        $id_origin_warehouse      = (string) ( $this->contifico->get_id_bodega( $origin_code ) ?? '' );
-                        $default_destination_id   = (string) ( $this->contifico->get_id_bodega( $destination_code ) ?? '' );
-$env = ( (int) $this->woo_contifico->settings['ambiente'] === WOO_CONTIFICO_TEST ) ? 'test' : 'prod';
+$origin_code            = isset( $this->woo_contifico->settings['bodega_facturacion'] ) ? (string) $this->woo_contifico->settings['bodega_facturacion'] : '';
+$destination_code       = isset( $this->woo_contifico->settings['bodega'] ) ? (string) $this->woo_contifico->settings['bodega'] : '';
+$id_origin_warehouse    = (string) ( $this->contifico->get_id_bodega( $origin_code ) ?? '' );
+$default_destination_id = (string) ( $this->contifico->get_id_bodega( $destination_code ) ?? '' );
+$env                    = ( (int) $this->woo_contifico->settings['ambiente'] === WOO_CONTIFICO_TEST ) ? 'test' : 'prod';
 
 # Get items to restore
 $items = empty( $refund_id ) ? $order->get_items() : $refund->get_items();
-if( empty($items) && !empty($refund) ) {
-$items = $order->get_items();
+if ( empty( $items ) && ! empty( $refund ) ) {
+$items  = $order->get_items();
 $refund = null;
 }
 
@@ -5245,9 +5250,9 @@ $processed_groups  = 0;
 $successful_groups = 0;
 
 foreach ( $grouped_items as $group ) {
-$group_context  = $group['context'];
-$group_entries  = [];
-$restore_stock  = [
+$group_context = $group['context'];
+$group_entries = [];
+$restore_stock = [
 'tipo'              => 'TRA',
 'fecha'             => date( 'd/m/Y' ),
 'bodega_id'         => $id_origin_warehouse,
@@ -5268,62 +5273,62 @@ $group_context['location_label']
 );
 }
 
-                foreach ( $group['items'] as $item ) {
-                        $wc_product = $item->get_product();
+foreach ( $group['items'] as $item ) {
+$wc_product = $item->get_product();
+
+if ( $group_context['mapped'] && '' !== $group_context['location_label'] ) {
+$restore_stock['descripcion'] .= ' ' . sprintf(
+__( '(Ubicación MultiLoca: %s)', $this->plugin_name ),
+$group_context['location_label']
+);
+}
+
+$item_context  = isset( $group['item_contexts'][ $item->get_id() ] ) ? $group['item_contexts'][ $item->get_id() ] : $group_context;
+$sku           = (string) $wc_product->get_sku();
+$price         = $wc_product->get_price();
+$product_id    = $this->contifico->get_product_id( $sku );
+$item_quantity = 0.0;
 
                         if ( ! $wc_product ) {
                                 continue;
                         }
 
-                        $item_context = isset( $group['item_contexts'][ $item->get_id() ] ) ? $group['item_contexts'][ $item->get_id() ] : $group_context;
-                        $sku          = (string) $wc_product->get_sku();
-                        $price        = $wc_product->get_price();
-                        $product_id   = $this->contifico->get_product_id( $sku );
-                        $item_quantity = 0.0;
+$item_quantity = (float) $item_quantity;
 
-                        if ( empty( $refund ) ) {
-                                $item_stock_reduced = $item->get_meta( '_reduced_stock', true );
-                                $item_quantity      = empty( $item_stock_reduced ) ? $item->get_quantity() : $item_stock_reduced;
-                        } else {
-                                $item_quantity = abs( $item->get_quantity() );
-                        }
+if ( 0.0 === $item_quantity ) {
+continue;
+}
 
-                        $item_quantity = (float) $item_quantity;
+$restore_stock['detalles'][] = [
+'producto_id' => $product_id,
+'precio'      => $price,
+'cantidad'    => $item_quantity,
+];
 
-                        if ( 0.0 === $item_quantity ) {
-                                continue;
-                        }
-
-                        $restore_stock['detalles'][] = [
-                                'producto_id' => $product_id,
-                                'precio'      => $price,
-                                'cantidad'    => $item_quantity,
-                        ];
-
-                        $group_entries[] = $this->build_inventory_movement_entry( [
-                                'order_id'      => $order_id,
-                                'event_type'    => 'ingreso',
-                                'product_id'    => $product_id,
-                                'wc_product_id' => $wc_product->get_id(),
-                                'sku'           => $sku,
-                                'product_name'  => $wc_product->get_name(),
-                                'quantity'      => $item_quantity,
-                                'warehouses'    => [
-                                        'from' => [ 'id' => (string) $id_origin_warehouse, 'label' => $origin_code ],
-                                        'to'   => [ 'id' => (string) $group_context['id'], 'label' => $group_context['label'] ],
-                                ],
-                                'order_status'  => $order->get_status(),
-                                'order_trigger' => $trigger,
-                                'context'       => 'restore',
-                                'order_source'  => $order_source,
-                                'order_item_id' => $item->get_id(),
-                                'sync_type'     => 'global',
-                                'location'      => [
-                                        'id'    => isset( $item_context['location_id'] ) ? $item_context['location_id'] : $group_context['location_id'],
-                                        'label' => isset( $item_context['location_label'] ) ? $item_context['location_label'] : $group_context['location_label'],
-                                ],
-                        ] );
-                }
+$group_entries[] = $this->build_inventory_movement_entry( [
+'order_id'      => $order_id,
+'event_type'    => 'ingreso',
+'product_id'    => $product_id,
+'wc_product_id' => $wc_product->get_id(),
+'sku'           => $sku,
+'product_name'  => $wc_product->get_name(),
+'quantity'      => $item_quantity,
+'warehouses'    => [
+'from' => [ 'id' => (string) $id_origin_warehouse, 'label' => $origin_code ],
+'to'   => [ 'id' => (string) $group_context['id'], 'label' => $group_context['label'] ],
+],
+'order_status'  => $order->get_status(),
+'order_trigger' => $trigger,
+'context'       => 'restore',
+'order_source'  => $order_source,
+'order_item_id' => $item->get_id(),
+'sync_type'     => 'global',
+'location'      => [
+'id'    => isset( $item_context['location_id'] ) ? $item_context['location_id'] : $group_context['location_id'],
+'label' => isset( $item_context['location_label'] ) ? $item_context['location_label'] : $group_context['location_label'],
+],
+] );
+}
 
 if ( empty( $restore_stock['detalles'] ) ) {
 continue;
@@ -5331,9 +5336,9 @@ continue;
 
 $processed_groups++;
 $status         = 'pending';
-$reference_code  = '';
-$error_message   = '';
-$location_label  = $this->describe_inventory_location_for_note( $group_context );
+$reference_code = '';
+$error_message  = '';
+$location_label = $this->describe_inventory_location_for_note( $group_context );
 
 try {
 $result        = $this->contifico->transfer_stock( json_encode( $restore_stock ) );
@@ -5380,7 +5385,6 @@ if ( $order_id ) {
 unset( $this->preferred_warehouse_allocations[ $order_id ] );
 }
 }
-
 }
 
 	/**
