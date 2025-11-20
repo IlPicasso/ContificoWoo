@@ -2494,10 +2494,21 @@ return $value;
         /**
          * Build a human readable label for inventory notes based on the context.
          *
-         * @since 4.4.0
+        * @since 4.4.0
          */
         private function describe_inventory_location_for_note( array $context ) : string {
                 $location_label = isset( $context['location_label'] ) ? (string) $context['location_label'] : '';
+                $location_id    = isset( $context['location_id'] ) ? (string) $context['location_id'] : '';
+
+                if (
+                        '' === $location_label
+                        && '' !== $location_id
+                        && $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
+                        && $this->woo_contifico->multilocation->is_active()
+                        && method_exists( $this->woo_contifico->multilocation, 'get_location_label' )
+                ) {
+                        $location_label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
+                }
 
                 if ( '' !== $location_label ) {
                         return $location_label;
