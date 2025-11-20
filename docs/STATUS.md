@@ -10,3 +10,4 @@
 - **Compatibilidad declarada:** Actualizada en cabecera del plugin y README. Mantener pruebas cuando haya nuevas versiones de WP/WC para asegurar que los números reflejan la cobertura real.
 - **Auto‑actualizador:** Defaults alineados con el repositorio público `IlPicasso/ContificoWoo`. Confirmar que los filtros `woo_contifico_repo_owner`, `woo_contifico_repo_name`, `woo_contifico_repo_branch` y `woo_contifico_repo_access_token` siguen disponibles en despliegues personalizados.
 - **MultiLoca:** La integración continúa documentada con los flujos actuales; ejecutar una validación completa con las variantes recientes del plugin de terceros tras actualizaciones mayores de WooCommerce para asegurar que se mantienen los comportamientos descritos.
+- **Guía QA:** `docs/QA.md` resume los pasos para probar detección automática/manual y la ruta de metadatos `wcmlim_stock_at_{ID}` en productos simples y variables.
