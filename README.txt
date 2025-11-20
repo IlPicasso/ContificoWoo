@@ -1,10 +1,10 @@
 === Woocommerce - Facturación Electrónica - Contífico ===
 Tags: Facturación electrónica, Contífico
 Requires at least: 5.8
-Tested up to: 6.5
+Tested up to: 6.8
 Requires PHP: 7.4
 WC requires at least: 5.8
-WC tested up to: 8.7
+WC tested up to: 10.3
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -85,6 +85,7 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 = 4.1.3 =
 * Se actualiza la información del plugin para reflejar a IlPicasso como autor y se apunta el auto-actualizador al nuevo repositorio público.
+* Cobertura validada con WordPress 6.8.3 y WooCommerce 10.3.5.
 
 = 4.1.2 =
 * Se añade la activación manual de la compatibilidad con MultiLoca y el soporte para definir ubicaciones manuales.
