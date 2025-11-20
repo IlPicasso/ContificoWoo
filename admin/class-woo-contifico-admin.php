@@ -2341,6 +2341,10 @@ return $value;
                         return $context;
                 }
 
+                if ( ! empty( $context['mapped'] ) ) {
+                        return $context;
+                }
+
                 $preferred_codes = $this->get_preferred_warehouse_codes();
 
                 if ( empty( $preferred_codes ) ) {
@@ -2521,32 +2525,82 @@ return $value;
         private function group_order_items_by_location_context( WC_Order $order, array $items, string $default_code, string $default_id ) : array {
                 $groups = [];
 
-foreach ( $items as $item ) {
-if ( ! is_a( $item, 'WC_Order_Item_Product' ) ) {
-continue;
-}
+                foreach ( $items as $item ) {
+                        if ( ! is_a( $item, 'WC_Order_Item_Product' ) ) {
+                                continue;
+                        }
 
-$wc_product = $item->get_product();
+                        $wc_product = $item->get_product();
 
-if ( ! $wc_product ) {
-continue;
-}
+                        if ( ! $wc_product ) {
+                                continue;
+                        }
 
-$context  = $this->resolve_order_item_location_inventory_context( $order, $item, $default_code, $default_id );
-$group_id = sprintf( '%s|%s', $context['id'], $context['location_id'] );
+                        $context   = $this->resolve_order_item_location_inventory_context( $order, $item, $default_code, $default_id );
+                        $group_key = $context['id'] ?: $context['code'];
 
-if ( ! isset( $groups[ $group_id ] ) ) {
-$groups[ $group_id ] = [
-'context' => $context,
-'items'   => [],
-];
-}
+                        if ( '' === $group_key ) {
+                                $group_key = 'default';
+                        }
 
-$groups[ $group_id ]['items'][] = $item;
-}
+                        if ( ! isset( $groups[ $group_key ] ) ) {
+                                $groups[ $group_key ] = [
+                                        'context'       => $context,
+                                        'items'         => [],
+                                        'item_contexts' => [],
+                                        'locations'     => [],
+                                ];
+                        }
 
-return $groups;
-}
+                        $groups[ $group_key ]['items'][]                    = $item;
+                        $groups[ $group_key ]['item_contexts'][ $item->get_id() ] = $context;
+
+                        $location_id    = '' !== $context['location_id'] ? $context['location_id'] : sprintf( 'default-%s', $group_key );
+                        $location_label = '' !== $context['location_label'] ? $context['location_label'] : $this->describe_inventory_location_for_note( $context );
+
+                        $groups[ $group_key ]['locations'][ $location_id ] = $location_label;
+                }
+
+                foreach ( $groups as &$group ) {
+                        $group['context']['location_label'] = $this->summarize_group_location_labels( $group['locations'], $group['context'] );
+
+                        if ( count( $group['locations'] ) > 1 ) {
+                                $group['context']['location_id'] = 'mixed';
+                        }
+                }
+                unset( $group );
+
+                return $groups;
+        }
+
+        /**
+         * Summarize location labels belonging to a grouped warehouse context.
+         *
+         * @since 4.4.0
+         */
+        private function summarize_group_location_labels( array $locations, array $context ) : string {
+                $labels = array_values( array_unique( array_filter( array_map( 'trim', $locations ) ) ) );
+
+                if ( empty( $labels ) ) {
+                        return $this->describe_inventory_location_for_note( $context );
+                }
+
+                if ( 1 === count( $labels ) ) {
+                        return $labels[0];
+                }
+
+                $warehouse_label = isset( $context['label'] ) ? (string) $context['label'] : '';
+
+                if ( '' !== $warehouse_label ) {
+                        return sprintf(
+                                __( '%1$s · Ubicaciones: %2$s', $this->plugin_name ),
+                                $warehouse_label,
+                                implode( ', ', $labels )
+                        );
+                }
+
+                return sprintf( __( 'Ubicaciones: %s', $this->plugin_name ), implode( ', ', $labels ) );
+        }
 
 /**
  * Find the Contífico warehouse code configured for a MultiLoca location.
@@ -5027,46 +5081,47 @@ $group_context['location_label']
 
 $group_entries = [];
 
-foreach ( $group['items'] as $item ) {
-$wc_product = $item->get_product();
+                foreach ( $group['items'] as $item ) {
+                        $wc_product = $item->get_product();
 
-if ( ! $wc_product ) {
-continue;
-}
+                        if ( ! $wc_product ) {
+                                continue;
+                        }
 
-$sku        = (string) $wc_product->get_sku();
-$product_id = $this->contifico->get_product_id( $sku );
-$quantity   = (float) $item->get_quantity();
+                        $item_context = isset( $group['item_contexts'][ $item->get_id() ] ) ? $group['item_contexts'][ $item->get_id() ] : $group_context;
+                        $sku          = (string) $wc_product->get_sku();
+                        $product_id   = $this->contifico->get_product_id( $sku );
+                        $quantity     = (float) $item->get_quantity();
 
-$transfer_stock['detalles'][] = [
-'producto_id' => $product_id,
-'cantidad'    => $quantity,
-];
+                        $transfer_stock['detalles'][] = [
+                                'producto_id' => $product_id,
+                                'cantidad'    => $quantity,
+                        ];
 
-$group_entries[] = $this->build_inventory_movement_entry( [
-'order_id'      => $order_id,
-'event_type'    => 'egreso',
-'product_id'    => $product_id,
-'wc_product_id' => $wc_product->get_id(),
-'sku'           => $sku,
-'product_name'  => $wc_product->get_name(),
-'quantity'      => $quantity,
-'warehouses'    => [
-'from' => [ 'id' => (string) $group_context['id'], 'label' => $group_context['label'] ],
-'to'   => [ 'id' => (string) $id_destination_warehouse, 'label' => $destination_code ],
-],
-'order_status'  => $order->get_status(),
-'order_trigger' => 'woocommerce_reduce_order_stock',
-'context'       => 'transfer',
-'order_source'  => 'order',
-'order_item_id' => $item->get_id(),
-'sync_type'     => 'global',
-'location'      => [
-'id'    => $group_context['location_id'],
-'label' => $group_context['location_label'],
-],
-] );
-}
+                        $group_entries[] = $this->build_inventory_movement_entry( [
+                                'order_id'      => $order_id,
+                                'event_type'    => 'egreso',
+                                'product_id'    => $product_id,
+                                'wc_product_id' => $wc_product->get_id(),
+                                'sku'           => $sku,
+                                'product_name'  => $wc_product->get_name(),
+                                'quantity'      => $quantity,
+                                'warehouses'    => [
+                                        'from' => [ 'id' => (string) $group_context['id'], 'label' => $group_context['label'] ],
+                                        'to'   => [ 'id' => (string) $id_destination_warehouse, 'label' => $destination_code ],
+                                ],
+                                'order_status'  => $order->get_status(),
+                                'order_trigger' => 'woocommerce_reduce_order_stock',
+                                'context'       => 'transfer',
+                                'order_source'  => 'order',
+                                'order_item_id' => $item->get_id(),
+                                'sync_type'     => 'global',
+                                'location'      => [
+                                        'id'    => isset( $item_context['location_id'] ) ? $item_context['location_id'] : $group_context['location_id'],
+                                        'label' => isset( $item_context['location_label'] ) ? $item_context['location_label'] : $group_context['location_label'],
+                                ],
+                        ] );
+                }
 
 if ( empty( $transfer_stock['detalles'] ) ) {
 continue;
@@ -5109,6 +5164,12 @@ $order_note .= $origin_location_annotation;
 }
 
 $order->add_order_note( $order_note );
+}
+}
+
+if ( $processed_groups > 0 && $successful_groups === $processed_groups ) {
+$order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( true ) );
+$order->save();
 }
 }
 
@@ -5207,61 +5268,62 @@ $group_context['location_label']
 );
 }
 
-foreach ( $group['items'] as $item ) {
-$wc_product = $item->get_product();
+                foreach ( $group['items'] as $item ) {
+                        $wc_product = $item->get_product();
 
-if ( ! $wc_product ) {
-continue;
-}
+                        if ( ! $wc_product ) {
+                                continue;
+                        }
 
-$sku        = (string) $wc_product->get_sku();
-$price      = $wc_product->get_price();
-$product_id = $this->contifico->get_product_id( $sku );
-$item_quantity = 0.0;
+                        $item_context = isset( $group['item_contexts'][ $item->get_id() ] ) ? $group['item_contexts'][ $item->get_id() ] : $group_context;
+                        $sku          = (string) $wc_product->get_sku();
+                        $price        = $wc_product->get_price();
+                        $product_id   = $this->contifico->get_product_id( $sku );
+                        $item_quantity = 0.0;
 
-if ( empty( $refund ) ) {
-$item_stock_reduced = $item->get_meta( '_reduced_stock', true );
-$item_quantity      = empty( $item_stock_reduced ) ? $item->get_quantity() : $item_stock_reduced;
-} else {
-$item_quantity = abs( $item->get_quantity() );
-}
+                        if ( empty( $refund ) ) {
+                                $item_stock_reduced = $item->get_meta( '_reduced_stock', true );
+                                $item_quantity      = empty( $item_stock_reduced ) ? $item->get_quantity() : $item_stock_reduced;
+                        } else {
+                                $item_quantity = abs( $item->get_quantity() );
+                        }
 
-$item_quantity = (float) $item_quantity;
+                        $item_quantity = (float) $item_quantity;
 
-if ( 0.0 === $item_quantity ) {
-continue;
-}
+                        if ( 0.0 === $item_quantity ) {
+                                continue;
+                        }
 
-$restore_stock['detalles'][] = [
-'producto_id' => $product_id,
-'precio'      => $price,
-'cantidad'    => $item_quantity,
-];
+                        $restore_stock['detalles'][] = [
+                                'producto_id' => $product_id,
+                                'precio'      => $price,
+                                'cantidad'    => $item_quantity,
+                        ];
 
-$group_entries[] = $this->build_inventory_movement_entry( [
-'order_id'      => $order_id,
-'event_type'    => 'ingreso',
-'product_id'    => $product_id,
-'wc_product_id' => $wc_product->get_id(),
-'sku'           => $sku,
-'product_name'  => $wc_product->get_name(),
-'quantity'      => $item_quantity,
-'warehouses'    => [
-'from' => [ 'id' => (string) $id_origin_warehouse, 'label' => $origin_code ],
-'to'   => [ 'id' => (string) $group_context['id'], 'label' => $group_context['label'] ],
-],
-'order_status'  => $order->get_status(),
-'order_trigger' => $trigger,
-'context'       => 'restore',
-'order_source'  => $order_source,
-'order_item_id' => $item->get_id(),
-'sync_type'     => 'global',
-'location'      => [
-'id'    => $group_context['location_id'],
-'label' => $group_context['location_label'],
-],
-] );
-}
+                        $group_entries[] = $this->build_inventory_movement_entry( [
+                                'order_id'      => $order_id,
+                                'event_type'    => 'ingreso',
+                                'product_id'    => $product_id,
+                                'wc_product_id' => $wc_product->get_id(),
+                                'sku'           => $sku,
+                                'product_name'  => $wc_product->get_name(),
+                                'quantity'      => $item_quantity,
+                                'warehouses'    => [
+                                        'from' => [ 'id' => (string) $id_origin_warehouse, 'label' => $origin_code ],
+                                        'to'   => [ 'id' => (string) $group_context['id'], 'label' => $group_context['label'] ],
+                                ],
+                                'order_status'  => $order->get_status(),
+                                'order_trigger' => $trigger,
+                                'context'       => 'restore',
+                                'order_source'  => $order_source,
+                                'order_item_id' => $item->get_id(),
+                                'sync_type'     => 'global',
+                                'location'      => [
+                                        'id'    => isset( $item_context['location_id'] ) ? $item_context['location_id'] : $group_context['location_id'],
+                                        'label' => isset( $item_context['location_label'] ) ? $item_context['location_label'] : $group_context['location_label'],
+                                ],
+                        ] );
+                }
 
 if ( empty( $restore_stock['detalles'] ) ) {
 continue;
@@ -5304,13 +5366,9 @@ $this->finalize_inventory_movement_entries( $group_entries, $status, $reference_
 
 if ( $processed_groups > 0 && $successful_groups === $processed_groups ) {
 $order->update_meta_data( '_woo_contifico_stock_reduced', wc_bool_to_string( false ) );
-$availability_note = __( '<b>Contífico: </b><br> Inventario marcado como disponible nuevamente en la bodega principal.', $this->plugin_name );
-
-if ( '' !== $destination_location_annotation ) {
-$availability_note .= $destination_location_annotation;
-}
-
-$order->add_order_note( $availability_note );
+$order->add_order_note(
+__( '<b>Contífico: </b><br> Inventario marcado como disponible nuevamente en la bodega principal.', $this->plugin_name )
+);
 $order->save();
 }
 
@@ -5983,9 +6041,9 @@ $order_note = sprintf(
 	 * @see     woocommerce_admin_order_data_after_billing_address
 	 * @since   1.4.0
 	 */
-	public function display_admin_order_meta( $order ) {
+        public function display_admin_order_meta( $order ) {
 
-		# Order info
+                # Order info
                 $order_id      = $order->get_id();
                 $tax_subject   = $order->get_meta( '_billing_tax_subject', true );
                 $tax_type      = $order->get_meta( '_billing_tax_type', true );
@@ -6006,8 +6064,302 @@ $order_note = sprintf(
 		$fields['tax_id']['value']        = $tax_id;
 		$fields['taxpayer_type']['value'] = $taxpayer_type;
 
-		require_once plugin_dir_path( __FILE__ ) . 'partials/woo-contifico-admin-edit-fields.php';
-	}
+                require_once plugin_dir_path( __FILE__ ) . 'partials/woo-contifico-admin-edit-fields.php';
+        }
+
+        /**
+         * Render the PDF download button within the order details meta box.
+         *
+         * @since 4.4.0
+         */
+        public function render_order_pdf_download_button( $order ) {
+                if ( ! $order || ! is_a( $order, 'WC_Order' ) ) {
+                        return;
+                }
+
+                if ( ! current_user_can( 'edit_shop_orders' ) ) {
+                        return;
+                }
+
+                $order_id = $order->get_id();
+                $url      = wp_nonce_url(
+                        add_query_arg(
+                                [
+                                        'action'   => 'woo_contifico_order_pdf',
+                                        'order_id' => $order_id,
+                                ],
+                                admin_url( 'admin-post.php' )
+                        ),
+                        'woo_contifico_order_pdf_' . $order_id,
+                        '_wccontifico_nonce'
+                );
+
+                printf(
+                        '<p class="form-field"><a class="button button-primary" href="%1$s">%2$s</a></p>',
+                        esc_url( $url ),
+                        esc_html__( 'Descargar reporte Contífico (PDF)', $this->plugin_name )
+                );
+        }
+
+        /**
+         * Stream the Contífico order PDF report to the browser.
+         *
+         * @since 4.4.0
+         */
+        public function download_order_inventory_report() {
+                if ( ! current_user_can( 'edit_shop_orders' ) ) {
+                        wp_die( esc_html__( 'No tiene permisos para descargar este documento.', $this->plugin_name ) );
+                }
+
+                $order_id = isset( $_GET['order_id'] ) ? absint( $_GET['order_id'] ) : 0;
+                $nonce    = isset( $_GET['_wccontifico_nonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wccontifico_nonce'] ) ) : '';
+
+                if ( ! $order_id || ! wp_verify_nonce( $nonce, 'woo_contifico_order_pdf_' . $order_id ) ) {
+                        wp_die( esc_html__( 'Solicitud inválida para generar el PDF del pedido.', $this->plugin_name ) );
+                }
+
+                $order = wc_get_order( $order_id );
+
+                if ( ! $order ) {
+                        wp_die( esc_html__( 'No se encontró el pedido solicitado.', $this->plugin_name ) );
+                }
+
+                try {
+                        $pdf_content = $this->generate_order_inventory_report_pdf( $order );
+                } catch ( Exception $exception ) {
+                        wp_die( sprintf( esc_html__( 'No se pudo generar el PDF: %s', $this->plugin_name ), esc_html( $exception->getMessage() ) ) );
+                }
+
+                $filename = sprintf( 'contifico-order-%s.pdf', $order->get_order_number() );
+
+                nocache_headers();
+                header( 'Content-Type: application/pdf' );
+                header( 'Content-Disposition: attachment; filename="' . sanitize_file_name( $filename ) . '"' );
+                header( 'Content-Length: ' . strlen( $pdf_content ) );
+                echo $pdf_content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+                exit;
+        }
+
+        /**
+         * Build the PDF payload summarizing the order and its inventory movements.
+         *
+         * @since 4.4.0
+         */
+        private function generate_order_inventory_report_pdf( WC_Order $order ) : string {
+                $pdf = new Woo_Contifico_Order_Report_Pdf();
+                $order_number = $order->get_order_number();
+                $date_format  = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+                $order_date   = $order->get_date_created();
+                $date_label   = $order_date ? wc_format_datetime( $order_date, $date_format ) : __( 'Sin fecha registrada', $this->plugin_name );
+                $status_label = wc_get_order_status_name( $order->get_status() );
+                $total_label  = wp_strip_all_tags( $order->get_formatted_order_total() );
+                $shipping_methods = $order->get_shipping_methods();
+                $shipping_label   = empty( $shipping_methods )
+                        ? __( 'Sin método de envío', $this->plugin_name )
+                        : implode( ', ', array_map( static function ( $method ) {
+                                return wp_strip_all_tags( $method->get_name() );
+                        }, $shipping_methods ) );
+                $fulfillment_label = $this->order_has_store_pickup( $order )
+                        ? __( 'Retiro en tienda', $this->plugin_name )
+                        : __( 'Despacho / entrega', $this->plugin_name );
+
+                $pdf->add_title( sprintf( __( 'Reporte Contífico del pedido #%s', $this->plugin_name ), $order_number ) );
+                $pdf->add_text_line( sprintf( __( 'Fecha del pedido: %s', $this->plugin_name ), $date_label ) );
+                $pdf->add_text_line( sprintf( __( 'Estado actual: %s', $this->plugin_name ), $status_label ) );
+                $pdf->add_text_line( sprintf( __( 'Total: %s', $this->plugin_name ), $total_label ) );
+                $pdf->add_text_line( sprintf( __( 'Método de envío: %s', $this->plugin_name ), $shipping_label ) );
+                $pdf->add_text_line( sprintf( __( 'Modalidad de entrega: %s', $this->plugin_name ), $fulfillment_label ) );
+                $pdf->add_spacer( 12 );
+
+                $customer_name_parts = array_filter( [ $order->get_billing_first_name(), $order->get_billing_last_name() ] );
+                $customer_name       = trim( implode( ' ', $customer_name_parts ) );
+
+                if ( '' === $customer_name ) {
+                        $customer_name = __( 'No disponible', $this->plugin_name );
+                }
+
+                $pdf->add_subheading( __( 'Datos del cliente', $this->plugin_name ) );
+                $pdf->add_text_line( sprintf( __( 'Cliente: %s', $this->plugin_name ), $customer_name ) );
+                $pdf->add_text_line( sprintf( __( 'Correo: %s', $this->plugin_name ), $order->get_billing_email() ?: __( 'No disponible', $this->plugin_name ) ) );
+                $pdf->add_text_line( sprintf( __( 'Teléfono: %s', $this->plugin_name ), $order->get_billing_phone() ?: __( 'No disponible', $this->plugin_name ) ) );
+                $billing_address = $order->get_formatted_billing_address();
+                if ( $billing_address ) {
+                        $pdf->add_text_line( sprintf( __( 'Dirección de facturación: %s', $this->plugin_name ), wp_strip_all_tags( $billing_address ) ) );
+                }
+                $pdf->add_spacer( 10 );
+
+                $pdf->add_subheading( __( 'Productos y bodegas asignadas', $this->plugin_name ) );
+                $origin_code       = isset( $this->woo_contifico->settings['bodega'] ) ? (string) $this->woo_contifico->settings['bodega'] : '';
+                $default_origin_id = (string) ( $this->contifico->get_id_bodega( $origin_code ) ?? '' );
+                $items_added       = false;
+
+                foreach ( $order->get_items() as $item ) {
+                        if ( ! is_a( $item, 'WC_Order_Item_Product' ) ) {
+                                continue;
+                        }
+
+                        $wc_product = $item->get_product();
+
+                        if ( ! $wc_product ) {
+                                continue;
+                        }
+
+                        $context        = $this->resolve_order_item_location_inventory_context( $order, $item, $origin_code, $default_origin_id );
+                        $warehouse_label = isset( $context['label'] ) ? $context['label'] : $origin_code;
+                        $location_label  = $this->describe_inventory_location_for_note( $context );
+                        $quantity_label  = wc_format_decimal( $item->get_quantity(), 2 );
+                        $sku_label       = $wc_product->get_sku() ?: __( 'Sin SKU', $this->plugin_name );
+                        $product_name    = wp_strip_all_tags( $item->get_name() );
+
+                        $pdf->add_list_item(
+                                sprintf(
+                                        __( '%1$s · Cantidad: %2$s · SKU: %3$s · Bodega: %4$s · Ubicación: %5$s', $this->plugin_name ),
+                                        $product_name,
+                                        $quantity_label,
+                                        $sku_label,
+                                        $warehouse_label,
+                                        $location_label
+                                )
+                        );
+                        $items_added = true;
+                }
+
+                if ( ! $items_added ) {
+                        $pdf->add_text_line( __( 'No hay productos asociados al pedido.', $this->plugin_name ) );
+                }
+
+                $pdf->add_spacer( 10 );
+                $pdf->add_subheading( __( 'Movimientos de inventario', $this->plugin_name ) );
+                $movements = $this->get_order_inventory_movements_for_order( $order->get_id() );
+
+                if ( empty( $movements ) ) {
+                        $pdf->add_text_line( __( 'No se han registrado movimientos para este pedido.', $this->plugin_name ) );
+                } else {
+                        foreach ( $movements as $movement ) {
+                                $timestamp     = isset( $movement['timestamp'] ) ? (int) $movement['timestamp'] : 0;
+                                $movement_date = $timestamp ? date_i18n( $date_format, $timestamp ) : __( 'Sin fecha', $this->plugin_name );
+                                $event_label   = 'ingreso' === $movement['event_type'] ? __( 'Ingreso', $this->plugin_name ) : __( 'Egreso', $this->plugin_name );
+                                $from_label    = isset( $movement['warehouses']['from']['label'] ) ? $movement['warehouses']['from']['label'] : '';
+                                $to_label      = isset( $movement['warehouses']['to']['label'] ) ? $movement['warehouses']['to']['label'] : '';
+                                $from_label    = $from_label ?: ( $movement['warehouses']['from']['id'] ?? __( 'Desconocida', $this->plugin_name ) );
+                                $to_label      = $to_label ?: ( $movement['warehouses']['to']['id'] ?? __( 'Desconocida', $this->plugin_name ) );
+                                $reference     = $movement['reference'] ?: __( 'Sin código', $this->plugin_name );
+                                $location      = isset( $movement['location']['label'] ) && '' !== $movement['location']['label']
+                                        ? $movement['location']['label']
+                                        : __( 'No definida', $this->plugin_name );
+                                $product_name  = wp_strip_all_tags( (string) $movement['product_name'] );
+                                $sku_label     = $movement['sku'] ?: __( 'Sin SKU', $this->plugin_name );
+                                $quantity      = wc_format_decimal( $movement['quantity'], 2 );
+
+                                $pdf->add_list_item(
+                                        sprintf(
+                                                __( '[%1$s] %2$s de %3$s uds · %4$s → %5$s · Producto: %6$s (%7$s) · Ref: %8$s · Ubicación: %9$s', $this->plugin_name ),
+                                                $movement_date,
+                                                $event_label,
+                                                $quantity,
+                                                $from_label,
+                                                $to_label,
+                                                $product_name,
+                                                $sku_label,
+                                                $reference,
+                                                $location
+                                        )
+                                );
+                        }
+                }
+
+                $transfer_summaries = $this->build_order_transfer_summaries( $movements );
+                $pdf->add_spacer( 10 );
+                $pdf->add_subheading( __( 'Transferencias registradas', $this->plugin_name ) );
+
+                if ( empty( $transfer_summaries ) ) {
+                        $pdf->add_text_line( __( 'No hay transferencias registradas en Contífico para este pedido.', $this->plugin_name ) );
+                } else {
+                        foreach ( $transfer_summaries as $summary ) {
+                                $from_label = $summary['from'];
+                                $to_label   = $summary['to'];
+                                $pdf->add_list_item(
+                                        sprintf(
+                                                __( '%1$s → %2$s · Ref: %3$s · Productos: %4$s', $this->plugin_name ),
+                                                $from_label,
+                                                $to_label,
+                                                $summary['reference'],
+                                                implode( '; ', $summary['products'] )
+                                        )
+                                );
+                        }
+                }
+
+                return $pdf->render();
+        }
+
+        /**
+         * Retrieve normalized inventory movement entries for a given order.
+         *
+         * @since 4.4.0
+         */
+        private function get_order_inventory_movements_for_order( int $order_id ) : array {
+                $entries  = $this->get_inventory_movements_storage();
+                $filtered = [];
+
+                foreach ( $entries as $entry ) {
+                        $entry = $this->normalize_inventory_movement_entry( $entry );
+
+                        if ( (int) ( $entry['order_id'] ?? 0 ) !== $order_id ) {
+                                continue;
+                        }
+
+                        $filtered[] = $entry;
+                }
+
+                usort( $filtered, static function ( $a, $b ) {
+                        $a_time = isset( $a['timestamp'] ) ? (int) $a['timestamp'] : 0;
+                        $b_time = isset( $b['timestamp'] ) ? (int) $b['timestamp'] : 0;
+
+                        if ( $a_time === $b_time ) {
+                                return 0;
+                        }
+
+                        return ( $a_time < $b_time ) ? -1 : 1;
+                } );
+
+                return $filtered;
+        }
+
+        /**
+         * Build summarized transfer descriptions for the PDF.
+         *
+         * @since 4.4.0
+         */
+        private function build_order_transfer_summaries( array $movements ) : array {
+                if ( empty( $movements ) ) {
+                        return [];
+                }
+
+                $summaries = [];
+
+                foreach ( $movements as $movement ) {
+                        $reference = $movement['reference'] ?: __( 'Sin código', $this->plugin_name );
+                        $from_label = isset( $movement['warehouses']['from']['label'] ) ? $movement['warehouses']['from']['label'] : $movement['warehouses']['from']['id'];
+                        $to_label   = isset( $movement['warehouses']['to']['label'] ) ? $movement['warehouses']['to']['label'] : $movement['warehouses']['to']['id'];
+                        $key        = md5( implode( '|', [ $reference, $from_label, $to_label, $movement['event_type'] ] ) );
+
+                        if ( ! isset( $summaries[ $key ] ) ) {
+                                $summaries[ $key ] = [
+                                        'reference' => $reference,
+                                        'from'      => $from_label,
+                                        'to'        => $to_label,
+                                        'products'  => [],
+                                ];
+                        }
+
+                        $product_name = wp_strip_all_tags( (string) $movement['product_name'] );
+                        $quantity     = wc_format_decimal( $movement['quantity'], 2 );
+                        $summaries[ $key ]['products'][] = sprintf( '%s (%s)', $product_name, $quantity );
+                }
+
+                return array_values( $summaries );
+        }
 
 	/**
 	 *  Update order meta with Tax Id and Type

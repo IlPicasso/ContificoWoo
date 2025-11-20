@@ -734,10 +734,15 @@ class Woo_Contifico
 	     */
 	    require_once WOO_CONTIFICO_PATH . 'includes/class-woo-contifico-i18n.php';
 
-	    /**
-	     * The class responsible for defining all actions that occur in the admin area.
-	     */
-	    require_once WOO_CONTIFICO_PATH . 'admin/class-woo-contifico-admin.php';
+        /**
+         * Helpers for PDF generation.
+         */
+        require_once WOO_CONTIFICO_PATH . 'includes/class-woo-contifico-order-report-pdf.php';
+
+        /**
+         * The class responsible for defining all actions that occur in the admin area.
+         */
+        require_once WOO_CONTIFICO_PATH . 'admin/class-woo-contifico-admin.php';
 
 	    /**
 	     * The class responsible for defining all actions that occur in the public-facing
@@ -806,6 +811,7 @@ class Woo_Contifico
         $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_styles');
         $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts');
         $this->loader->add_action('admin_post_woo_contifico_export_inventory_movements', $plugin_admin, 'export_inventory_movements');
+        $this->loader->add_action('admin_post_woo_contifico_order_pdf', $plugin_admin, 'download_order_inventory_report');
 
         # Plugin settings link in plugins list table
         $plugin_basename = $this->plugin_name . '/' . $this->get_plugin_name();
@@ -862,7 +868,8 @@ class Woo_Contifico
 	    $this->loader->add_action('edit_user_profile', $plugin_admin, 'print_user_admin_fields', 30);
 
 	    # Hooks to display and update tax info in order edit page
-	    $this->loader->add_action('woocommerce_admin_order_data_after_billing_address', $plugin_admin, 'display_admin_order_meta', 10, 1);
+        $this->loader->add_action('woocommerce_admin_order_data_after_billing_address', $plugin_admin, 'display_admin_order_meta', 10, 1);
+        $this->loader->add_action('woocommerce_admin_order_data_after_order_details', $plugin_admin, 'render_order_pdf_download_button', 20, 1);
 	    $this->loader->add_action('woocommerce_process_shop_order_meta', $plugin_admin, 'save_order_meta_fields');
 
 	    # Hooks to update user meta with Tax Id and Type (in checkout and account pages)
