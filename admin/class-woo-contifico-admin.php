@@ -2486,7 +2486,7 @@ return $value;
                 $context['id']     = $warehouse_id;
                 $context['code']   = $warehouse_code;
                 $context['mapped'] = true;
-                $context['label']  = '' !== $location_label ? sprintf( '%s (%s)', $warehouse_code, $location_label ) : $warehouse_code;
+                $context['label']  = '' !== $location_label ? $location_label : $warehouse_code;
 
                 return $context;
         }
