@@ -119,6 +119,33 @@ class Woo_Contifico_Public {
                 }
         }
 
+        /**
+         * Exclude the realtime stock script from WP Rocket's delay JavaScript feature.
+         *
+         * Preventing the delay ensures the stock AJAX request runs as soon as the
+         * product page loads, avoiding stale quantities when cache optimizations are
+         * enabled.
+         *
+         * @since 4.3.0
+         *
+         * @param array $excluded_js Patterns excluded from delay.
+         *
+         * @return array
+         */
+        public function exclude_wp_rocket_delay_for_stock_script( $excluded_js ) : array {
+
+                if ( ! is_array( $excluded_js ) ) {
+                        $excluded_js = [];
+                }
+
+                $stock_handle = "{$this->plugin_name}-product-stock";
+
+                $excluded_js[] = $stock_handle;
+                $excluded_js[] = "{$stock_handle}.js";
+
+                return array_values( array_unique( $excluded_js ) );
+        }
+
 	/**
 	 * Enqueue the realtime stock refresh script in single product pages.
 	 *
