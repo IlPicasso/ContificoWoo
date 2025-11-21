@@ -1,5 +1,5 @@
-/* global jQuery, wooContificoProductStock */
-(function( $ ) {
+/* global wooContificoProductStock */
+(() => {
         'use strict';
 
         const config = window.wooContificoProductStock || {};
@@ -8,94 +8,115 @@
                 return;
         }
 
-        $( function() {
+        const ready = ( callback ) => {
+                if ( document.readyState === 'loading' ) {
+                        document.addEventListener( 'DOMContentLoaded', callback );
+                } else {
+                        callback();
+                }
+        };
+
+        ready( () => {
                 if ( config.manageStock === false ) {
                         return;
                 }
 
                 const selectors = config.selectors || {};
-                const $stockNode = selectors.stockNode ? $( selectors.stockNode ) : $( '.summary .stock' );
-
-                if ( ! $stockNode.length ) {
-                        return;
-                }
-
-                const requestData = {
-                        action:   'woo_contifico_sync_single_product',
-                        security: config.nonce
-                };
-
-                if ( config.productId ) {
-                        requestData.product_id = config.productId;
-                }
-
-                if ( config.sku ) {
-                        requestData.sku = config.sku;
-                }
-
-                if ( ! requestData.product_id && ! requestData.sku ) {
-                        return;
-                }
-
+                const stockSelector = selectors.stockNode || '.summary .stock';
                 const messages = config.messages || {};
 
-                if ( messages.syncing ) {
-                        $stockNode
-                                .removeClass( 'woo-contifico-stock-error' )
-                                .addClass( 'woo-contifico-stock-updating' )
-                                .text( messages.syncing );
-                }
+                const resolveStockNode = () => document.querySelector( stockSelector ) || document.querySelector( '.summary .stock' );
 
-                $.ajax( {
-                        type: 'post',
-                        url: config.ajaxUrl,
-                        data: requestData,
-                        dataType: 'json'
-                } ).done( function( response ) {
-                        if ( response && response.success && response.data ) {
-                                const data = response.data;
+                const buildRequestData = ( productId, sku ) => {
+                        const requestData = new URLSearchParams();
+                        requestData.append( 'action', 'woo_contifico_sync_single_product' );
+                        requestData.append( 'security', config.nonce );
 
-                                if ( typeof data.stock_quantity === 'number' ) {
-                                        updateStockNode( data.stock_quantity );
-                                }
-                        } else {
-                                const errorMessage = response && response.data && response.data.message
-                                        ? response.data.message
-                                        : '';
-                                renderError( errorMessage );
+                        if ( productId ) {
+                                requestData.append( 'product_id', productId );
                         }
-                } ).fail( function() {
-                        renderError();
-                } );
 
-                function updateStockNode( quantity ) {
+                        if ( sku ) {
+                                requestData.append( 'sku', sku );
+                        }
+
+                        return requestData;
+                };
+
+                const refreshStock = ( productId, sku ) => {
+                        if ( ! productId && ! sku ) {
+                                return;
+                        }
+
+                        const requestData = buildRequestData( productId, sku );
+
+                        const stockNode = resolveStockNode();
+
+                        if ( stockNode && messages.syncing ) {
+                                stockNode.classList.remove( 'woo-contifico-stock-error' );
+                                stockNode.classList.add( 'woo-contifico-stock-updating' );
+                                stockNode.textContent = messages.syncing;
+                        }
+
+                        fetch( config.ajaxUrl, {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: {
+                                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                                },
+                                body: requestData.toString()
+                        } )
+                                .then( ( response ) => response.json() )
+                                .then( ( response ) => {
+                                        if ( response && response.success && response.data ) {
+                                                const data = response.data;
+
+                                                if ( typeof data.stock_quantity === 'number' ) {
+                                                        updateStockNode( data.stock_quantity );
+                                                }
+
+                                                return;
+                                        }
+
+                                        const errorMessage =
+                                                response && response.data && response.data.message
+                                                        ? response.data.message
+                                                        : '';
+
+                                        renderError( errorMessage );
+                                } )
+                                .catch( () => {
+                                        renderError();
+                                } );
+                };
+
+                const updateStockNode = ( quantity ) => {
                         const normalizedQuantity = parseInt( quantity, 10 );
+                        const stockNode = resolveStockNode();
 
-                        if ( Number.isNaN( normalizedQuantity ) ) {
+                        if ( ! stockNode || Number.isNaN( normalizedQuantity ) ) {
                                 return;
                         }
 
                         if ( normalizedQuantity <= 0 ) {
-                                $stockNode
-                                        .removeClass( 'in-stock woo-contifico-stock-updating' )
-                                        .addClass( 'out-of-stock' )
-                                        .text( messages.outOfStock || messages.error || '' );
+                                stockNode.classList.remove( 'in-stock', 'woo-contifico-stock-updating' );
+                                stockNode.classList.add( 'out-of-stock' );
+                                stockNode.textContent = messages.outOfStock || messages.error || '';
 
                                 return;
                         }
 
                         const formattedMessage = formatInStockMessage( normalizedQuantity );
 
-                        $stockNode
-                                .removeClass( 'out-of-stock woo-contifico-stock-error woo-contifico-stock-updating' )
-                                .addClass( 'in-stock' );
+                        stockNode.classList.remove( 'out-of-stock', 'woo-contifico-stock-error', 'woo-contifico-stock-updating' );
+                        stockNode.classList.add( 'in-stock' );
 
                         if ( formattedMessage ) {
-                                $stockNode.text( formattedMessage );
+                                stockNode.textContent = formattedMessage;
                         }
-                }
+                };
 
-                function formatInStockMessage( quantity ) {
+                const formatInStockMessage = ( quantity ) => {
                         const template = messages.inStockWithQuantity || messages.inStock || '';
 
                         if ( template.indexOf( '%d' ) !== -1 ) {
@@ -103,23 +124,95 @@
                         }
 
                         if ( template ) {
-                                return template + ' ' + quantity;
+                                return `${ template } ${ quantity }`;
                         }
 
                         return String( quantity );
-                }
+                };
 
-                function renderError( customMessage ) {
+                const renderError = ( customMessage ) => {
+                        const stockNode = resolveStockNode();
                         const message = customMessage || messages.error;
 
-                        if ( ! message ) {
+                        if ( ! stockNode || ! message ) {
                                 return;
                         }
 
-                        $stockNode
-                                .removeClass( 'woo-contifico-stock-updating' )
-                                .addClass( 'woo-contifico-stock-error' )
-                                .text( message );
+                        stockNode.classList.remove( 'woo-contifico-stock-updating' );
+                        stockNode.classList.add( 'woo-contifico-stock-error' );
+                        stockNode.textContent = message;
+                };
+
+                const variationForm = document.querySelector( 'form.variations_form' );
+
+                if ( variationForm ) {
+                        const variationIdInput = variationForm.querySelector( 'input.variation_id' );
+                        const variationDataRaw = variationForm.getAttribute( 'data-product_variations' );
+                        let variationData = [];
+
+                        if ( variationDataRaw ) {
+                                try {
+                                        variationData = JSON.parse( variationDataRaw );
+                                } catch ( e ) {
+                                        variationData = [];
+                                }
+                        }
+
+                        const resolveVariationSku = ( variationId ) => {
+                                if ( ! variationId || ! Array.isArray( variationData ) ) {
+                                        return '';
+                                }
+
+                                const match = variationData.find( ( item ) => {
+                                        const id = parseInt( item.variation_id || item.variationId, 10 );
+
+                                        return id === variationId;
+                                } );
+
+                                if ( match && match.sku ) {
+                                        return String( match.sku );
+                                }
+
+                                return '';
+                        };
+
+                        const handleVariationRefresh = () => {
+                                const variationId = variationIdInput ? parseInt( variationIdInput.value, 10 ) : 0;
+
+                                if ( variationId > 0 ) {
+                                        const variationSku = resolveVariationSku( variationId ) || config.sku || '';
+                                        refreshStock( variationId, variationSku );
+
+                                        return;
+                                }
+
+                                refreshStock( config.productId, config.sku );
+                        };
+
+                        variationForm.addEventListener( 'found_variation', handleVariationRefresh );
+                        variationForm.addEventListener( 'hide_variation', handleVariationRefresh );
+                        variationForm.addEventListener( 'reset_data', handleVariationRefresh );
+
+                        if ( variationIdInput ) {
+                                variationIdInput.addEventListener( 'change', handleVariationRefresh );
+
+                                const observer = new MutationObserver( ( mutations ) => {
+                                        mutations.forEach( ( mutation ) => {
+                                                if ( mutation.type === 'attributes' || mutation.type === 'characterData' ) {
+                                                        handleVariationRefresh();
+                                                }
+                                        } );
+                                } );
+
+                                observer.observe( variationIdInput, {
+                                        attributes: true,
+                                        attributeFilter: [ 'value' ],
+                                        characterData: true,
+                                        subtree: false
+                                } );
+                        }
                 }
+
+                refreshStock( config.productId, config.sku );
         } );
-})( jQuery );
+})();
