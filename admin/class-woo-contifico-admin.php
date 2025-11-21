@@ -2483,10 +2483,21 @@ return $value;
                         return $context;
                 }
 
-                $context['id']     = $warehouse_id;
-                $context['code']   = $warehouse_code;
-                $context['mapped'] = true;
-                $context['label']  = '' !== $location_label ? sprintf( '%s (%s)', $warehouse_code, $location_label ) : $warehouse_code;
+                $resolved_label    = $location_label;
+
+                if ( '' === $resolved_label || $warehouse_code === $resolved_label ) {
+                        $fallback_label = $this->resolve_warehouse_location_label( $warehouse_code, $location_id );
+
+                        if ( '' !== $fallback_label ) {
+                                $resolved_label = $fallback_label;
+                        }
+                }
+
+                $context['id']            = $warehouse_id;
+                $context['code']          = $warehouse_code;
+                $context['mapped']        = true;
+                $context['location_label'] = '' !== $resolved_label ? $resolved_label : $location_label;
+                $context['label']         = '' !== $resolved_label ? $resolved_label : $warehouse_code;
 
                 return $context;
         }
@@ -2494,10 +2505,31 @@ return $value;
         /**
          * Build a human readable label for inventory notes based on the context.
          *
-         * @since 4.4.0
+        * @since 4.4.0
          */
         private function describe_inventory_location_for_note( array $context ) : string {
                 $location_label = isset( $context['location_label'] ) ? (string) $context['location_label'] : '';
+                $location_id    = isset( $context['location_id'] ) ? (string) $context['location_id'] : '';
+
+                if (
+                        '' === $location_label
+                        && '' !== $location_id
+                        && $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
+                        && $this->woo_contifico->multilocation->is_active()
+                        && method_exists( $this->woo_contifico->multilocation, 'get_location_label' )
+                ) {
+                        $location_label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
+                }
+
+                $warehouse_code = isset( $context['code'] ) ? (string) $context['code'] : '';
+
+                if ( '' === $location_label || $warehouse_code === $location_label ) {
+                        $fallback_label = $this->resolve_warehouse_location_label( $warehouse_code, $location_id );
+
+                        if ( '' !== $fallback_label ) {
+                                $location_label = $fallback_label;
+                        }
+                }
 
                 if ( '' !== $location_label ) {
                         return $location_label;
@@ -2653,6 +2685,56 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 }
 
                 return ' ' . sprintf( __( '(Ubicación MultiLoca: %s)', $this->plugin_name ), $location_label );
+        }
+
+        /**
+         * Resolve a user-friendly label for a warehouse code by checking the MultiLoca mapping.
+         *
+         * @since 4.4.0
+         */
+        private function resolve_warehouse_location_label( string $warehouse_code, string $location_id = '' ) : string {
+                $warehouse_code = trim( $warehouse_code );
+
+                if ( '' === $warehouse_code ) {
+                        return '';
+                }
+
+                if ( ! ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) ) {
+                        return '';
+                }
+
+                if ( ! $this->woo_contifico->multilocation->is_active() ) {
+                        return '';
+                }
+
+                $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
+
+                if ( ! is_array( $configured_locations ) || empty( $configured_locations ) ) {
+                        return '';
+                }
+
+                foreach ( $configured_locations as $configured_location_id => $configured_code ) {
+                        $mapped_code = (string) $configured_code;
+                        $configured_location_id = (string) $configured_location_id;
+
+                        if ( '' === $mapped_code || $warehouse_code !== $mapped_code ) {
+                                continue;
+                        }
+
+                        if ( '' !== $location_id && $configured_location_id !== $location_id ) {
+                                continue;
+                        }
+
+                        if ( method_exists( $this->woo_contifico->multilocation, 'get_location_label' ) ) {
+                                $label = (string) $this->woo_contifico->multilocation->get_location_label( $configured_location_id );
+
+                                if ( '' !== $label ) {
+                                        return $label;
+                                }
+                        }
+                }
+
+                return '';
         }
 
 /**
