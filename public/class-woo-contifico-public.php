@@ -181,13 +181,13 @@ class Woo_Contifico_Public {
 			return;
 		}
 
-		wp_enqueue_script(
-			"{$this->plugin_name}-product-stock",
-			WOO_CONTIFICO_URL . 'public/js/woo-contifico-product-stock.js',
-			[ 'jquery' ],
-			$this->version,
-			true
-		);
+                wp_enqueue_script(
+                        "{$this->plugin_name}-product-stock",
+                        WOO_CONTIFICO_URL . 'public/js/woo-contifico-product-stock.js',
+                        [],
+                        $this->version,
+                        true
+                );
 
 		$stock_selector = apply_filters( 'woo_contifico_product_stock_selector', '.summary .stock', $product );
 
