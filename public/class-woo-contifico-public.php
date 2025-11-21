@@ -119,73 +119,117 @@ class Woo_Contifico_Public {
                 }
         }
 
-        /**
-         * Enqueue the realtime stock refresh script in single product pages.
-         *
-         * @since 4.3.0
-         *
-         * @return void
-         */
-        private function enqueue_product_stock_refresh_script() : void {
+	/**
+	 * Enqueue the realtime stock refresh script in single product pages.
+	 *
+	 * @since 4.3.0
+	 *
+	 * @return void
+	 */
+	private function enqueue_product_stock_refresh_script() : void {
 
-                if ( ! function_exists( 'wc_get_product' ) ) {
-                        return;
-                }
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return;
+		}
 
-                $product_id = get_queried_object_id();
+		$product_id = get_queried_object_id();
 
-                if ( $product_id <= 0 ) {
-                        return;
-                }
+		if ( $product_id <= 0 ) {
+			return;
+		}
 
-                $product = wc_get_product( $product_id );
+		$product = wc_get_product( $product_id );
 
-                if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
-                        return;
-                }
+		if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+			return;
+		}
 
-                $supports_refresh = apply_filters(
-                        'woo_contifico_should_refresh_product_stock',
-                        (bool) $product->get_manage_stock(),
-                        $product
-                );
+		$supports_refresh = apply_filters(
+			'woo_contifico_should_refresh_product_stock',
+			$this->product_supports_stock_refresh( $product ),
+			$product
+		);
 
-                if ( ! $supports_refresh ) {
-                        return;
-                }
+		if ( ! $supports_refresh ) {
+			return;
+		}
 
-                wp_enqueue_script(
-                        "{$this->plugin_name}-product-stock",
-                        WOO_CONTIFICO_URL . 'public/js/woo-contifico-product-stock.js',
-                        [ 'jquery' ],
-                        $this->version,
-                        true
-                );
+		wp_enqueue_script(
+			"{$this->plugin_name}-product-stock",
+			WOO_CONTIFICO_URL . 'public/js/woo-contifico-product-stock.js',
+			[ 'jquery' ],
+			$this->version,
+			true
+		);
 
-                $stock_selector = apply_filters( 'woo_contifico_product_stock_selector', '.summary .stock', $product );
+		$stock_selector = apply_filters( 'woo_contifico_product_stock_selector', '.summary .stock', $product );
 
-                wp_localize_script(
-                        "{$this->plugin_name}-product-stock",
-                        'wooContificoProductStock',
-                        [
-                                'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
-                                'nonce'        => wp_create_nonce( 'woo_ajax_nonce' ),
-                                'productId'    => $product->get_id(),
-                                'sku'          => $product->get_sku(),
-                                'manageStock'  => (bool) $product->get_manage_stock(),
-                                'selectors'    => [
-                                        'stockNode' => $stock_selector,
-                                ],
-                                'messages'     => [
-                                        'syncing'             => __( 'Actualizando inventario…', 'woo-contifico' ),
-                                        'error'               => __( 'No fue posible actualizar el inventario en este momento.', 'woo-contifico' ),
-                                        'inStock'             => __( 'Hay existencias', 'woo-contifico' ),
-                                        'inStockWithQuantity' => __( 'Hay existencias (%d disponibles)', 'woo-contifico' ),
-                                        'outOfStock'          => __( 'Agotado', 'woo-contifico' ),
-                                ],
-                        ]
-                );
-        }
+		wp_localize_script(
+			"{$this->plugin_name}-product-stock",
+			'wooContificoProductStock',
+			[
+				'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
+				'nonce'        => wp_create_nonce( 'woo_ajax_nonce' ),
+				'productId'    => $product->get_id(),
+				'sku'          => $product->get_sku(),
+				'manageStock'  => $this->product_supports_stock_refresh( $product ),
+				'selectors'    => [
+					'stockNode' => $stock_selector,
+				],
+				'messages'     => [
+					'syncing'             => __( 'Actualizando inventario…', 'woo-contifico' ),
+					'error'               => __( 'No fue posible actualizar el inventario en este momento.', 'woo-contifico' ),
+					'inStock'             => __( 'Hay existencias', 'woo-contifico' ),
+					'inStockWithQuantity' => __( 'Hay existencias (%d disponibles)', 'woo-contifico' ),
+					'outOfStock'          => __( 'Agotado', 'woo-contifico' ),
+				],
+			]
+		);
+	}
+
+	/**
+	 * Determine if the product supports realtime stock refresh.
+	 *
+	 * @since 4.3.0
+	 *
+	 * @param WC_Product $product
+	 *
+	 * @return bool
+	 */
+	private function product_supports_stock_refresh( $product ) : bool {
+
+		if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
+			return false;
+		}
+
+		if ( method_exists( $product, 'managing_stock' ) ) {
+			if ( (bool) $product->managing_stock() ) {
+				return true;
+			}
+		} elseif ( (bool) $product->get_manage_stock() ) {
+			return true;
+		}
+
+		if ( $product->is_type( 'variable' ) ) {
+			foreach ( $product->get_children() as $variation_id ) {
+				$variation = wc_get_product( $variation_id );
+
+				if ( ! $variation || ! is_a( $variation, 'WC_Product_Variation' ) ) {
+					continue;
+				}
+
+				if ( method_exists( $variation, 'managing_stock' ) ) {
+					if ( (bool) $variation->managing_stock() ) {
+						return true;
+					}
+				} elseif ( (bool) $variation->get_manage_stock() ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
 
 	/**
 	 * Add Tax fields to checkout.
