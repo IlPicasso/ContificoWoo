@@ -900,12 +900,15 @@ class Woo_Contifico
 
         $plugin_public = new Woo_Contifico_Public($this->get_plugin_name(), $this->get_version());
 
-	    # Load style and script
-	    $this->loader->add_action('wp_enqueue_scripts', $plugin_public, 'enqueue_styles', 99);
-	    $this->loader->add_action('wp_enqueue_scripts', $plugin_public, 'enqueue_scripts');
+            # Load style and script
+            $this->loader->add_action('wp_enqueue_scripts', $plugin_public, 'enqueue_styles', 99);
+            $this->loader->add_action('wp_enqueue_scripts', $plugin_public, 'enqueue_scripts');
 
-	    # Init hook
-	    $this->loader->add_action('init', $plugin_public, 'init');
+            # Compatibility with WP Rocket JS delay
+            $this->loader->add_filter('rocket_delay_js_exclusions', $plugin_public, 'exclude_wp_rocket_delay_for_stock_script');
+
+            # Init hook
+            $this->loader->add_action('init', $plugin_public, 'init');
 
 	    # Add checkout fields
 	    $this->loader->add_filter('woocommerce_checkout_fields', $plugin_public, 'checkout_field');
