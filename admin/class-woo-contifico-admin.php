@@ -1849,33 +1849,137 @@ return $value;
                 return $current_entries;
         }
 
-       /**
-        * Append multiple inventory movement entries.
-        *
-        * @since 4.3.1
-        */
-       private function append_inventory_movement_entries( array $entries ) : void {
+        /**
+         * Append multiple inventory movement entries.
+         *
+         * @since 4.3.1
+         */
+        private function append_inventory_movement_entries( array $entries ) : void {
 
-               if ( empty( $entries ) ) {
-                       return;
-               }
+                if ( empty( $entries ) ) {
+                        return;
+                }
 
-               $current = $this->get_inventory_movements_storage();
-               $entries = array_map( [ $this, 'normalize_inventory_movement_entry' ], $entries );
-               $entries = array_filter( $entries );
+                $current = $this->get_inventory_movements_storage();
+                $entries = array_map( [ $this, 'normalize_inventory_movement_entry' ], $entries );
+                $entries = array_filter( $entries );
 
-               if ( empty( $entries ) ) {
-                       return;
-               }
+                if ( empty( $entries ) ) {
+                        return;
+                }
 
-               $current = array_merge( $entries, $current );
+                $unique_entries = [];
 
-               if ( count( $current ) > self::INVENTORY_MOVEMENTS_MAX_ENTRIES ) {
-                       $current = array_slice( $current, 0, self::INVENTORY_MOVEMENTS_MAX_ENTRIES );
-               }
+                foreach ( $entries as $entry ) {
+                        $is_duplicate = false;
 
-               $this->save_inventory_movements( $current );
-       }
+                        foreach ( $current as $existing_entry ) {
+                                if ( $this->is_duplicate_inventory_movement_entry( $entry, $existing_entry ) ) {
+                                        $is_duplicate = true;
+
+                                        break;
+                                }
+                        }
+
+                        if ( ! $is_duplicate ) {
+                                foreach ( $unique_entries as $existing_entry ) {
+                                        if ( $this->is_duplicate_inventory_movement_entry( $entry, $existing_entry ) ) {
+                                                $is_duplicate = true;
+
+                                                break;
+                                        }
+                                }
+                        }
+
+                        if ( ! $is_duplicate ) {
+                                $unique_entries[] = $entry;
+                        }
+                }
+
+                if ( empty( $unique_entries ) ) {
+                        return;
+                }
+
+                $current = array_merge( $unique_entries, $current );
+
+                if ( count( $current ) > self::INVENTORY_MOVEMENTS_MAX_ENTRIES ) {
+                        $current = array_slice( $current, 0, self::INVENTORY_MOVEMENTS_MAX_ENTRIES );
+                }
+
+                $this->save_inventory_movements( $current );
+        }
+
+        /**
+         * Determine if two inventory movement entries represent the same manual sync change.
+         *
+         * @since 4.3.2
+         *
+         * @param array $entry
+         * @param array $existing_entry
+         *
+         * @return bool
+         */
+        private function is_duplicate_inventory_movement_entry( array $entry, array $existing_entry ) : bool {
+
+                $entry_context    = isset( $entry['context'] ) ? (string) $entry['context'] : '';
+                $existing_context = isset( $existing_entry['context'] ) ? (string) $existing_entry['context'] : '';
+
+                if ( 'manual_sync' !== $entry_context || 'manual_sync' !== $existing_context ) {
+                        return false;
+                }
+
+                $entry_source    = isset( $entry['order_source'] ) ? (string) $entry['order_source'] : '';
+                $existing_source = isset( $existing_entry['order_source'] ) ? (string) $existing_entry['order_source'] : '';
+
+                if ( strpos( $entry_source, 'manual_sync' ) !== 0 || strpos( $existing_source, 'manual_sync' ) !== 0 ) {
+                        return false;
+                }
+
+                if ( (int) ( $entry['wc_product_id'] ?? 0 ) !== (int) ( $existing_entry['wc_product_id'] ?? 0 ) ) {
+                        return false;
+                }
+
+                $timestamp          = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
+                $existing_timestamp = isset( $existing_entry['timestamp'] ) ? (int) $existing_entry['timestamp'] : 0;
+
+                if ( 0 === $timestamp || 0 === $existing_timestamp ) {
+                        return false;
+                }
+
+                if ( abs( $timestamp - $existing_timestamp ) > 5 * MINUTE_IN_SECONDS ) {
+                        return false;
+                }
+
+                $fields = [ 'event_type', 'sku', 'quantity', 'sync_type', 'status', 'order_id', 'order_trigger' ];
+
+                foreach ( $fields as $field ) {
+                        $entry_value    = $entry[ $field ] ?? null;
+                        $existing_value = $existing_entry[ $field ] ?? null;
+
+                        if ( is_numeric( $entry_value ) || is_numeric( $existing_value ) ) {
+                                if ( (float) $entry_value !== (float) $existing_value ) {
+                                        return false;
+                                }
+
+                                continue;
+                        }
+
+                        if ( (string) $entry_value !== (string) $existing_value ) {
+                                return false;
+                        }
+                }
+
+                $entry_from    = isset( $entry['warehouses']['from']['id'] ) ? (string) $entry['warehouses']['from']['id'] : '';
+                $existing_from = isset( $existing_entry['warehouses']['from']['id'] ) ? (string) $existing_entry['warehouses']['from']['id'] : '';
+                $entry_to      = isset( $entry['warehouses']['to']['id'] ) ? (string) $entry['warehouses']['to']['id'] : '';
+                $existing_to   = isset( $existing_entry['warehouses']['to']['id'] ) ? (string) $existing_entry['warehouses']['to']['id'] : '';
+
+                if ( $entry_from !== $existing_from || $entry_to !== $existing_to ) {
+                        return false;
+                }
+
+                return true;
+        }
 
        /**
         * Append a single inventory movement entry.
@@ -3298,6 +3402,11 @@ $filters = [
 
                 $sku        = isset( $_POST['sku'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['sku'] ) ) : '';
                 $product_id = isset( $_POST['product_id'] ) ? absint( wp_unslash( $_POST['product_id'] ) ) : 0;
+                $skip_movement_log = false;
+
+                if ( isset( $_POST['skip_inventory_movement'] ) ) {
+                        $skip_movement_log = wc_string_to_bool( wp_unslash( $_POST['skip_inventory_movement'] ) );
+                }
 
                 if ( $product_id <= 0 && '' === $sku ) {
                         wp_send_json_error(
@@ -3310,9 +3419,9 @@ $filters = [
 
                 try {
                         if ( $product_id > 0 ) {
-                                $result = $this->sync_single_product_by_product_id( $product_id, $sku );
+                                $result = $this->sync_single_product_by_product_id( $product_id, $sku, ! $skip_movement_log );
                         } else {
-                                $result = $this->sync_single_product_by_sku( $sku );
+                                $result = $this->sync_single_product_by_sku( $sku, ! $skip_movement_log );
                         }
 
                         wp_send_json_success( $result );
@@ -3733,11 +3842,12 @@ $filters = [
          *
          * @param int    $product_id
          * @param string $fallback_sku
+         * @param bool   $log_inventory_movement
          *
          * @return array
          * @throws Exception
          */
-        private function sync_single_product_by_product_id( int $product_id, string $fallback_sku = '' ) : array {
+        private function sync_single_product_by_product_id( int $product_id, string $fallback_sku = '', bool $log_inventory_movement = true ) : array {
 
                 if ( $product_id <= 0 ) {
                         throw new Exception( __( 'No se indicó un producto válido para sincronizar.', 'woo-contifico' ) );
@@ -3761,7 +3871,7 @@ $filters = [
                         $lookup_sku = (string) $wc_product->get_sku();
                 }
 
-                return $this->execute_single_product_sync( $wc_product, $environment, $lookup_sku );
+                return $this->execute_single_product_sync( $wc_product, $environment, $lookup_sku, $log_inventory_movement );
         }
 
         /**
@@ -3816,11 +3926,12 @@ $filters = [
          * @param WC_Product $resolved_product
          * @param array      $environment
          * @param string     $lookup_sku
+         * @param bool       $log_inventory_movement
          *
          * @return array
          * @throws Exception
          */
-        private function execute_single_product_sync( $resolved_product, array $environment, string $lookup_sku = '' ) : array {
+        private function execute_single_product_sync( $resolved_product, array $environment, string $lookup_sku = '', bool $log_inventory_movement = true ) : array {
 
                 if ( ! $resolved_product || ! is_a( $resolved_product, 'WC_Product' ) ) {
                         throw new Exception( __( 'No se pudo cargar el producto de WooCommerce.', 'woo-contifico' ) );
@@ -4061,10 +4172,12 @@ $filters = [
                         true
                 );
 
-                $movement_entry = $this->build_manual_sync_inventory_movement_entry( $product_entry, $changes, 'product' );
+                if ( $log_inventory_movement ) {
+                        $movement_entry = $this->build_manual_sync_inventory_movement_entry( $product_entry, $changes, 'product' );
 
-                if ( null !== $movement_entry ) {
-                        $this->append_inventory_movement_entry( $movement_entry );
+                        if ( null !== $movement_entry ) {
+                                $this->append_inventory_movement_entry( $movement_entry );
+                        }
                 }
 
                 $message = __( 'El producto se sincronizó correctamente y no registró cambios.', 'woo-contifico' );
@@ -4100,11 +4213,12 @@ $filters = [
          * @since 4.2.0
          *
          * @param string $sku
+         * @param bool   $log_inventory_movement
          *
          * @return array
          * @throws Exception
          */
-        private function sync_single_product_by_sku( string $sku ) : array {
+        private function sync_single_product_by_sku( string $sku, bool $log_inventory_movement = true ) : array {
 
                 $sku = trim( $sku );
 
@@ -4136,7 +4250,7 @@ $filters = [
                         throw new Exception( __( 'No se pudo resolver la variación del producto para el SKU indicado.', 'woo-contifico' ) );
                 }
 
-                return $this->execute_single_product_sync( $resolved_product, $environment, $sku );
+                return $this->execute_single_product_sync( $resolved_product, $environment, $sku, $log_inventory_movement );
         }
         /**
          * Apply Contífico updates to a WooCommerce product entry.
