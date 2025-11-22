@@ -6378,9 +6378,13 @@ $order_note = sprintf(
                 $filename = sprintf( 'contifico-order-%s.pdf', $order->get_order_number() );
 
                 nocache_headers();
+                $content_length = function_exists( 'mb_strlen' )
+                        ? (int) mb_strlen( $pdf_content, '8bit' )
+                        : strlen( $pdf_content );
+
                 header( 'Content-Type: application/pdf' );
                 header( 'Content-Disposition: attachment; filename="' . sanitize_file_name( $filename ) . '"' );
-                header( 'Content-Length: ' . strlen( $pdf_content ) );
+                header( 'Content-Length: ' . $content_length );
                 echo $pdf_content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
                 exit;
         }
