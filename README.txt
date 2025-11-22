@@ -86,6 +86,7 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 = 4.1.4 =
 * El refresco de stock en tiempo real se activa en páginas de producto también cuando las variaciones administran su propio inventario.
 * Se excluye el script de actualización de stock de la optimización de carga diferida de WP Rocket para mantener las peticiones AJAX en caché activa.
+* Los ajustes de stock disparados desde la página de producto se registran en el historial de movimientos sin duplicar egresos.
 
 = 4.1.3 =
 * Se actualiza la información del plugin para reflejar a IlPicasso como autor y se apunta el auto-actualizador al nuevo repositorio público.
