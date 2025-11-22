@@ -190,61 +190,34 @@
         refreshStock( config.productId, config.sku );
       };
 
-      const bindVariationListeners = () => {
-        if ( variationForm.dataset.wooContificoBound === '1' ) {
-          return;
-        }
-
-        variationForm.dataset.wooContificoBound = '1';
-
-        if ( $ && typeof $.fn === 'object' && typeof $( variationForm ).on === 'function' ) {
-          $( variationForm ).on(
-            'found_variation.wc-contifico hide_variation.wc-contifico reset_data.wc-contifico woocommerce_variation_has_changed.wc-contifico',
-            handleVariationRefresh
-          );
-        } else {
-          variationForm.addEventListener( 'found_variation', handleVariationRefresh );
-          variationForm.addEventListener( 'hide_variation', handleVariationRefresh );
-          variationForm.addEventListener( 'reset_data', handleVariationRefresh );
-          variationForm.addEventListener( 'woocommerce_variation_has_changed', handleVariationRefresh );
-        }
-
-        if ( variationIdInput ) {
-          variationIdInput.addEventListener( 'change', handleVariationRefresh );
-
-          const observer = new MutationObserver( ( mutations ) => {
-            mutations.forEach( ( mutation ) => {
-              if ( mutation.type === 'attributes' || mutation.type === 'characterData' ) {
-                handleVariationRefresh();
-              }
-            } );
-          } );
-
-          observer.observe( variationIdInput, {
-            attributes: true,
-            attributeFilter: [ 'value' ],
-            characterData: true,
-            subtree: false
-          } );
-        }
-      };
-
-      if ( $ && typeof $.fn === 'object' && typeof $.fn.wc_variation_form === 'function' ) {
-        const waitForInit = () => {
-          const variationData = $( variationForm ).data( 'product_variations' );
-
-          if ( Array.isArray( variationData ) && variationData.length ) {
-            bindVariationListeners();
-
-            return;
-          }
-
-          window.requestAnimationFrame( waitForInit );
-        };
-
-        waitForInit();
+      if ( $ && typeof $.fn === 'object' && typeof $( variationForm ).on === 'function' ) {
+        $( variationForm ).on(
+          'found_variation.wc-contifico hide_variation.wc-contifico reset_data.wc-contifico',
+          handleVariationRefresh
+        );
       } else {
-        bindVariationListeners();
+        variationForm.addEventListener( 'found_variation', handleVariationRefresh );
+        variationForm.addEventListener( 'hide_variation', handleVariationRefresh );
+        variationForm.addEventListener( 'reset_data', handleVariationRefresh );
+      }
+
+      if ( variationIdInput ) {
+        variationIdInput.addEventListener( 'change', handleVariationRefresh );
+
+        const observer = new MutationObserver( ( mutations ) => {
+          mutations.forEach( ( mutation ) => {
+            if ( mutation.type === 'attributes' || mutation.type === 'characterData' ) {
+              handleVariationRefresh();
+            }
+          } );
+        } );
+
+        observer.observe( variationIdInput, {
+          attributes: true,
+          attributeFilter: [ 'value' ],
+          characterData: true,
+          subtree: false
+        } );
       }
     }
 
