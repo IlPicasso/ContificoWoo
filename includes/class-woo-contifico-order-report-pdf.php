@@ -1,14 +1,14 @@
 <?php
 
 class Woo_Contifico_Order_Report_Pdf {
-    private $pages = [];
-    private $current_page = 0;
-    private $current_y = 0;
-    private $margin_left = 40;
+    private $entries = [];
     private $max_chars = 105;
+    private $margin_left = 40;
+    private $top_margin = 40;
+    private $bottom_margin = 40;
 
     public function __construct() {
-        $this->add_page();
+        // Defer PDF creation to render(); we only collect content here.
     }
 
     public function add_title( string $text ) : void {
@@ -20,16 +20,8 @@ class Woo_Contifico_Order_Report_Pdf {
         $this->add_wrapped_text( $text, 13, 20 );
     }
 
-    private function add_wrapped_text( string $text, int $font_size, int $line_height ) : void {
-        foreach ( $this->wrap_text( $text ) as $line ) {
-            $this->add_line( $line, $font_size, $line_height );
-        }
-    }
-
     public function add_text_line( string $text, int $font_size = 11, int $line_height = 14 ) : void {
-        foreach ( $this->wrap_text( $text ) as $line ) {
-            $this->add_line( $line, $font_size, $line_height );
-        }
+        $this->add_wrapped_text( $text, $font_size, $line_height );
     }
 
     public function add_list_item( string $text ) : void {
@@ -37,8 +29,7 @@ class Woo_Contifico_Order_Report_Pdf {
     }
 
     public function add_spacer( int $height = 10 ) : void {
-        $this->ensure_space( $height );
-        $this->current_y -= $height;
+        $this->entries[] = [ 'type' => 'spacer', 'height' => $height ];
     }
 
     public function render() : string {
@@ -75,46 +66,41 @@ class Woo_Contifico_Order_Report_Pdf {
             $objects[ $page_object_id ] = str_replace( '__PARENT__', $pages_object_id . ' 0 R', $objects[ $page_object_id ] );
         }
 
-        $catalog_id = $next_id++;
-        $objects[ $catalog_id ] = '<< /Type /Catalog /Pages ' . $pages_object_id . ' 0 R >>';
+        $pdf = new FPDF( 'P', 'pt', 'Letter' );
+        $pdf->SetMargins( $this->margin_left, $this->top_margin, $this->margin_left );
+        $pdf->SetAutoPageBreak( true, $this->bottom_margin );
+        $pdf->AddPage();
 
-        $pdf = "%PDF-1.4\n";
+        foreach ( $this->entries as $entry ) {
+            if ( 'spacer' === $entry['type'] ) {
+                $this->output_spacer( $pdf, $entry['height'] );
+                continue;
+            }
 
-        for ( $i = 1; $i < $next_id; $i++ ) {
-            $offsets[ $i ] = $this->length_in_bytes( $pdf );
-            $pdf .= $i . " 0 obj\n" . $objects[ $i ] . "\nendobj\n";
+            $this->output_line( $pdf, $entry['text'], $entry['font_size'], $entry['line_height'] );
         }
 
-        $xref_offset = $this->length_in_bytes( $pdf );
-        $pdf        .= "xref\n0 $next_id\n";
-        $pdf        .= "0000000000 65535 f \n";
-
-        for ( $i = 1; $i < $next_id; $i++ ) {
-            $pdf .= sprintf( "%010d 00000 n \n", $offsets[ $i ] );
-        }
-
-        $pdf .= "trailer\n<< /Size $next_id /Root $catalog_id 0 R >>\nstartxref\n$xref_offset\n%%EOF";
-
-        return $pdf;
+        return $pdf->Output( 'S' );
     }
 
-    private function add_page() : void {
-        $this->pages[]     = [];
-        $this->current_page = count( $this->pages ) - 1;
-        $this->current_y    = 780;
+    private function output_spacer( FPDF $pdf, int $height ) : void {
+        $pdf->SetY( $pdf->GetY() + $height );
     }
 
-    private function add_line( string $text, int $font_size, int $line_height ) : void {
-        if ( '' === trim( $text ) ) {
-            $this->add_spacer( $line_height );
-            return;
-        }
+    private function output_line( FPDF $pdf, string $text, int $font_size, int $line_height ) : void {
+        $pdf->SetFont( 'Arial', '', $font_size );
+        $pdf->Cell( 0, $line_height, $this->encode_text( $text ), 0, 1, 'L' );
+    }
 
-        $this->ensure_space( $line_height );
-        $encoded_text = $this->encode_text( $text );
-        $y            = max( 40, $this->current_y );
-        $this->pages[ $this->current_page ][] = sprintf( 'BT /F1 %d Tf %d %d Td <%s> Tj ET', $font_size, $this->margin_left, $y, $encoded_text );
-        $this->current_y -= $line_height;
+    private function add_wrapped_text( string $text, int $font_size, int $line_height ) : void {
+        foreach ( $this->wrap_text( $text ) as $line ) {
+            $this->entries[] = [
+                'type'        => 'text',
+                'text'        => $line,
+                'font_size'   => $font_size,
+                'line_height' => $line_height,
+            ];
+        }
     }
 
     private function wrap_text( string $text ) : array {
@@ -135,12 +121,6 @@ class Woo_Contifico_Order_Report_Pdf {
         }
 
         return $results ?: [ '' ];
-    }
-
-    private function ensure_space( int $height ) : void {
-        if ( $this->current_y - $height < 40 ) {
-            $this->add_page();
-        }
     }
 
     private function normalize_text( string $text ) : string {
@@ -173,13 +153,5 @@ class Woo_Contifico_Order_Report_Pdf {
         }
 
         return $text;
-    }
-
-    private function length_in_bytes( string $value ) : int {
-        if ( function_exists( 'mb_strlen' ) ) {
-            return (int) mb_strlen( $value, '8bit' );
-        }
-
-        return strlen( $value );
     }
 }
