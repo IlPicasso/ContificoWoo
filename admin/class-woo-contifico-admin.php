@@ -2974,6 +2974,40 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 return $filters;
         }
 
+        /**
+         * Retrieve the product categories for a WooCommerce product id.
+         *
+         * @since 4.3.1
+         */
+        private function get_inventory_movement_product_categories( int $product_id ) : array {
+                static $cache = [];
+
+                if ( isset( $cache[ $product_id ] ) ) {
+                        return $cache[ $product_id ];
+                }
+
+                if ( $product_id <= 0 ) {
+                        return [];
+                }
+
+                $terms = get_the_terms( $product_id, 'product_cat' );
+
+                if ( is_wp_error( $terms ) || empty( $terms ) ) {
+                        $cache[ $product_id ] = [];
+
+                        return $cache[ $product_id ];
+                }
+
+                $cache[ $product_id ] = array_map(
+                        static function ( $term ) {
+                                return (string) $term->name;
+                        },
+                        $terms
+                );
+
+                return $cache[ $product_id ];
+        }
+
 	/**
 	 * Sanitize incoming date values for the inventory report filters.
 	 *
@@ -3007,6 +3041,7 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 $totals           = [ 'ingresos' => 0.0, 'egresos' => 0.0, 'balance' => 0.0 ];
                 $period_totals    = [];
                 $product_totals   = [];
+                $category_totals  = [];
 
                 foreach ( $entries as $entry ) {
                         $timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
@@ -3089,6 +3124,33 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                         $product_totals[ $product_key ]['balance']       = $product_totals[ $product_key ]['ingresos'] - $product_totals[ $product_key ]['egresos'];
                         $product_totals[ $product_key ]['last_movement'] = max( $product_totals[ $product_key ]['last_movement'], $timestamp );
+
+                        $categories = $this->get_inventory_movement_product_categories( (int) $entry['wc_product_id'] );
+
+                        if ( empty( $categories ) ) {
+                                $categories = [ __( 'Sin categoría', 'woo-contifico' ) ];
+                        }
+
+                        foreach ( $categories as $category_label ) {
+                                if ( ! isset( $category_totals[ $category_label ] ) ) {
+                                        $category_totals[ $category_label ] = [
+                                                'category'      => $category_label,
+                                                'ingresos'      => 0.0,
+                                                'egresos'       => 0.0,
+                                                'balance'       => 0.0,
+                                                'last_movement' => $timestamp,
+                                        ];
+                                }
+
+                                if ( 'ingreso' === $event ) {
+                                        $category_totals[ $category_label ]['ingresos'] += $quantity;
+                                } else {
+                                        $category_totals[ $category_label ]['egresos']  += $quantity;
+                                }
+
+                                $category_totals[ $category_label ]['balance']       = $category_totals[ $category_label ]['ingresos'] - $category_totals[ $category_label ]['egresos'];
+                                $category_totals[ $category_label ]['last_movement'] = max( $category_totals[ $category_label ]['last_movement'], $timestamp );
+                        }
                 }
 
                 usort( $filtered_entries, static function ( $a, $b ) {
@@ -3102,6 +3164,10 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 } );
 
                 usort( $product_totals, static function ( $a, $b ) {
+                        return ( $b['last_movement'] ?? 0 ) <=> ( $a['last_movement'] ?? 0 );
+                } );
+
+                usort( $category_totals, static function ( $a, $b ) {
                         return ( $b['last_movement'] ?? 0 ) <=> ( $a['last_movement'] ?? 0 );
                 } );
 
@@ -3122,7 +3188,8 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                         'entries'           => $filtered_entries,
                         'totals'            => $totals,
                         'totals_by_period'  => $period_totals,
-                        'totals_by_product' => $product_totals,
+                        'totals_by_product'  => $product_totals,
+                        'totals_by_category' => $category_totals,
                         'chart_data'        => [
                                 'periods'  => $chart_periods,
                                 'products' => $chart_products,
