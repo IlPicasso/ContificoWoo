@@ -1,23 +1,22 @@
 <?php
 
 class Woo_Contifico_Order_Report_Pdf {
-    private $brand_name = '';
+    private $brand_name    = '';
     private $brand_details = [];
     private $document_title = '';
 
     private $recipient_heading = '';
-    private $recipient_lines = [];
+    private $recipient_lines   = [];
 
     private $order_summary = [];
-
-    private $product_rows = [];
+    private $product_rows  = [];
     private $movement_lines = [];
     private $transfer_lines = [];
 
-    private $margin_left = 20; // mm
-    private $top_margin = 16; // mm
+    private $margin_left   = 20; // mm
+    private $top_margin    = 16; // mm
     private $bottom_margin = 16; // mm
-    private $column_gap = 12; // mm
+    private $column_gap    = 12; // mm
 
     public function set_branding( string $brand_name, array $brand_details = [] ) : void {
         $this->brand_name    = $brand_name;
@@ -143,7 +142,8 @@ class Woo_Contifico_Order_Report_Pdf {
         $pdf->SetXY( $start_x + $column_width + $this->column_gap, $start_y );
         if ( ! empty( $this->order_summary ) ) {
             $pdf->SetFont( 'Arial', 'B', 11 );
-            $pdf->Cell( $column_width, 6, $this->encode_text( __( 'Detalle del pedido', 'woo-contifico' ) ), 0, 1, 'L' );
+            $title = function_exists( '__' ) ? __( 'Detalle del pedido', 'woo-contifico' ) : 'Detalle del pedido';
+            $pdf->Cell( $column_width, 6, $this->encode_text( $title ), 0, 1, 'L' );
             $pdf->SetFont( 'Arial', '', 10 );
             foreach ( $this->order_summary as $row ) {
                 $label = isset( $row['label'] ) ? (string) $row['label'] : '';
@@ -168,8 +168,10 @@ class Woo_Contifico_Order_Report_Pdf {
 
         $pdf->SetFont( 'Arial', 'B', 11 );
         $pdf->SetFillColor( 240, 240, 240 );
-        $pdf->Cell( $product_col, 9, $this->encode_text( __( 'Producto', 'woo-contifico' ) ), 0, 0, 'L', true );
-        $pdf->Cell( $qty_col, 9, $this->encode_text( __( 'Cantidad', 'woo-contifico' ) ), 0, 1, 'R', true );
+        $product_label = function_exists( '__' ) ? __( 'Producto', 'woo-contifico' ) : 'Producto';
+        $qty_label     = function_exists( '__' ) ? __( 'Cantidad', 'woo-contifico' ) : 'Cantidad';
+        $pdf->Cell( $product_col, 9, $this->encode_text( $product_label ), 0, 0, 'L', true );
+        $pdf->Cell( $qty_col, 9, $this->encode_text( $qty_label ), 0, 1, 'R', true );
 
         $pdf->SetFont( 'Arial', '', 10 );
         $pdf->SetDrawColor( 220, 220, 220 );
@@ -212,7 +214,8 @@ class Woo_Contifico_Order_Report_Pdf {
         }
 
         $pdf->SetFont( 'Arial', 'B', 11 );
-        $pdf->Cell( 0, 7, $this->encode_text( __( 'Movimientos de inventario', 'woo-contifico' ) ), 0, 1, 'L' );
+        $title = function_exists( '__' ) ? __( 'Movimientos de inventario', 'woo-contifico' ) : 'Movimientos de inventario';
+        $pdf->Cell( 0, 7, $this->encode_text( $title ), 0, 1, 'L' );
         $pdf->SetFont( 'Arial', '', 10 );
 
         foreach ( $this->movement_lines as $line ) {
@@ -229,7 +232,8 @@ class Woo_Contifico_Order_Report_Pdf {
         }
 
         $pdf->SetFont( 'Arial', 'B', 11 );
-        $pdf->Cell( 0, 7, $this->encode_text( __( 'Transferencias registradas', 'woo-contifico' ) ), 0, 1, 'L' );
+        $title = function_exists( '__' ) ? __( 'Transferencias registradas', 'woo-contifico' ) : 'Transferencias registradas';
+        $pdf->Cell( 0, 7, $this->encode_text( $title ), 0, 1, 'L' );
         $pdf->SetFont( 'Arial', '', 10 );
 
         foreach ( $this->transfer_lines as $line ) {
