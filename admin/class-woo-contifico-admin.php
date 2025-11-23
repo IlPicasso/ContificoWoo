@@ -2621,6 +2621,85 @@ return $value;
                 return $line;
         }
 
+        /**
+         * Resolve a usable logo path for the order report PDF without relying on tracked binary assets.
+         *
+         * @since 4.4.0
+         */
+        private function get_report_logo_path() : string {
+                $plugin_dir = plugin_dir_path( dirname( __FILE__ ) );
+                $logo_path  = $plugin_dir . 'assets/contifico-logo.png';
+
+                if ( file_exists( $logo_path ) ) {
+                        return $logo_path;
+                }
+
+                $embedded_logo = $plugin_dir . 'assets/contifico-logo.base64.txt';
+
+                if ( ! file_exists( $embedded_logo ) ) {
+                        return '';
+                }
+
+                $encoded = trim( (string) file_get_contents( $embedded_logo ) );
+
+                if ( '' === $encoded ) {
+                        return '';
+                }
+
+                $binary = base64_decode( $encoded, true );
+
+                if ( false === $binary ) {
+                        return '';
+                }
+
+                $temp_path = $this->get_temp_logo_path();
+
+                if ( '' === $temp_path ) {
+                        return '';
+                }
+
+                $result = @file_put_contents( $temp_path, $binary );
+
+                return false === $result ? '' : $temp_path;
+        }
+
+        /**
+         * Provide a writable path for the decoded logo image.
+         *
+         * @since 4.4.0
+         */
+        private function get_temp_logo_path() : string {
+                $upload_dir = wp_upload_dir();
+                $base_dir   = isset( $upload_dir['basedir'] ) ? (string) $upload_dir['basedir'] : '';
+                $temp_dir   = '';
+
+                if ( '' !== $base_dir ) {
+                        $candidate = trailingslashit( $base_dir ) . 'contifico';
+
+                        if ( ! is_dir( $candidate ) ) {
+                                wp_mkdir_p( $candidate );
+                        }
+
+                        if ( is_dir( $candidate ) && is_writable( $candidate ) ) {
+                                $temp_dir = $candidate;
+                        }
+                }
+
+                if ( '' === $temp_dir ) {
+                        $fallback = sys_get_temp_dir();
+
+                        if ( is_writable( $fallback ) ) {
+                                $temp_dir = $fallback;
+                        }
+                }
+
+                if ( '' === $temp_dir ) {
+                        return '';
+                }
+
+                return rtrim( $temp_dir, '/\\' ) . '/contifico-logo.png';
+        }
+
         private function build_shipping_city_line( WC_Order $order ) : string {
                 $city    = (string) $order->get_shipping_city();
                 $state   = (string) $order->get_shipping_state();
@@ -6487,13 +6566,19 @@ $order_note = sprintf(
                 $payment_label = $order->get_payment_method_title();
 
                 $store_name   = wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES );
-                $store_lines  = array_filter( [
+                $store_lines  = array_filter( array(
                         get_option( 'woocommerce_store_address' ),
                         get_option( 'woocommerce_store_address_2' ),
                         $this->build_store_location_line(),
-                ] );
+                ) );
 
                 $pdf->set_branding( $store_name, $store_lines );
+
+                $logo_path = $this->get_report_logo_path();
+
+                if ( '' !== $logo_path ) {
+                        $pdf->set_brand_logo_path( $logo_path );
+                }
                 $pdf->set_document_title( __( 'ALBARÁN', $this->plugin_name ) );
 
                 $shipping_name_parts = array_filter( [ $order->get_shipping_first_name(), $order->get_shipping_last_name() ] );

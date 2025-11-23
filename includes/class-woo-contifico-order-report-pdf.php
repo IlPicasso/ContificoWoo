@@ -12,6 +12,7 @@ if ( ! class_exists( 'FPDF' ) ) {
 class Woo_Contifico_Order_Report_Pdf {
     var $brand_name;
     var $brand_details;
+    var $brand_logo_path;
     var $document_title;
 
     var $recipient_heading;
@@ -35,6 +36,7 @@ class Woo_Contifico_Order_Report_Pdf {
     function __construct() {
         $this->brand_name      = '';
         $this->brand_details   = array();
+        $this->brand_logo_path = '';
         $this->document_title  = '';
 
         $this->recipient_heading = '';
@@ -54,6 +56,10 @@ class Woo_Contifico_Order_Report_Pdf {
     function set_branding( $brand_name, $brand_details = array() ) {
         $this->brand_name    = $brand_name;
         $this->brand_details = $brand_details;
+    }
+
+    function set_brand_logo_path( $logo_path ) {
+        $this->brand_logo_path = $logo_path;
     }
 
     function set_document_title( $title ) {
@@ -125,10 +131,45 @@ class Woo_Contifico_Order_Report_Pdf {
         $start_x      = $pdf->GetX();
         $start_y      = $pdf->GetY();
 
+        $logo_width = 0;
+        $logo_height = 0;
+
+        if ( '' !== $this->brand_logo_path && file_exists( $this->brand_logo_path ) ) {
+            $logo_max_height = 18;
+            $logo_size       = @getimagesize( $this->brand_logo_path );
+
+            if ( is_array( $logo_size ) && isset( $logo_size[0], $logo_size[1] ) && (int) $logo_size[1] > 0 ) {
+                $ratio       = $logo_max_height / $logo_size[1];
+                $logo_width  = $logo_size[0] * $ratio;
+                $logo_height = $logo_max_height;
+            } else {
+                $logo_width  = 42;
+                $logo_height = $logo_max_height;
+            }
+
+            $pdf->Image( $this->brand_logo_path, $start_x, $start_y, $logo_width, $logo_height );
+        }
+
+        $text_offset = $start_x;
+
+        if ( $logo_width > 0 ) {
+            $text_offset += $logo_width + 6;
+        }
+
+        $brand_block_end_y = $start_y;
+
         if ( '' !== $this->brand_name ) {
             $pdf->SetFont( 'Arial', 'B', 16 );
-            $pdf->Cell( $left_width, 8, $this->encode_text( $this->brand_name ), 0, 0, 'L' );
+            $pdf->SetXY( $text_offset, $start_y );
+            $pdf->Cell( max( 0, $left_width - ( $text_offset - $start_x ) ), 8, $this->encode_text( $this->brand_name ), 0, 1, 'L' );
+            $brand_block_end_y = max( $brand_block_end_y, $pdf->GetY() );
         }
+
+        if ( $logo_height > 0 ) {
+            $brand_block_end_y = max( $brand_block_end_y, $start_y + $logo_height );
+        }
+
+        $details_end_y = $start_y;
 
         if ( ! empty( $this->brand_details ) ) {
             $pdf->SetFont( 'Arial', '', 10 );
@@ -136,9 +177,10 @@ class Woo_Contifico_Order_Report_Pdf {
             foreach ( $this->brand_details as $line ) {
                 $pdf->Cell( $right_width, 5, $this->encode_text( $line ), 0, 2, 'R' );
             }
+            $details_end_y = $pdf->GetY();
         }
 
-        $pdf->Ln( 10 );
+        $pdf->SetY( max( $brand_block_end_y, $details_end_y ) + 10 );
     }
 
     function render_title( $pdf ) {
@@ -269,8 +311,6 @@ class Woo_Contifico_Order_Report_Pdf {
             $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
             $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
         }
-
-        $pdf->Ln( 2 );
     }
 
     function encode_text( $text ) {
