@@ -46,7 +46,7 @@ class Woo_Contifico_Order_Report_Pdf {
         $offsets  = [];
         $next_id  = 1;
         $font_obj = $next_id++;
-        $objects[ $font_obj ] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+        $objects[ $font_obj ] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
 
         $page_objects = [];
         $kid_refs     = [];
@@ -55,11 +55,11 @@ class Woo_Contifico_Order_Report_Pdf {
             $stream = implode( "\n", $commands );
 
             if ( '' === trim( $stream ) ) {
-                $stream = 'BT /F1 12 Tf 40 760 Td ( ) Tj ET';
+                $stream = 'BT /F1 12 Tf 40 760 Td <> Tj ET';
             }
 
             $content_id = $next_id++;
-            $objects[ $content_id ] = sprintf( "<< /Length %d >>\nstream\n%s\nendstream", strlen( $stream ), $stream );
+            $objects[ $content_id ] = sprintf( "<< /Length %d >>\nstream\n%s\nendstream", $this->length_in_bytes( $stream ), $stream );
 
             $page_template  = '<< /Type /Page /Parent __PARENT__ /MediaBox [0 0 612 792] /Resources << /Font << /F1 ' . $font_obj . ' 0 R >> >> /Contents ' . $content_id . ' 0 R >>';
             $page_object_id = $next_id++;
@@ -81,19 +81,19 @@ class Woo_Contifico_Order_Report_Pdf {
         $pdf = "%PDF-1.4\n";
 
         for ( $i = 1; $i < $next_id; $i++ ) {
-            $offsets[ $i ] = strlen( $pdf );
+            $offsets[ $i ] = $this->length_in_bytes( $pdf );
             $pdf .= $i . " 0 obj\n" . $objects[ $i ] . "\nendobj\n";
         }
 
-        $xref_offset = strlen( $pdf );
-        $pdf        .= 'xref\n0 ' . $next_id . "\n";
+        $xref_offset = $this->length_in_bytes( $pdf );
+        $pdf        .= "xref\n0 $next_id\n";
         $pdf        .= "0000000000 65535 f \n";
 
         for ( $i = 1; $i < $next_id; $i++ ) {
             $pdf .= sprintf( "%010d 00000 n \n", $offsets[ $i ] );
         }
 
-        $pdf .= 'trailer\n<< /Size ' . $next_id . ' /Root ' . $catalog_id . " 0 R >>\nstartxref\n" . $xref_offset . "\n%%EOF";
+        $pdf .= "trailer\n<< /Size $next_id /Root $catalog_id 0 R >>\nstartxref\n$xref_offset\n%%EOF";
 
         return $pdf;
     }
@@ -111,9 +111,9 @@ class Woo_Contifico_Order_Report_Pdf {
         }
 
         $this->ensure_space( $line_height );
-        $text = $this->escape_text( $text );
-        $y    = max( 40, $this->current_y );
-        $this->pages[ $this->current_page ][] = sprintf( 'BT /F1 %d Tf %d %d Td (%s) Tj ET', $font_size, $this->margin_left, $y, $text );
+        $encoded_text = $this->encode_text( $text );
+        $y            = max( 40, $this->current_y );
+        $this->pages[ $this->current_page ][] = sprintf( 'BT /F1 %d Tf %d %d Td <%s> Tj ET', $font_size, $this->margin_left, $y, $encoded_text );
         $this->current_y -= $line_height;
     }
 
@@ -149,15 +149,37 @@ class Woo_Contifico_Order_Report_Pdf {
         return trim( $text );
     }
 
-    private function escape_text( string $text ) : string {
-        if ( function_exists( 'iconv' ) ) {
-            $converted = @iconv( 'UTF-8', 'ISO-8859-1//TRANSLIT', $text );
+    private function encode_text( string $text ) : string {
+        $text = preg_replace( "/[\n\r]/", ' ', $text );
+
+        $win_1252 = $this->to_win1252( $text );
+
+        return bin2hex( $win_1252 );
+    }
+
+    private function to_win1252( string $text ) : string {
+        if ( function_exists( 'mb_convert_encoding' ) ) {
+            $converted = @mb_convert_encoding( $text, 'Windows-1252', 'UTF-8' );
             if ( false !== $converted ) {
-                $text = $converted;
+                return $converted;
             }
         }
 
-        $text = str_replace( [ '\\', '(', ')' ], [ '\\\\', '\\(', '\\)' ], $text );
-        return preg_replace( "/[\n\r]/", ' ', $text );
+        if ( function_exists( 'iconv' ) ) {
+            $converted = @iconv( 'UTF-8', 'Windows-1252//TRANSLIT//IGNORE', $text );
+            if ( false !== $converted ) {
+                return $converted;
+            }
+        }
+
+        return $text;
+    }
+
+    private function length_in_bytes( string $value ) : int {
+        if ( function_exists( 'mb_strlen' ) ) {
+            return (int) mb_strlen( $value, '8bit' );
+        }
+
+        return strlen( $value );
     }
 }
