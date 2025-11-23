@@ -33,8 +33,37 @@ class Woo_Contifico_Order_Report_Pdf {
     }
 
     public function render() : string {
-        if ( ! class_exists( 'FPDF' ) ) {
-            require_once dirname( __DIR__ ) . '/libraries/fpdf.php';
+        $objects  = [];
+        $offsets  = [];
+        $next_id  = 1;
+        $font_obj = $next_id++;
+        $objects[ $font_obj ] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+
+        $page_objects = [];
+        $kid_refs     = [];
+
+        foreach ( $this->pages as $commands ) {
+            $stream = implode( "\n", $commands );
+
+            if ( '' === trim( $stream ) ) {
+                $stream = 'BT /F1 12 Tf 40 760 Td <> Tj ET';
+            }
+
+            $content_id = $next_id++;
+            $objects[ $content_id ] = sprintf( "<< /Length %d >>\nstream\n%s\nendstream", $this->length_in_bytes( $stream ), $stream );
+
+            $page_template  = '<< /Type /Page /Parent __PARENT__ /MediaBox [0 0 612 792] /Resources << /Font << /F1 ' . $font_obj . ' 0 R >> >> /Contents ' . $content_id . ' 0 R >>';
+            $page_object_id = $next_id++;
+            $objects[ $page_object_id ] = $page_template;
+            $page_objects[]             = $page_object_id;
+            $kid_refs[]                 = $page_object_id . ' 0 R';
+        }
+
+        $pages_object_id = $next_id++;
+        $objects[ $pages_object_id ] = sprintf( '<< /Type /Pages /Count %d /Kids [ %s ] >>', count( $kid_refs ), implode( ' ', $kid_refs ) );
+
+        foreach ( $page_objects as $page_object_id ) {
+            $objects[ $page_object_id ] = str_replace( '__PARENT__', $pages_object_id . ' 0 R', $objects[ $page_object_id ] );
         }
 
         $pdf = new FPDF( 'P', 'pt', 'Letter' );
@@ -103,7 +132,9 @@ class Woo_Contifico_Order_Report_Pdf {
     private function encode_text( string $text ) : string {
         $text = preg_replace( "/[\n\r]/", ' ', $text );
 
-        return $this->to_win1252( $text );
+        $win_1252 = $this->to_win1252( $text );
+
+        return bin2hex( $win_1252 );
     }
 
     private function to_win1252( string $text ) : string {
