@@ -2,23 +2,23 @@
 
 class Woo_Contifico_Order_Report_Pdf {
     private $brand_name    = '';
-    private $brand_details = [];
+    private $brand_details = array();
     private $document_title = '';
 
     private $recipient_heading = '';
-    private $recipient_lines   = [];
+    private $recipient_lines   = array();
 
-    private $order_summary = [];
-    private $product_rows  = [];
-    private $movement_lines = [];
-    private $transfer_lines = [];
+    private $order_summary = array();
+    private $product_rows  = array();
+    private $movement_lines = array();
+    private $transfer_lines = array();
 
     private $margin_left   = 20; // mm
     private $top_margin    = 16; // mm
     private $bottom_margin = 16; // mm
     private $column_gap    = 12; // mm
 
-    public function set_branding( $brand_name, $brand_details = [] ) {
+    public function set_branding( $brand_name, $brand_details = array() ) {
         $this->brand_name    = $brand_name;
         $this->brand_details = $brand_details;
     }
@@ -36,12 +36,12 @@ class Woo_Contifico_Order_Report_Pdf {
         $this->order_summary = $rows;
     }
 
-    public function add_product_row( $name, $quantity, $details = [] ) {
-        $this->product_rows[] = [
+    public function add_product_row( $name, $quantity, $details = array() ) {
+        $this->product_rows[] = array(
             'name'     => $name,
             'quantity' => $quantity,
             'details'  => $details,
-        ];
+        );
     }
 
     public function add_inventory_movement_line( $text ) {
@@ -179,7 +179,7 @@ class Woo_Contifico_Order_Report_Pdf {
         foreach ( $this->product_rows as $row ) {
             $name     = isset( $row['name'] ) ? (string) $row['name'] : '';
             $quantity = isset( $row['quantity'] ) ? (string) $row['quantity'] : '';
-            $details  = isset( $row['details'] ) && is_array( $row['details'] ) ? $row['details'] : [];
+            $details  = isset( $row['details'] ) && is_array( $row['details'] ) ? $row['details'] : array();
 
             $x_start   = $pdf->GetX();
             $y_start   = $pdf->GetY();
@@ -237,16 +237,6 @@ class Woo_Contifico_Order_Report_Pdf {
         $pdf->SetFont( 'Arial', '', 10 );
 
         foreach ( $this->transfer_lines as $line ) {
-            $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
-            $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
-        }
-
-        $pdf->SetFont( 'Arial', 'B', 11 );
-        $title = function_exists( '__' ) ? __( 'Movimientos de inventario', 'woo-contifico' ) : 'Movimientos de inventario';
-        $pdf->Cell( 0, 7, $this->encode_text( $title ), 0, 1, 'L' );
-        $pdf->SetFont( 'Arial', '', 10 );
-
-        foreach ( $this->movement_lines as $line ) {
             $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
             $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
         }
