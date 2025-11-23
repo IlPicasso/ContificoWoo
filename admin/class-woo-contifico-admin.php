@@ -6569,9 +6569,9 @@ $order_note = sprintf(
                                 $details[] = sprintf( __( 'Ubicación: %s', $this->plugin_name ), $location_label );
                         }
 
-                        $pdf->add_product_row( $product_name, $quantity_label, $details );
-                        $items_added = true;
-                }
+                $pdf->add_product_row( $product_name, $quantity_label, $details );
+                $items_added = true;
+        }
 
                 if ( ! $items_added ) {
                         $pdf->add_product_row( __( 'No hay productos asociados al pedido.', $this->plugin_name ), '—' );
@@ -6580,7 +6580,7 @@ $order_note = sprintf(
                 $movements = $this->get_order_inventory_movements_for_order( $order->get_id() );
 
                 if ( empty( $movements ) ) {
-                        $pdf->add_inventory_movement_line( __( 'No se han registrado movimientos para este pedido.', $this->plugin_name ) );
+                        $pdf->add_inventory_movement_line( __( 'Aún no hay movimientos registrados para este pedido.', $this->plugin_name ) );
                 } else {
                         foreach ( $movements as $movement ) {
                                 $timestamp     = isset( $movement['timestamp'] ) ? (int) $movement['timestamp'] : 0;
@@ -6588,19 +6588,23 @@ $order_note = sprintf(
                                 $event_label   = 'ingreso' === $movement['event_type'] ? __( 'Ingreso', $this->plugin_name ) : __( 'Egreso', $this->plugin_name );
                                 $from_label    = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['from'] ) ? $movement['warehouses']['from'] : [] );
                                 $to_label      = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : [] );
-                                $from_label    = $from_label ?: __( 'Desconocida', $this->plugin_name );
-                                $to_label      = $to_label ?: __( 'Desconocida', $this->plugin_name );
-                                $reference     = $movement['reference'] ?: __( 'Sin código', $this->plugin_name );
+                                $from_label    = $from_label ?: __( 'Bodega no especificada', $this->plugin_name );
+                                $to_label      = $to_label ?: __( 'Bodega no especificada', $this->plugin_name );
+                                $reference     = $movement['reference'] ?: __( 'Sin referencia', $this->plugin_name );
                                 $location      = isset( $movement['location']['label'] ) && '' !== $movement['location']['label']
                                         ? $movement['location']['label']
-                                        : __( 'No definida', $this->plugin_name );
+                                        : '';
                                 $product_name  = wp_strip_all_tags( (string) $movement['product_name'] );
                                 $sku_label     = $movement['sku'] ?: __( 'Sin SKU', $this->plugin_name );
                                 $quantity      = wc_format_decimal( $movement['quantity'], 2 );
 
+                                $location_fragment = '' !== $location
+                                        ? sprintf( __( ' · Ubicación: %s', $this->plugin_name ), $location )
+                                        : '';
+
                                 $pdf->add_inventory_movement_line(
                                         sprintf(
-                                                __( '[%1$s] %2$s de %3$s uds · %4$s → %5$s · Producto: %6$s (SKU: %7$s) · Ref: %8$s · Ubicación: %9$s', $this->plugin_name ),
+                                                __( '[%1$s] %2$s de %3$s uds · %4$s → %5$s · Producto: %6$s (SKU: %7$s) · Ref: %8$s%9$s', $this->plugin_name ),
                                                 $movement_date,
                                                 $event_label,
                                                 $quantity,
@@ -6609,7 +6613,7 @@ $order_note = sprintf(
                                                 $product_name,
                                                 $sku_label,
                                                 $reference,
-                                                $location
+                                                $location_fragment
                                         )
                                 );
                         }
@@ -6618,7 +6622,7 @@ $order_note = sprintf(
                 $transfer_summaries = $this->build_order_transfer_summaries( $movements );
 
                 if ( empty( $transfer_summaries ) ) {
-                        $pdf->add_transfer_summary_line( __( 'No hay transferencias registradas en Contífico para este pedido.', $this->plugin_name ) );
+                        $pdf->add_transfer_summary_line( __( 'Aún no se registran transferencias en Contífico para este pedido.', $this->plugin_name ) );
                 } else {
                         foreach ( $transfer_summaries as $summary ) {
                                 $from_label = $this->format_warehouse_label_with_code( [ 'label' => $summary['from'] ] );
