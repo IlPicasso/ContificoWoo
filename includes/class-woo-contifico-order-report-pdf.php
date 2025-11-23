@@ -115,6 +115,7 @@ class Woo_Contifico_Order_Report_Pdf {
         if ( '' === $this->document_title ) {
             return;
         }
+    }
 
         $pdf->SetFont( 'Arial', 'B', 20 );
         $pdf->Cell( 0, 12, $this->encode_text( $this->document_title ), 0, 1, 'L' );
@@ -239,6 +240,8 @@ class Woo_Contifico_Order_Report_Pdf {
             $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
             $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
         }
+
+        $pdf->Ln( 2 );
     }
 
     private function encode_text( $text ) {
