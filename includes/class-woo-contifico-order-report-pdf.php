@@ -1,163 +1,267 @@
 <?php
 
 class Woo_Contifico_Order_Report_Pdf {
-    private $pages = [];
-    private $current_page = 0;
-    private $current_y = 0;
-    private $margin_left = 40;
-    private $max_chars = 105;
+    private $brand_name    = '';
+    private $brand_details = array();
+    private $document_title = '';
 
-    public function __construct() {
-        $this->add_page();
+    private $recipient_heading = '';
+    private $recipient_lines   = array();
+
+    private $order_summary = array();
+    private $product_rows  = array();
+    private $movement_lines = array();
+    private $transfer_lines = array();
+
+    private $margin_left   = 20; // mm
+    private $top_margin    = 16; // mm
+    private $bottom_margin = 16; // mm
+    private $column_gap    = 12; // mm
+
+    public function set_branding( $brand_name, $brand_details = array() ) {
+        $this->brand_name    = $brand_name;
+        $this->brand_details = $brand_details;
     }
 
-    public function add_title( string $text ) : void {
-        $this->add_wrapped_text( $text, 16, 28 );
-        $this->add_spacer( 6 );
+    public function set_document_title( $title ) {
+        $this->document_title = $title;
     }
 
-    public function add_subheading( string $text ) : void {
-        $this->add_wrapped_text( $text, 13, 20 );
+    public function set_recipient_block( $heading, $lines ) {
+        $this->recipient_heading = $heading;
+        $this->recipient_lines   = $lines;
     }
 
-    private function add_wrapped_text( string $text, int $font_size, int $line_height ) : void {
-        foreach ( $this->wrap_text( $text ) as $line ) {
-            $this->add_line( $line, $font_size, $line_height );
-        }
+    public function set_order_summary( $rows ) {
+        $this->order_summary = $rows;
     }
 
-    public function add_text_line( string $text, int $font_size = 11, int $line_height = 14 ) : void {
-        foreach ( $this->wrap_text( $text ) as $line ) {
-            $this->add_line( $line, $font_size, $line_height );
-        }
+    public function add_product_row( $name, $quantity, $details = array() ) {
+        $this->product_rows[] = array(
+            'name'     => $name,
+            'quantity' => $quantity,
+            'details'  => $details,
+        );
     }
 
-    public function add_list_item( string $text ) : void {
-        $this->add_text_line( '- ' . $text );
+    public function add_inventory_movement_line( $text ) {
+        $this->movement_lines[] = $text;
     }
 
-    public function add_spacer( int $height = 10 ) : void {
-        $this->ensure_space( $height );
-        $this->current_y -= $height;
+    public function add_transfer_summary_line( $text ) {
+        $this->transfer_lines[] = $text;
     }
 
-    public function render() : string {
-        $objects  = [];
-        $offsets  = [];
-        $next_id  = 1;
-        $font_obj = $next_id++;
-        $objects[ $font_obj ] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+    public function render() {
+        $this->require_fpdf();
 
-        $page_objects = [];
-        $kid_refs     = [];
+        $pdf = new FPDF( 'P', 'mm', 'A4' );
+        $pdf->SetMargins( $this->margin_left, $this->top_margin, $this->margin_left );
+        $pdf->SetAutoPageBreak( true, $this->bottom_margin );
+        $pdf->AddPage();
 
-        foreach ( $this->pages as $commands ) {
-            $stream = implode( "\n", $commands );
+        $this->render_branding( $pdf );
+        $this->render_title( $pdf );
+        $this->render_info_columns( $pdf );
+        $this->render_products_table( $pdf );
+        $this->render_movements_section( $pdf );
+        $this->render_transfers_section( $pdf );
 
-            if ( '' === trim( $stream ) ) {
-                $stream = 'BT /F1 12 Tf 40 760 Td ( ) Tj ET';
-            }
-
-            $content_id = $next_id++;
-            $objects[ $content_id ] = sprintf( "<< /Length %d >>\nstream\n%s\nendstream", strlen( $stream ), $stream );
-
-            $page_template  = '<< /Type /Page /Parent __PARENT__ /MediaBox [0 0 612 792] /Resources << /Font << /F1 ' . $font_obj . ' 0 R >> >> /Contents ' . $content_id . ' 0 R >>';
-            $page_object_id = $next_id++;
-            $objects[ $page_object_id ] = $page_template;
-            $page_objects[]             = $page_object_id;
-            $kid_refs[]                 = $page_object_id . ' 0 R';
-        }
-
-        $pages_object_id = $next_id++;
-        $objects[ $pages_object_id ] = sprintf( '<< /Type /Pages /Count %d /Kids [ %s ] >>', count( $kid_refs ), implode( ' ', $kid_refs ) );
-
-        foreach ( $page_objects as $page_object_id ) {
-            $objects[ $page_object_id ] = str_replace( '__PARENT__', $pages_object_id . ' 0 R', $objects[ $page_object_id ] );
-        }
-
-        $catalog_id = $next_id++;
-        $objects[ $catalog_id ] = '<< /Type /Catalog /Pages ' . $pages_object_id . ' 0 R >>';
-
-        $pdf = "%PDF-1.4\n";
-
-        for ( $i = 1; $i < $next_id; $i++ ) {
-            $offsets[ $i ] = strlen( $pdf );
-            $pdf .= $i . " 0 obj\n" . $objects[ $i ] . "\nendobj\n";
-        }
-
-        $xref_offset = strlen( $pdf );
-        $pdf        .= 'xref\n0 ' . $next_id . "\n";
-        $pdf        .= "0000000000 65535 f \n";
-
-        for ( $i = 1; $i < $next_id; $i++ ) {
-            $pdf .= sprintf( "%010d 00000 n \n", $offsets[ $i ] );
-        }
-
-        $pdf .= 'trailer\n<< /Size ' . $next_id . ' /Root ' . $catalog_id . " 0 R >>\nstartxref\n" . $xref_offset . "\n%%EOF";
-
-        return $pdf;
+        return $pdf->Output( 'S' );
     }
 
-    private function add_page() : void {
-        $this->pages[]     = [];
-        $this->current_page = count( $this->pages ) - 1;
-        $this->current_y    = 780;
-    }
-
-    private function add_line( string $text, int $font_size, int $line_height ) : void {
-        if ( '' === trim( $text ) ) {
-            $this->add_spacer( $line_height );
+    private function require_fpdf() {
+        if ( class_exists( 'FPDF' ) ) {
             return;
         }
 
-        $this->ensure_space( $line_height );
-        $text = $this->escape_text( $text );
-        $y    = max( 40, $this->current_y );
-        $this->pages[ $this->current_page ][] = sprintf( 'BT /F1 %d Tf %d %d Td (%s) Tj ET', $font_size, $this->margin_left, $y, $text );
-        $this->current_y -= $line_height;
+        $fpdf_path = __DIR__ . '/../libraries/fpdf.php';
+
+        if ( ! file_exists( $fpdf_path ) ) {
+            throw new RuntimeException( 'No se encontró la librería FPDF en: ' . $fpdf_path );
+        }
+
+        require_once $fpdf_path;
+
+        if ( ! class_exists( 'FPDF' ) ) {
+            throw new RuntimeException( 'La librería FPDF no se pudo cargar correctamente.' );
+        }
     }
 
-    private function wrap_text( string $text ) : array {
-        $text    = $this->normalize_text( $text );
-        $chunks  = preg_split( "/\r?\n/", $text );
-        $results = [];
+    private function render_branding( $pdf ) {
+        $usable_width = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
+        $left_width   = $usable_width * 0.5;
+        $right_width  = $usable_width * 0.5;
+        $start_x      = $pdf->GetX();
+        $start_y      = $pdf->GetY();
 
-        foreach ( $chunks as $chunk ) {
-            $chunk = trim( $chunk );
+        if ( '' !== $this->brand_name ) {
+            $pdf->SetFont( 'Arial', 'B', 16 );
+            $pdf->Cell( $left_width, 8, $this->encode_text( $this->brand_name ), 0, 0, 'L' );
+        }
 
-            if ( '' === $chunk ) {
-                $results[] = '';
-                continue;
+        if ( ! empty( $this->brand_details ) ) {
+            $pdf->SetFont( 'Arial', '', 10 );
+            $pdf->SetXY( $start_x + $left_width, $start_y );
+            foreach ( $this->brand_details as $line ) {
+                $pdf->Cell( $right_width, 5, $this->encode_text( $line ), 0, 2, 'R' );
+            }
+        }
+
+        $pdf->Ln( 10 );
+    }
+
+    private function render_title( $pdf ) {
+        if ( '' === $this->document_title ) {
+            return;
+        }
+
+        $pdf->SetFont( 'Arial', 'B', 20 );
+        $pdf->Cell( 0, 12, $this->encode_text( $this->document_title ), 0, 1, 'L' );
+        $pdf->Ln( 4 );
+    }
+
+    private function render_info_columns( $pdf ) {
+        $usable_width = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
+        $column_width = ( $usable_width - $this->column_gap ) / 2;
+        $start_x      = $pdf->GetX();
+        $start_y      = $pdf->GetY();
+        $max_y        = $start_y;
+
+        // Recipient / address block.
+        $pdf->SetFont( 'Arial', 'B', 11 );
+        $pdf->Cell( $column_width, 6, $this->encode_text( $this->recipient_heading ), 0, 1, 'L' );
+        $pdf->SetFont( 'Arial', '', 10 );
+        foreach ( $this->recipient_lines as $line ) {
+            $pdf->Cell( $column_width, 5.5, $this->encode_text( $line ), 0, 1, 'L' );
+        }
+        $max_y = max( $max_y, $pdf->GetY() );
+
+        // Order summary block.
+        $pdf->SetXY( $start_x + $column_width + $this->column_gap, $start_y );
+        if ( ! empty( $this->order_summary ) ) {
+            $pdf->SetFont( 'Arial', 'B', 11 );
+            $title = function_exists( '__' ) ? __( 'Detalle del pedido', 'woo-contifico' ) : 'Detalle del pedido';
+            $pdf->Cell( $column_width, 6, $this->encode_text( $title ), 0, 1, 'L' );
+            $pdf->SetFont( 'Arial', '', 10 );
+            foreach ( $this->order_summary as $row ) {
+                $label = isset( $row['label'] ) ? (string) $row['label'] : '';
+                $value = isset( $row['value'] ) ? (string) $row['value'] : '';
+                $pdf->Cell( $column_width * 0.55, 5.5, $this->encode_text( $label ), 0, 0, 'L' );
+                $pdf->Cell( $column_width * 0.45, 5.5, $this->encode_text( $value ), 0, 1, 'L' );
+            }
+            $max_y = max( $max_y, $pdf->GetY() );
+        }
+
+        $pdf->SetY( $max_y + 6 );
+    }
+
+    private function render_products_table( $pdf ) {
+        if ( empty( $this->product_rows ) ) {
+            return;
+        }
+
+        $usable_width = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
+        $product_col  = $usable_width * 0.7;
+        $qty_col      = $usable_width * 0.3;
+
+        $pdf->SetFont( 'Arial', 'B', 11 );
+        $pdf->SetFillColor( 240, 240, 240 );
+        $product_label = function_exists( '__' ) ? __( 'Producto', 'woo-contifico' ) : 'Producto';
+        $qty_label     = function_exists( '__' ) ? __( 'Cantidad', 'woo-contifico' ) : 'Cantidad';
+        $pdf->Cell( $product_col, 9, $this->encode_text( $product_label ), 0, 0, 'L', true );
+        $pdf->Cell( $qty_col, 9, $this->encode_text( $qty_label ), 0, 1, 'R', true );
+
+        $pdf->SetFont( 'Arial', '', 10 );
+        $pdf->SetDrawColor( 220, 220, 220 );
+
+        foreach ( $this->product_rows as $row ) {
+            $name     = isset( $row['name'] ) ? (string) $row['name'] : '';
+            $quantity = isset( $row['quantity'] ) ? (string) $row['quantity'] : '';
+            $details  = isset( $row['details'] ) && is_array( $row['details'] ) ? $row['details'] : array();
+
+            $x_start   = $pdf->GetX();
+            $y_start   = $pdf->GetY();
+            $line_text = $this->encode_text( $name );
+
+            if ( ! empty( $details ) ) {
+                $line_text .= "\n" . $this->encode_text( implode( "\n", $details ) );
             }
 
-            $wrapped = wordwrap( $chunk, $this->max_chars, "\n", true );
-            $results = array_merge( $results, explode( "\n", $wrapped ) );
+            $pdf->MultiCell( $product_col, 5.5, $line_text, 0, 'L' );
+            $y_after_product = $pdf->GetY();
+
+            $pdf->SetXY( $x_start + $product_col, $y_start );
+            $row_height = $y_after_product - $y_start;
+            $pdf->Cell( $qty_col, $row_height, $this->encode_text( $quantity ), 0, 0, 'R' );
+            $pdf->Ln( 0 );
+
+            $max_y = max( $y_after_product, $y_start + $row_height );
+            $pdf->SetY( $max_y );
+
+            $line_y = $pdf->GetY() + 1;
+            $pdf->Line( $this->margin_left, $line_y, $pdf->GetPageWidth() - $this->margin_left, $line_y );
+            $pdf->Ln( 3 );
         }
 
-        return $results ?: [ '' ];
+        $pdf->Ln( 4 );
     }
 
-    private function ensure_space( int $height ) : void {
-        if ( $this->current_y - $height < 40 ) {
-            $this->add_page();
+    private function render_movements_section( $pdf ) {
+        if ( empty( $this->movement_lines ) ) {
+            return;
+        }
+
+        $pdf->SetFont( 'Arial', 'B', 11 );
+        $title = function_exists( '__' ) ? __( 'Movimientos de inventario', 'woo-contifico' ) : 'Movimientos de inventario';
+        $pdf->Cell( 0, 7, $this->encode_text( $title ), 0, 1, 'L' );
+        $pdf->SetFont( 'Arial', '', 10 );
+
+        foreach ( $this->movement_lines as $line ) {
+            $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
+            $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
+        }
+
+        $pdf->Ln( 2 );
+    }
+
+    private function render_transfers_section( $pdf ) {
+        if ( empty( $this->transfer_lines ) ) {
+            return;
+        }
+
+        $pdf->SetFont( 'Arial', 'B', 11 );
+        $title = function_exists( '__' ) ? __( 'Transferencias registradas', 'woo-contifico' ) : 'Transferencias registradas';
+        $pdf->Cell( 0, 7, $this->encode_text( $title ), 0, 1, 'L' );
+        $pdf->SetFont( 'Arial', '', 10 );
+
+        foreach ( $this->transfer_lines as $line ) {
+            $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
+            $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
         }
     }
 
-    private function normalize_text( string $text ) : string {
-        $text = preg_replace( "/[\t\r]+/", ' ', $text );
-        $text = preg_replace( "/\s+/", ' ', $text );
-        return trim( $text );
+    private function encode_text( $text ) {
+        $text = preg_replace( "/[\n\r]/", "\n", $text );
+
+        return $this->to_win1252( $text );
     }
 
-    private function escape_text( string $text ) : string {
-        if ( function_exists( 'iconv' ) ) {
-            $converted = @iconv( 'UTF-8', 'ISO-8859-1//TRANSLIT', $text );
+    private function to_win1252( $text ) {
+        if ( function_exists( 'mb_convert_encoding' ) ) {
+            $converted = @mb_convert_encoding( $text, 'Windows-1252', 'UTF-8' );
             if ( false !== $converted ) {
-                $text = $converted;
+                return $converted;
             }
         }
 
-        $text = str_replace( [ '\\', '(', ')' ], [ '\\\\', '\\(', '\\)' ], $text );
-        return preg_replace( "/[\n\r]/", ' ', $text );
+        if ( function_exists( 'iconv' ) ) {
+            $converted = @iconv( 'UTF-8', 'Windows-1252//TRANSLIT//IGNORE', $text );
+            if ( false !== $converted ) {
+                return $converted;
+            }
+        }
+
+        return $text;
     }
 }
