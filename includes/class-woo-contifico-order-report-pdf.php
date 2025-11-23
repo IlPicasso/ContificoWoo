@@ -33,38 +33,7 @@ class Woo_Contifico_Order_Report_Pdf {
     }
 
     public function render() : string {
-        $objects  = [];
-        $offsets  = [];
-        $next_id  = 1;
-        $font_obj = $next_id++;
-        $objects[ $font_obj ] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
-
-        $page_objects = [];
-        $kid_refs     = [];
-
-        foreach ( $this->pages as $commands ) {
-            $stream = implode( "\n", $commands );
-
-            if ( '' === trim( $stream ) ) {
-                $stream = 'BT /F1 12 Tf 40 760 Td <> Tj ET';
-            }
-
-            $content_id = $next_id++;
-            $objects[ $content_id ] = sprintf( "<< /Length %d >>\nstream\n%s\nendstream", $this->length_in_bytes( $stream ), $stream );
-
-            $page_template  = '<< /Type /Page /Parent __PARENT__ /MediaBox [0 0 612 792] /Resources << /Font << /F1 ' . $font_obj . ' 0 R >> >> /Contents ' . $content_id . ' 0 R >>';
-            $page_object_id = $next_id++;
-            $objects[ $page_object_id ] = $page_template;
-            $page_objects[]             = $page_object_id;
-            $kid_refs[]                 = $page_object_id . ' 0 R';
-        }
-
-        $pages_object_id = $next_id++;
-        $objects[ $pages_object_id ] = sprintf( '<< /Type /Pages /Count %d /Kids [ %s ] >>', count( $kid_refs ), implode( ' ', $kid_refs ) );
-
-        foreach ( $page_objects as $page_object_id ) {
-            $objects[ $page_object_id ] = str_replace( '__PARENT__', $pages_object_id . ' 0 R', $objects[ $page_object_id ] );
-        }
+        $this->require_fpdf();
 
         $pdf = new FPDF( 'P', 'pt', 'Letter' );
         $pdf->SetMargins( $this->margin_left, $this->top_margin, $this->margin_left );
@@ -81,6 +50,24 @@ class Woo_Contifico_Order_Report_Pdf {
         }
 
         return $pdf->Output( 'S' );
+    }
+
+    private function require_fpdf() : void {
+        if ( class_exists( 'FPDF' ) ) {
+            return;
+        }
+
+        $fpdf_path = __DIR__ . '/../libraries/fpdf.php';
+
+        if ( ! file_exists( $fpdf_path ) ) {
+            throw new RuntimeException( 'No se encontró la librería FPDF en: ' . $fpdf_path );
+        }
+
+        require_once $fpdf_path;
+
+        if ( ! class_exists( 'FPDF' ) ) {
+            throw new RuntimeException( 'La librería FPDF no se pudo cargar correctamente.' );
+        }
     }
 
     private function output_spacer( FPDF $pdf, int $height ) : void {
@@ -132,9 +119,7 @@ class Woo_Contifico_Order_Report_Pdf {
     private function encode_text( string $text ) : string {
         $text = preg_replace( "/[\n\r]/", ' ', $text );
 
-        $win_1252 = $this->to_win1252( $text );
-
-        return bin2hex( $win_1252 );
+        return $this->to_win1252( $text );
     }
 
     private function to_win1252( string $text ) : string {
