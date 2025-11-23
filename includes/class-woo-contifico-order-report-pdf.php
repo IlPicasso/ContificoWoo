@@ -18,25 +18,25 @@ class Woo_Contifico_Order_Report_Pdf {
     private $bottom_margin = 16; // mm
     private $column_gap    = 12; // mm
 
-    public function set_branding( string $brand_name, array $brand_details = [] ) : void {
+    public function set_branding( $brand_name, $brand_details = [] ) {
         $this->brand_name    = $brand_name;
         $this->brand_details = $brand_details;
     }
 
-    public function set_document_title( string $title ) : void {
+    public function set_document_title( $title ) {
         $this->document_title = $title;
     }
 
-    public function set_recipient_block( string $heading, array $lines ) : void {
+    public function set_recipient_block( $heading, $lines ) {
         $this->recipient_heading = $heading;
         $this->recipient_lines   = $lines;
     }
 
-    public function set_order_summary( array $rows ) : void {
+    public function set_order_summary( $rows ) {
         $this->order_summary = $rows;
     }
 
-    public function add_product_row( string $name, string $quantity, array $details = [] ) : void {
+    public function add_product_row( $name, $quantity, $details = [] ) {
         $this->product_rows[] = [
             'name'     => $name,
             'quantity' => $quantity,
@@ -44,15 +44,15 @@ class Woo_Contifico_Order_Report_Pdf {
         ];
     }
 
-    public function add_inventory_movement_line( string $text ) : void {
+    public function add_inventory_movement_line( $text ) {
         $this->movement_lines[] = $text;
     }
 
-    public function add_transfer_summary_line( string $text ) : void {
+    public function add_transfer_summary_line( $text ) {
         $this->transfer_lines[] = $text;
     }
 
-    public function render() : string {
+    public function render() {
         $this->require_fpdf();
 
         $pdf = new FPDF( 'P', 'mm', 'A4' );
@@ -70,7 +70,7 @@ class Woo_Contifico_Order_Report_Pdf {
         return $pdf->Output( 'S' );
     }
 
-    private function require_fpdf() : void {
+    private function require_fpdf() {
         if ( class_exists( 'FPDF' ) ) {
             return;
         }
@@ -88,7 +88,7 @@ class Woo_Contifico_Order_Report_Pdf {
         }
     }
 
-    private function render_branding( FPDF $pdf ) : void {
+    private function render_branding( $pdf ) {
         $usable_width = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
         $left_width   = $usable_width * 0.5;
         $right_width  = $usable_width * 0.5;
@@ -111,7 +111,7 @@ class Woo_Contifico_Order_Report_Pdf {
         $pdf->Ln( 10 );
     }
 
-    private function render_title( FPDF $pdf ) : void {
+    private function render_title( $pdf ) {
         if ( '' === $this->document_title ) {
             return;
         }
@@ -122,7 +122,7 @@ class Woo_Contifico_Order_Report_Pdf {
         $pdf->Ln( 4 );
     }
 
-    private function render_info_columns( FPDF $pdf ) : void {
+    private function render_info_columns( $pdf ) {
         $usable_width = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
         $column_width = ( $usable_width - $this->column_gap ) / 2;
         $start_x      = $pdf->GetX();
@@ -157,7 +157,7 @@ class Woo_Contifico_Order_Report_Pdf {
         $pdf->SetY( $max_y + 6 );
     }
 
-    private function render_products_table( FPDF $pdf ) : void {
+    private function render_products_table( $pdf ) {
         if ( empty( $this->product_rows ) ) {
             return;
         }
@@ -208,7 +208,7 @@ class Woo_Contifico_Order_Report_Pdf {
         $pdf->Ln( 4 );
     }
 
-    private function render_movements_section( FPDF $pdf ) : void {
+    private function render_movements_section( $pdf ) {
         if ( empty( $this->movement_lines ) ) {
             return;
         }
@@ -226,7 +226,7 @@ class Woo_Contifico_Order_Report_Pdf {
         $pdf->Ln( 2 );
     }
 
-    private function render_transfers_section( FPDF $pdf ) : void {
+    private function render_transfers_section( $pdf ) {
         if ( empty( $this->transfer_lines ) ) {
             return;
         }
@@ -240,15 +240,27 @@ class Woo_Contifico_Order_Report_Pdf {
             $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
             $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
         }
+
+        $pdf->SetFont( 'Arial', 'B', 11 );
+        $title = function_exists( '__' ) ? __( 'Movimientos de inventario', 'woo-contifico' ) : 'Movimientos de inventario';
+        $pdf->Cell( 0, 7, $this->encode_text( $title ), 0, 1, 'L' );
+        $pdf->SetFont( 'Arial', '', 10 );
+
+        foreach ( $this->movement_lines as $line ) {
+            $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
+            $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
+        }
+
+        $pdf->Ln( 2 );
     }
 
-    private function encode_text( string $text ) : string {
+    private function encode_text( $text ) {
         $text = preg_replace( "/[\n\r]/", "\n", $text );
 
         return $this->to_win1252( $text );
     }
 
-    private function to_win1252( string $text ) : string {
+    private function to_win1252( $text ) {
         if ( function_exists( 'mb_convert_encoding' ) ) {
             $converted = @mb_convert_encoding( $text, 'Windows-1252', 'UTF-8' );
             if ( false !== $converted ) {
