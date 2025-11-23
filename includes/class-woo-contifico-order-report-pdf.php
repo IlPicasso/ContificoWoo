@@ -116,6 +116,7 @@ class Woo_Contifico_Order_Report_Pdf {
         if ( '' === $this->document_title ) {
             return;
         }
+    }
 
         $pdf->SetFont( 'Arial', 'B', 20 );
         $pdf->Cell( 0, 12, $this->encode_text( $this->document_title ), 0, 1, 'L' );
