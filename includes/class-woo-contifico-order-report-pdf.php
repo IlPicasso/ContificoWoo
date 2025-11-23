@@ -99,6 +99,7 @@ class Woo_Contifico_Order_Report_Pdf {
         if ( ! file_exists( $fpdf_path ) ) {
             throw new RuntimeException( 'No se encontró la librería FPDF en: ' . $fpdf_path );
         }
+    }
 
         require_once $fpdf_path;
 
@@ -118,6 +119,7 @@ class Woo_Contifico_Order_Report_Pdf {
             $pdf->SetFont( 'Arial', 'B', 16 );
             $pdf->Cell( $left_width, 8, $this->encode_text( $this->brand_name ), 0, 0, 'L' );
         }
+    }
 
         if ( ! empty( $this->brand_details ) ) {
             $pdf->SetFont( 'Arial', '', 10 );
@@ -258,6 +260,18 @@ class Woo_Contifico_Order_Report_Pdf {
             $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
             $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
         }
+
+        $pdf->SetFont( 'Arial', 'B', 11 );
+        $title = function_exists( '__' ) ? __( 'Movimientos de inventario', 'woo-contifico' ) : 'Movimientos de inventario';
+        $pdf->Cell( 0, 7, $this->encode_text( $title ), 0, 1, 'L' );
+        $pdf->SetFont( 'Arial', '', 10 );
+
+        foreach ( $this->movement_lines as $line ) {
+            $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
+            $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
+        }
+
+        $pdf->Ln( 2 );
     }
 
     private function encode_text( $text ) {
