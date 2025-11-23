@@ -1,22 +1,41 @@
 <?php
 
 class Woo_Contifico_Order_Report_Pdf {
-    private $brand_name    = '';
-    private $brand_details = array();
-    private $document_title = '';
+    var $brand_name;
+    var $brand_details;
+    var $document_title;
 
-    private $recipient_heading = '';
-    private $recipient_lines   = array();
+    var $recipient_heading;
+    var $recipient_lines;
 
-    private $order_summary = array();
-    private $product_rows  = array();
-    private $movement_lines = array();
-    private $transfer_lines = array();
+    var $order_summary;
+    var $product_rows;
+    var $movement_lines;
+    var $transfer_lines;
 
-    private $margin_left   = 20; // mm
-    private $top_margin    = 16; // mm
-    private $bottom_margin = 16; // mm
-    private $column_gap    = 12; // mm
+    var $margin_left;   // mm
+    var $top_margin;    // mm
+    var $bottom_margin; // mm
+    var $column_gap;    // mm
+
+    public function __construct() {
+        $this->brand_name      = '';
+        $this->brand_details   = array();
+        $this->document_title  = '';
+
+        $this->recipient_heading = '';
+        $this->recipient_lines   = array();
+
+        $this->order_summary  = array();
+        $this->product_rows   = array();
+        $this->movement_lines = array();
+        $this->transfer_lines = array();
+
+        $this->margin_left   = 20;
+        $this->top_margin    = 16;
+        $this->bottom_margin = 16;
+        $this->column_gap    = 12;
+    }
 
     public function set_branding( $brand_name, $brand_details = array() ) {
         $this->brand_name    = $brand_name;
@@ -75,11 +94,12 @@ class Woo_Contifico_Order_Report_Pdf {
             return;
         }
 
-        $fpdf_path = __DIR__ . '/../libraries/fpdf.php';
+        $fpdf_path = dirname( __FILE__ ) . '/../libraries/fpdf.php';
 
         if ( ! file_exists( $fpdf_path ) ) {
             throw new RuntimeException( 'No se encontró la librería FPDF en: ' . $fpdf_path );
         }
+    }
 
         require_once $fpdf_path;
 
@@ -99,6 +119,7 @@ class Woo_Contifico_Order_Report_Pdf {
             $pdf->SetFont( 'Arial', 'B', 16 );
             $pdf->Cell( $left_width, 8, $this->encode_text( $this->brand_name ), 0, 0, 'L' );
         }
+    }
 
         if ( ! empty( $this->brand_details ) ) {
             $pdf->SetFont( 'Arial', '', 10 );
@@ -115,7 +136,6 @@ class Woo_Contifico_Order_Report_Pdf {
         if ( '' === $this->document_title ) {
             return;
         }
-    }
 
         $pdf->SetFont( 'Arial', 'B', 20 );
         $pdf->Cell( 0, 12, $this->encode_text( $this->document_title ), 0, 1, 'L' );
@@ -237,6 +257,16 @@ class Woo_Contifico_Order_Report_Pdf {
         $pdf->SetFont( 'Arial', '', 10 );
 
         foreach ( $this->transfer_lines as $line ) {
+            $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
+            $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
+        }
+
+        $pdf->SetFont( 'Arial', 'B', 11 );
+        $title = function_exists( '__' ) ? __( 'Movimientos de inventario', 'woo-contifico' ) : 'Movimientos de inventario';
+        $pdf->Cell( 0, 7, $this->encode_text( $title ), 0, 1, 'L' );
+        $pdf->SetFont( 'Arial', '', 10 );
+
+        foreach ( $this->movement_lines as $line ) {
             $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
             $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
         }
