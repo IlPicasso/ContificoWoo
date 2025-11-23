@@ -86,14 +86,14 @@ class Woo_Contifico_Order_Report_Pdf {
         }
 
         $xref_offset = $this->length_in_bytes( $pdf );
-        $pdf        .= 'xref\n0 ' . $next_id . "\n";
+        $pdf        .= "xref\n0 $next_id\n";
         $pdf        .= "0000000000 65535 f \n";
 
         for ( $i = 1; $i < $next_id; $i++ ) {
             $pdf .= sprintf( "%010d 00000 n \n", $offsets[ $i ] );
         }
 
-        $pdf .= 'trailer\n<< /Size ' . $next_id . ' /Root ' . $catalog_id . " 0 R >>\nstartxref\n" . $xref_offset . "\n%%EOF";
+        $pdf .= "trailer\n<< /Size $next_id /Root $catalog_id 0 R >>\nstartxref\n$xref_offset\n%%EOF";
 
         return $pdf;
     }
