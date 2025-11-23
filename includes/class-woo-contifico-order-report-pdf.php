@@ -1,5 +1,14 @@
 <?php
 
+// Cargar FPDF antes de declarar la clase para evitar errores de sintaxis en PHP antiguos
+if ( ! class_exists( 'FPDF' ) ) {
+    $woo_contifico_fpdf_path = dirname( __FILE__ ) . '/../libraries/fpdf.php';
+
+    if ( file_exists( $woo_contifico_fpdf_path ) ) {
+        require_once $woo_contifico_fpdf_path;
+    }
+}
+
 class Woo_Contifico_Order_Report_Pdf {
     var $brand_name;
     var $brand_details;
@@ -72,7 +81,10 @@ class Woo_Contifico_Order_Report_Pdf {
     }
 
     public function render() {
-        $this->require_fpdf();
+        if ( ! class_exists( 'FPDF' ) ) {
+            $fpdf_path = dirname( __FILE__ ) . '/../libraries/fpdf.php';
+            throw new RuntimeException( 'La librería FPDF no se pudo cargar correctamente desde: ' . $fpdf_path );
+        }
 
         $pdf = new FPDF( 'P', 'mm', 'A4' );
         $pdf->SetMargins( $this->margin_left, $this->top_margin, $this->margin_left );
@@ -87,25 +99,6 @@ class Woo_Contifico_Order_Report_Pdf {
         $this->render_transfers_section( $pdf );
 
         return $pdf->Output( 'S' );
-    }
-
-    private function require_fpdf() {
-        if ( class_exists( 'FPDF' ) ) {
-            return;
-        }
-
-        $fpdf_path = dirname( __FILE__ ) . '/../libraries/fpdf.php';
-
-        if ( ! file_exists( $fpdf_path ) ) {
-            throw new RuntimeException( 'No se encontró la librería FPDF en: ' . $fpdf_path );
-        }
-    }
-
-        require_once $fpdf_path;
-
-        if ( ! class_exists( 'FPDF' ) ) {
-            throw new RuntimeException( 'La librería FPDF no se pudo cargar correctamente.' );
-        }
     }
 
     private function render_branding( $pdf ) {
@@ -128,6 +121,14 @@ class Woo_Contifico_Order_Report_Pdf {
                 $pdf->Cell( $right_width, 5, $this->encode_text( $line ), 0, 2, 'R' );
             }
         }
+    }
+
+    private function render_branding( $pdf ) {
+        $usable_width = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
+        $left_width   = $usable_width * 0.5;
+        $right_width  = $usable_width * 0.5;
+        $start_x      = $pdf->GetX();
+        $start_y      = $pdf->GetY();
 
         $pdf->Ln( 10 );
     }
