@@ -1,5 +1,14 @@
 <?php
 
+// Cargar FPDF antes de declarar la clase para evitar errores de sintaxis en PHP antiguos
+if ( ! class_exists( 'FPDF' ) ) {
+    $woo_contifico_fpdf_path = dirname( __FILE__ ) . '/../libraries/fpdf.php';
+
+    if ( file_exists( $woo_contifico_fpdf_path ) ) {
+        require_once $woo_contifico_fpdf_path;
+    }
+}
+
 class Woo_Contifico_Order_Report_Pdf {
     var $brand_name;
     var $brand_details;
@@ -260,6 +269,8 @@ class Woo_Contifico_Order_Report_Pdf {
             $pdf->Cell( 4, 5.5, chr( 149 ), 0, 0, 'L' );
             $pdf->MultiCell( 0, 5.5, $this->encode_text( $line ), 0, 'L' );
         }
+
+        $pdf->Ln( 2 );
     }
 
     function encode_text( $text ) {

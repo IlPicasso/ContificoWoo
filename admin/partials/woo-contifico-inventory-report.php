@@ -8,14 +8,14 @@ if ( ! class_exists( 'WP_List_Table' ) ) {
 }
 
 if ( ! class_exists( 'Woo_Contifico_Inventory_Movements_Table' ) ) {
-class Woo_Contifico_Inventory_Movements_Table extends WP_List_Table {
+        class Woo_Contifico_Inventory_Movements_Table extends WP_List_Table {
 
-/**
- * Raw rows to render in the list table.
- *
- * @var array[]
- */
-protected $prepared_items = [];
+                /**
+                 * Raw rows to render in the list table.
+                 *
+                 * @var array[]
+                 */
+                protected $prepared_items = [];
 
                 public function __construct() {
                         parent::__construct( [
@@ -25,17 +25,17 @@ protected $prepared_items = [];
                         ] );
                 }
 
-public function set_table_items( array $items ) {
-$this->prepared_items = $items;
-}
+                public function set_table_items( array $items ) {
+                        $this->prepared_items = $items;
+                }
 
-public function prepare_items() {
-$columns               = $this->get_columns();
-$hidden                = [];
-$sortable              = [];
-$this->_column_headers = [ $columns, $hidden, $sortable ];
-$this->items           = $this->prepared_items;
-}
+                public function prepare_items() {
+                        $columns               = $this->get_columns();
+                        $hidden                = [];
+                        $sortable              = [];
+                        $this->_column_headers = [ $columns, $hidden, $sortable ];
+                        $this->items           = $this->prepared_items;
+                }
 
                 public function get_columns() : array {
                         return [
@@ -75,6 +75,72 @@ $this->items           = $this->prepared_items;
         }
 }
 
+if ( ! class_exists( 'Woo_Contifico_Inventory_Categories_Table' ) ) {
+        class Woo_Contifico_Inventory_Categories_Table extends WP_List_Table {
+
+                /**
+                 * Raw rows to render in the list table.
+                 *
+                 * @var array[]
+                 */
+                protected $prepared_items = [];
+
+                public function __construct() {
+                        parent::__construct( [
+                                'plural'   => 'inventory-categories',
+                                'singular' => 'inventory-category',
+                                'ajax'     => false,
+                        ] );
+                }
+
+                public function set_table_items( array $items ) {
+                        $this->prepared_items = $items;
+                }
+
+                public function prepare_items() {
+                        $columns               = $this->get_columns();
+                        $hidden                = [];
+                        $sortable              = [];
+                        $this->_column_headers = [ $columns, $hidden, $sortable ];
+                        $this->items           = $this->prepared_items;
+                }
+
+                public function get_columns() : array {
+                        return [
+                                'category'      => __( 'Categoría', 'woo-contifico' ),
+                                'ingresos'      => __( 'Ingresos', 'woo-contifico' ),
+                                'egresos'       => __( 'Egresos', 'woo-contifico' ),
+                                'balance'       => __( 'Balance', 'woo-contifico' ),
+                                'last_movement' => __( 'Último movimiento', 'woo-contifico' ),
+                        ];
+                }
+
+                public function no_items() {
+                        esc_html_e( 'No se encontraron movimientos con los filtros seleccionados.', 'woo-contifico' );
+                }
+
+                protected function column_default( $item, $column_name ) {
+                        switch ( $column_name ) {
+                                case 'category':
+                                        return esc_html( $item['category'] ?? __( 'Sin categoría', 'woo-contifico' ) );
+                                case 'ingresos':
+                                case 'egresos':
+                                case 'balance':
+                                        return esc_html( number_format_i18n( (float) ( $item[ $column_name ] ?? 0 ) ) );
+                                case 'last_movement':
+                                        $timestamp = isset( $item['last_movement'] ) ? (int) $item['last_movement'] : 0;
+
+                                        if ( ! $timestamp ) {
+                                                return '—';
+                                        }
+
+                                        return esc_html( wp_date( get_option( 'date_format', 'Y-m-d' ) . ' ' . get_option( 'time_format', 'H:i' ), $timestamp ) );
+                                default:
+                                        return isset( $item[ $column_name ] ) ? esc_html( $item[ $column_name ] ) : '';
+                        }
+                }
+        }
+}
 $raw_filters = [
         'start_date' => isset( $_GET['start_date'] ) ? sanitize_text_field( wp_unslash( $_GET['start_date'] ) ) : '',
         'end_date'   => isset( $_GET['end_date'] ) ? sanitize_text_field( wp_unslash( $_GET['end_date'] ) ) : '',
@@ -92,6 +158,9 @@ $location_choices = $this->get_inventory_movement_location_choices();
 $table            = new Woo_Contifico_Inventory_Movements_Table();
 $table->set_table_items( $report['totals_by_product'] );
 $table->prepare_items();
+$category_table   = new Woo_Contifico_Inventory_Categories_Table();
+$category_table->set_table_items( $report['totals_by_category'] );
+$category_table->prepare_items();
 $summary_totals   = $report['totals'];
 $chart_attributes = [
         'periods'  => $report['chart_data']['periods'],
@@ -195,6 +264,12 @@ $json_url = esc_url( add_query_arg( array_merge( $export_base, [ 'format' => 'js
         </div>
 
         <div class="woo-contifico-inventory-report__table">
+                <h4><?php esc_html_e( 'Totales por categoría', 'woo-contifico' ); ?></h4>
+                <?php $category_table->display(); ?>
+        </div>
+
+        <div class="woo-contifico-inventory-report__table">
+                <h4><?php esc_html_e( 'Totales por producto', 'woo-contifico' ); ?></h4>
                 <?php $table->display(); ?>
         </div>
 
