@@ -1,5 +1,14 @@
 <?php
 
+// Cargar FPDF antes de declarar la clase para evitar errores de sintaxis en PHP antiguos
+if ( ! class_exists( 'FPDF' ) ) {
+    $woo_contifico_fpdf_path = dirname( __FILE__ ) . '/../libraries/fpdf.php';
+
+    if ( file_exists( $woo_contifico_fpdf_path ) ) {
+        require_once $woo_contifico_fpdf_path;
+    }
+}
+
 class Woo_Contifico_Order_Report_Pdf {
     var $brand_name;
     var $brand_details;
@@ -144,6 +153,7 @@ class Woo_Contifico_Order_Report_Pdf {
         if ( $logo_width > 0 ) {
             $text_offset += $logo_width + 6;
         }
+    }
 
         $text_width = $usable_width - ( $text_offset - $start_x );
 
