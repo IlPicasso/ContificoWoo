@@ -6682,28 +6682,7 @@ $order_note = sprintf(
                         $this->build_store_location_line(),
                 ) );
 
-                $logo_image = $this->get_pdf_logo_image();
-
-                if ( $logo_image ) {
-                        $pdf->add_image( $logo_image['data'], $logo_image['width'], $logo_image['height'], 180 );
-                }
-
-                $pdf->add_title( sprintf( __( 'Resumen del pedido #%s', $this->plugin_name ), $order_number ) );
-
-                $store_address_label = $this->get_store_address_label();
-                if ( '' !== $store_address_label ) {
-                        $pdf->add_text_line( $store_address_label );
-                        $pdf->add_spacer( 4 );
-                }
-
-                $pdf->add_text_line( sprintf( __( 'Fecha del pedido: %s', $this->plugin_name ), $date_label ) );
-                $pdf->add_text_line( sprintf( __( 'Estado: %s', $this->plugin_name ), $status_label ) );
-                $pdf->add_text_line( sprintf( __( 'Total del pedido: %s', $this->plugin_name ), $total_label ) );
-                $pdf->add_text_line( sprintf( __( 'Método de envío: %s', $this->plugin_name ), $shipping_label ) );
-                $pdf->add_text_line( sprintf( __( 'Modalidad de entrega: %s', $this->plugin_name ), $fulfillment_label ) );
-                $pdf->add_spacer( 10 );
-                $pdf->add_text_line( __( 'Gracias por su compra. A continuación encontrará un detalle claro de su pedido y los movimientos de inventario registrados.', $this->plugin_name ) );
-                $pdf->add_spacer( 12 );
+                $pdf->set_branding( $store_name, $store_lines );
 
                 $logo_path = $this->get_report_logo_path();
 
@@ -6719,7 +6698,6 @@ $order_note = sprintf(
                         $billing_name_parts = array_filter( [ $order->get_billing_first_name(), $order->get_billing_last_name() ] );
                         $shipping_name      = trim( implode( ' ', $billing_name_parts ) );
                 }
-                $pdf->add_spacer( 12 );
 
                 $shipping_name  = $shipping_name ?: __( 'Destinatario no definido', $this->plugin_name );
                 $recipient_lines = array_filter( [
@@ -6794,8 +6772,6 @@ $order_note = sprintf(
                         $pdf->add_product_row( __( 'No hay productos asociados al pedido.', $this->plugin_name ), '—' );
                 }
 
-                $pdf->add_spacer( 12 );
-                $pdf->add_subheading( __( 'Movimientos de inventario', $this->plugin_name ) );
                 $movements = $this->get_order_inventory_movements_for_order( $order->get_id() );
 
                 if ( empty( $movements ) ) {
@@ -6837,8 +6813,6 @@ $order_note = sprintf(
                 }
 
                 $transfer_summaries = $this->build_order_transfer_summaries( $movements );
-                $pdf->add_spacer( 12 );
-                $pdf->add_subheading( __( 'Transferencias registradas', $this->plugin_name ) );
 
                 if ( empty( $transfer_summaries ) ) {
                         $pdf->add_transfer_summary_line( __( 'Aún no se registran transferencias en Contífico para este pedido.', $this->plugin_name ) );
