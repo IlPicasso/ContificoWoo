@@ -165,6 +165,7 @@ class Woo_Contifico_Order_Report_Pdf {
             $pdf->SetXY( $text_offset, $brand_block_end_y + 1 );
 
             foreach ( $this->brand_details as $line ) {
+                $pdf->SetX( $text_offset );
                 $pdf->MultiCell( $text_width, 5, $this->encode_text( $line ), 0, 'L' );
             }
 
@@ -200,10 +201,14 @@ class Woo_Contifico_Order_Report_Pdf {
         $pdf->Cell( $column_width, 6, $this->encode_text( $this->recipient_heading ), 0, 1, 'L' );
         $pdf->SetFont( 'Arial', '', 10 );
 
+        $recipient_line_height = 6.5;
+
         foreach ( $this->recipient_lines as $line ) {
             $pdf->SetX( $start_x );
-            $pdf->MultiCell( $column_width, 5.5, $this->encode_text( $line ), 0, 'L' );
+            $pdf->MultiCell( $column_width, $recipient_line_height, $this->encode_text( $line ), 0, 'L' );
         }
+
+        $pdf->Ln( 1 );
 
         $max_y = max( $max_y, $pdf->GetY() );
 
@@ -232,7 +237,7 @@ class Woo_Contifico_Order_Report_Pdf {
                 $pdf->MultiCell( $value_width, $line_height, $this->encode_text( $value ), 0, 'L' );
                 $value_height = $pdf->GetY() - $row_start_y;
 
-                $row_height = max( $label_height, $value_height );
+                $row_height = max( $label_height, $value_height ) + 1;
                 $pdf->SetXY( $row_start_x, $row_start_y + $row_height );
             }
             $max_y = max( $max_y, $pdf->GetY() );
