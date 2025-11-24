@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.9 =
+* Se equilibran los anchos de las dos columnas del PDF para que el bloque de "Detalle del pedido" conserve su espacio y no se monte sobre la dirección.
+
 = 4.1.8 =
 * Se desplaza la columna de "Detalle del pedido" hacia la derecha y se estrecha levemente el ancho de ambos bloques para evitar que el número de pedido invada el espacio de la dirección.
 

@@ -190,11 +190,10 @@ class Woo_Contifico_Order_Report_Pdf {
     }
 
     function render_info_columns( $pdf ) {
-        $usable_width   = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
-        $column_width   = ( $usable_width - $this->column_gap ) / 2;
-        $recipient_width = $column_width - 2;
-        $summary_width   = $column_width - 2;
-        $summary_start_x = $pdf->GetX() + $column_width + $this->column_gap + 2;
+        $usable_width    = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
+        $recipient_width = ( $usable_width - $this->column_gap ) * 0.48;
+        $summary_width   = $usable_width - $recipient_width - $this->column_gap;
+        $summary_start_x = $pdf->GetX() + $recipient_width + $this->column_gap;
         $start_x        = $pdf->GetX();
         $start_y        = $pdf->GetY();
         $max_y          = $start_y;
