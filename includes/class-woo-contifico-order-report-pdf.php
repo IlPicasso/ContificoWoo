@@ -1,5 +1,14 @@
 <?php
 
+// Cargar FPDF antes de declarar la clase para evitar errores de sintaxis en PHP antiguos
+if ( ! class_exists( 'FPDF' ) ) {
+    $woo_contifico_fpdf_path = dirname( __FILE__ ) . '/../libraries/fpdf.php';
+
+    if ( file_exists( $woo_contifico_fpdf_path ) ) {
+        require_once $woo_contifico_fpdf_path;
+    }
+}
+
 class Woo_Contifico_Order_Report_Pdf {
     var $brand_name;
     var $brand_details;
@@ -144,6 +153,29 @@ class Woo_Contifico_Order_Report_Pdf {
         if ( $logo_width > 0 ) {
             $text_offset += $logo_width + 6;
         }
+    }
+
+    function render_branding( $pdf ) {
+        $usable_width = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
+        $start_x      = $pdf->GetX();
+        $start_y      = $pdf->GetY();
+
+        $logo_width  = 0;
+        $logo_height = 0;
+
+        if ( '' !== $this->brand_logo_path && file_exists( $this->brand_logo_path ) ) {
+            $logo_max_height = 18;
+            $logo_max_width  = 48;
+            $logo_size       = @getimagesize( $this->brand_logo_path );
+
+            if ( is_array( $logo_size ) && isset( $logo_size[0], $logo_size[1] ) && (int) $logo_size[0] > 0 && (int) $logo_size[1] > 0 ) {
+                $ratio       = min( $logo_max_width / $logo_size[0], $logo_max_height / $logo_size[1] );
+                $logo_width  = $logo_size[0] * $ratio;
+                $logo_height = $logo_size[1] * $ratio;
+            } else {
+                $logo_width  = $logo_max_width;
+                $logo_height = $logo_max_height;
+            }
 
         $text_width = $usable_width - ( $text_offset - $start_x );
 
