@@ -2628,39 +2628,52 @@ return $value;
          */
         private function get_report_logo_path() : string {
                 $plugin_dir = plugin_dir_path( dirname( __FILE__ ) );
-                $logo_path  = $plugin_dir . 'assets/contifico-logo.png';
 
-                if ( file_exists( $logo_path ) ) {
-                        return $logo_path;
+                $preferred_logo = $plugin_dir . 'assets/adams-logo.png';
+                $fallback_logo  = $plugin_dir . 'assets/contifico-logo.png';
+
+                foreach ( [ $preferred_logo, $fallback_logo ] as $candidate ) {
+                        if ( file_exists( $candidate ) ) {
+                                return $candidate;
+                        }
                 }
 
-                $embedded_logo = $plugin_dir . 'assets/contifico-logo.base64.txt';
+                $embedded_candidates = array(
+                        $plugin_dir . 'assets/adams-logo.base64.txt',
+                        $plugin_dir . 'assets/contifico-logo.base64.txt',
+                );
 
-                if ( ! file_exists( $embedded_logo ) ) {
-                        return '';
+                foreach ( $embedded_candidates as $embedded_logo ) {
+                        if ( ! file_exists( $embedded_logo ) ) {
+                                continue;
+                        }
+
+                        $encoded = trim( (string) file_get_contents( $embedded_logo ) );
+
+                        if ( '' === $encoded ) {
+                                continue;
+                        }
+
+                        $binary = base64_decode( $encoded, true );
+
+                        if ( false === $binary ) {
+                                continue;
+                        }
+
+                        $temp_path = $this->get_temp_logo_path();
+
+                        if ( '' === $temp_path ) {
+                                continue;
+                        }
+
+                        $result = @file_put_contents( $temp_path, $binary );
+
+                        if ( false !== $result ) {
+                                return $temp_path;
+                        }
                 }
 
-                $encoded = trim( (string) file_get_contents( $embedded_logo ) );
-
-                if ( '' === $encoded ) {
-                        return '';
-                }
-
-                $binary = base64_decode( $encoded, true );
-
-                if ( false === $binary ) {
-                        return '';
-                }
-
-                $temp_path = $this->get_temp_logo_path();
-
-                if ( '' === $temp_path ) {
-                        return '';
-                }
-
-                $result = @file_put_contents( $temp_path, $binary );
-
-                return false === $result ? '' : $temp_path;
+                return '';
         }
 
         /**
@@ -2697,7 +2710,7 @@ return $value;
                         return '';
                 }
 
-                return rtrim( $temp_dir, '/\\' ) . '/contifico-logo.png';
+                return rtrim( $temp_dir, '/\\' ) . '/adams-logo.png';
         }
 
         private function build_shipping_city_line( WC_Order $order ) : string {
@@ -2722,17 +2735,17 @@ return $value;
 
         private function build_item_attribute_lines( WC_Order_Item_Product $item ) : array {
                 $lines = [];
-                $meta  = $item->get_formatted_meta_data( '', true );
+                $meta  = $item->get_formatted_meta_data( '', false );
 
                 foreach ( $meta as $meta_item ) {
                         $label = isset( $meta_item->display_key ) ? wp_strip_all_tags( (string) $meta_item->display_key ) : '';
                         $value = isset( $meta_item->display_value ) ? wp_strip_all_tags( (string) $meta_item->display_value ) : '';
 
-                        if ( '' === $value ) {
+                        if ( '' === $value || '' === $label || '_' === substr( $label, 0, 1 ) ) {
                                 continue;
                         }
 
-                        $lines[] = '' !== $label ? sprintf( '%s: %s', $label, $value ) : $value;
+                        $lines[] = sprintf( '%s: %s', $label, $value );
                 }
 
                 return $lines;
@@ -6579,7 +6592,7 @@ $order_note = sprintf(
                 if ( '' !== $logo_path ) {
                         $pdf->set_brand_logo_path( $logo_path );
                 }
-                $pdf->set_document_title( __( 'ALBARÁN', $this->plugin_name ) );
+                $pdf->set_document_title( __( 'Resumen del pedido', $this->plugin_name ) );
 
                 $shipping_name_parts = array_filter( [ $order->get_shipping_first_name(), $order->get_shipping_last_name() ] );
                 $shipping_name       = trim( implode( ' ', $shipping_name_parts ) );
@@ -6687,7 +6700,7 @@ $order_note = sprintf(
 
                                 $pdf->add_inventory_movement_line(
                                         sprintf(
-                                                __( '%1$s · %2$s de %3$s uds · Producto: %4$s (SKU %5$s) · De: %6$s · Hacia: %7$s · Ref: %8$s%9$s', $this->plugin_name ),
+                                                __( '%1$s — %2$s de %3$s uds de %4$s (SKU %5$s). De: %6$s · Hacia: %7$s%8$s · Ref: %9$s', $this->plugin_name ),
                                                 $movement_date,
                                                 $event_label,
                                                 $quantity,
@@ -6695,8 +6708,8 @@ $order_note = sprintf(
                                                 $sku_label,
                                                 $from_label ?: __( 'Bodega no especificada', $this->plugin_name ),
                                                 $to_label ?: __( 'Bodega no especificada', $this->plugin_name ),
-                                                $reference,
-                                                $location_fragment
+                                                $location_fragment,
+                                                $reference
                                         )
                                 );
                         }
@@ -6713,7 +6726,7 @@ $order_note = sprintf(
 
                                 $pdf->add_transfer_summary_line(
                                         sprintf(
-                                                __( 'De: %1$s · A: %2$s · Ref: %3$s · Productos: %4$s', $this->plugin_name ),
+                                                __( 'De %1$s a %2$s · Ref: %3$s · Productos: %4$s', $this->plugin_name ),
                                                 $from_label ?: __( 'Bodega no especificada', $this->plugin_name ),
                                                 $to_label ?: __( 'Bodega no especificada', $this->plugin_name ),
                                                 $summary['reference'],
