@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.13 =
+* Los PDFs de movimientos y transferencias priorizan el nombre mapeado de MultiLoca para las bodegas y muestran entre paréntesis el código de bodega en lugar del ID interno.
+
 = 4.1.12 =
 * Se fija la columna de "Detalle del pedido" en el margen derecho después del título para que no retome el margen izquierdo tras imprimir el encabezado.
 

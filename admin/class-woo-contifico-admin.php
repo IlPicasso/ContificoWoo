@@ -2911,11 +2911,9 @@ return $value;
                         }
                 }
 
-                if ( '' === $code && isset( $warehouse['id'] ) ) {
-                        $code = (string) $warehouse['id'];
+                if ( '' === $label ) {
+                        $label = '' !== $code ? $code : $id;
                 }
-
-                $label = '' !== $label ? $label : $code;
 
                 if ( '' === $label ) {
                         return '';
