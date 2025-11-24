@@ -2629,6 +2629,12 @@ return $value;
         private function get_report_logo_path() : string {
                 $plugin_dir = plugin_dir_path( dirname( __FILE__ ) );
 
+                $inline_logo = $this->get_pdf_logo_image();
+
+                if ( is_array( $inline_logo ) && ! empty( $inline_logo['data'] ) ) {
+                        return '@' . $inline_logo['data'];
+                }
+
                 $remote_logo_url = 'https://www.adams.com.ec/wp-content/uploads/2020/11/adam-.png';
 
                 $remote_path = $this->download_remote_logo( $remote_logo_url );
