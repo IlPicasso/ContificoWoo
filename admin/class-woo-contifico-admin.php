@@ -3046,6 +3046,7 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                         'start_date' => '',
                         'end_date'   => '',
                         'product_id' => 0,
+                        'category_id' => 0,
                         'sku'        => '',
                         'period'     => 'day',
                         'scope'      => 'all',
@@ -3055,6 +3056,7 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 $filters['start_date'] = $this->sanitize_inventory_report_date( $filters['start_date'] );
                 $filters['end_date']   = $this->sanitize_inventory_report_date( $filters['end_date'] );
                 $filters['product_id'] = absint( $filters['product_id'] );
+                $filters['category_id'] = absint( $filters['category_id'] );
                 $filters['sku']        = strtoupper( sanitize_text_field( (string) $filters['sku'] ) );
                 $filters['period']     = in_array( $filters['period'], [ 'day', 'week', 'month' ], true ) ? $filters['period'] : 'day';
                 $filters['scope']      = in_array( $filters['scope'], [ 'all', 'global', 'product' ], true ) ? $filters['scope'] : 'all';
@@ -3064,6 +3066,80 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 $filters['end_timestamp']   = '' !== $filters['end_date'] ? strtotime( $filters['end_date'] . ' 23:59:59' ) : null;
 
                 return $filters;
+        }
+
+        /**
+         * Retrieve the product categories for a WooCommerce product id.
+         *
+         * @since 4.3.1
+         */
+        private function get_inventory_movement_product_categories( int $product_id ) : array {
+                static $cache = [];
+
+                if ( isset( $cache[ $product_id ] ) ) {
+                        return $cache[ $product_id ];
+                }
+
+                if ( $product_id <= 0 ) {
+                        return [];
+                }
+
+                $terms = get_the_terms( $product_id, 'product_cat' );
+
+                if ( is_wp_error( $terms ) || empty( $terms ) ) {
+                        $cache[ $product_id ] = [];
+
+                        return $cache[ $product_id ];
+                }
+
+                $cache[ $product_id ] = array_map(
+                        static function ( $term ) {
+                                return (string) $term->name;
+                        },
+                        $terms
+                );
+
+                return $cache[ $product_id ];
+        }
+
+        /**
+         * Retrieve the product category IDs (including ancestors) for a WooCommerce product id.
+         *
+         * @since 4.4.1
+         */
+        private function get_inventory_movement_product_category_ids( int $product_id ) : array {
+                static $cache = [];
+
+                if ( isset( $cache[ $product_id ] ) ) {
+                        return $cache[ $product_id ];
+                }
+
+                if ( $product_id <= 0 ) {
+                        return [];
+                }
+
+                $terms = get_the_terms( $product_id, 'product_cat' );
+
+                if ( is_wp_error( $terms ) || empty( $terms ) ) {
+                        $cache[ $product_id ] = [];
+
+                        return $cache[ $product_id ];
+                }
+
+                $ids = [];
+
+                foreach ( $terms as $term ) {
+                        $term_id = (int) $term->term_id;
+                        $ids[]   = $term_id;
+
+                        foreach ( get_ancestors( $term_id, 'product_cat' ) as $ancestor_id ) {
+                                $ids[] = (int) $ancestor_id;
+                        }
+                }
+
+                $cache[ $product_id ] = array_values( array_unique( $ids ) );
+
+                return $cache[ $product_id ];
         }
 
 	/**
@@ -3099,6 +3175,7 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 $totals           = [ 'ingresos' => 0.0, 'egresos' => 0.0, 'balance' => 0.0 ];
                 $period_totals    = [];
                 $product_totals   = [];
+                $category_totals  = [];
 
                 foreach ( $entries as $entry ) {
                         $timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
@@ -3117,6 +3194,14 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                         if ( '' !== $filters['sku'] && strtoupper( (string) $entry['sku'] ) !== $filters['sku'] ) {
                                 continue;
+                        }
+
+                        if ( $filters['category_id'] ) {
+                                $product_categories = $this->get_inventory_movement_product_category_ids( (int) $entry['wc_product_id'] );
+
+                                if ( ! in_array( $filters['category_id'], $product_categories, true ) ) {
+                                        continue;
+                                }
                         }
 
                         if ( 'all' !== $filters['scope'] && $filters['scope'] !== $entry['sync_type'] ) {
@@ -3181,6 +3266,33 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                         $product_totals[ $product_key ]['balance']       = $product_totals[ $product_key ]['ingresos'] - $product_totals[ $product_key ]['egresos'];
                         $product_totals[ $product_key ]['last_movement'] = max( $product_totals[ $product_key ]['last_movement'], $timestamp );
+
+                        $categories = $this->get_inventory_movement_product_categories( (int) $entry['wc_product_id'] );
+
+                        if ( empty( $categories ) ) {
+                                $categories = [ __( 'Sin categoría', 'woo-contifico' ) ];
+                        }
+
+                        foreach ( $categories as $category_label ) {
+                                if ( ! isset( $category_totals[ $category_label ] ) ) {
+                                        $category_totals[ $category_label ] = [
+                                                'category'      => $category_label,
+                                                'ingresos'      => 0.0,
+                                                'egresos'       => 0.0,
+                                                'balance'       => 0.0,
+                                                'last_movement' => $timestamp,
+                                        ];
+                                }
+
+                                if ( 'ingreso' === $event ) {
+                                        $category_totals[ $category_label ]['ingresos'] += $quantity;
+                                } else {
+                                        $category_totals[ $category_label ]['egresos']  += $quantity;
+                                }
+
+                                $category_totals[ $category_label ]['balance']       = $category_totals[ $category_label ]['ingresos'] - $category_totals[ $category_label ]['egresos'];
+                                $category_totals[ $category_label ]['last_movement'] = max( $category_totals[ $category_label ]['last_movement'], $timestamp );
+                        }
                 }
 
                 usort( $filtered_entries, static function ( $a, $b ) {
@@ -3194,6 +3306,10 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 } );
 
                 usort( $product_totals, static function ( $a, $b ) {
+                        return ( $b['last_movement'] ?? 0 ) <=> ( $a['last_movement'] ?? 0 );
+                } );
+
+                usort( $category_totals, static function ( $a, $b ) {
                         return ( $b['last_movement'] ?? 0 ) <=> ( $a['last_movement'] ?? 0 );
                 } );
 
@@ -3214,7 +3330,8 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                         'entries'           => $filtered_entries,
                         'totals'            => $totals,
                         'totals_by_period'  => $period_totals,
-                        'totals_by_product' => $product_totals,
+                        'totals_by_product'  => $product_totals,
+                        'totals_by_category' => $category_totals,
                         'chart_data'        => [
                                 'periods'  => $chart_periods,
                                 'products' => $chart_products,
@@ -3269,6 +3386,7 @@ $filters = [
 'start_date' => isset( $_GET['start_date'] ) ? sanitize_text_field( wp_unslash( $_GET['start_date'] ) ) : '',
 'end_date'   => isset( $_GET['end_date'] ) ? sanitize_text_field( wp_unslash( $_GET['end_date'] ) ) : '',
 'product_id' => isset( $_GET['product_id'] ) ? absint( wp_unslash( $_GET['product_id'] ) ) : 0,
+'category_id' => isset( $_GET['category_id'] ) ? absint( wp_unslash( $_GET['category_id'] ) ) : 0,
 'sku'        => isset( $_GET['sku'] ) ? sanitize_text_field( wp_unslash( $_GET['sku'] ) ) : '',
 'period'     => isset( $_GET['period'] ) ? sanitize_key( wp_unslash( $_GET['period'] ) ) : 'day',
 'scope'      => isset( $_GET['scope'] ) ? sanitize_key( wp_unslash( $_GET['scope'] ) ) : 'all',
@@ -3278,13 +3396,14 @@ $filters = [
 	$report = $this->get_inventory_movements_report( $filters );
 
 	if ( 'json' === $format ) {
-	wp_send_json( [
-	'filters'           => $report['filters'],
-	'totals'            => $report['totals'],
-	'entries'           => $report['entries'],
-	'totals_by_product' => $report['totals_by_product'],
-	] );
-	}
+        wp_send_json( [
+        'filters'           => $report['filters'],
+        'totals'            => $report['totals'],
+        'entries'           => $report['entries'],
+        'totals_by_product' => $report['totals_by_product'],
+        'totals_by_category' => $report['totals_by_category'],
+        ] );
+        }
 
 	nocache_headers();
 	$filename = sprintf( 'woo-contifico-inventory-movements-%s.csv', gmdate( 'Ymd-His' ) );
@@ -3348,11 +3467,11 @@ $filters = [
 	 *
 	 * @since 4.3.1
 	 */
-	private function resolve_inventory_movement_period_key( int $timestamp, string $period ) : array {
-	switch ( $period ) {
-	case 'week':
-	$key   = wp_date( 'o-\WW', $timestamp );
-	$label = sprintf(
+        private function resolve_inventory_movement_period_key( int $timestamp, string $period ) : array {
+        switch ( $period ) {
+        case 'week':
+        $key   = wp_date( 'o-\WW', $timestamp );
+        $label = sprintf(
 	/* translators: 1: ISO week number. 2: year. */
 	__( 'Semana %1$s · %2$s', 'woo-contifico' ),
 	wp_date( 'W', $timestamp ),
@@ -3371,7 +3490,7 @@ $filters = [
 	}
 
 	return [ $key, $label ];
-	}
+        }
 
         /**
          * Build a list of product choices discovered in the movement log.
@@ -3411,6 +3530,51 @@ $filters = [
 
                 uasort( $choices, static function ( $a, $b ) {
                         return strcmp( $a['label'], $b['label'] );
+                } );
+
+                return array_values( $choices );
+        }
+
+        /**
+         * Build a list of category choices with hierarchical labels.
+         *
+         * @since 4.4.1
+         */
+        private function get_inventory_movement_category_choices() : array {
+                $choices = [];
+
+                foreach ( get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => false ] ) as $term ) {
+                        if ( is_wp_error( $term ) ) {
+                                continue;
+                        }
+
+                        $ancestors = array_reverse( get_ancestors( $term->term_id, 'product_cat' ) );
+                        $label     = [];
+
+                        foreach ( $ancestors as $ancestor_id ) {
+                                $ancestor = get_term( $ancestor_id, 'product_cat' );
+
+                                if ( is_wp_error( $ancestor ) || ! $ancestor ) {
+                                        continue;
+                                }
+
+                                $label[] = $ancestor->name;
+                        }
+
+                        $label[] = $term->name;
+
+                        $choices[ $term->term_id ] = [
+                                'id'    => (int) $term->term_id,
+                                'label' => implode( ' › ', $label ),
+                        ];
+                }
+
+                if ( empty( $choices ) ) {
+                        return [];
+                }
+
+                uasort( $choices, static function ( $a, $b ) {
+                        return strcasecmp( $a['label'], $b['label'] );
                 } );
 
                 return array_values( $choices );
@@ -6670,6 +6834,131 @@ $order_note = sprintf(
                 }
 
                 return $pdf->render();
+        }
+
+        /**
+         * Resolve the logo image to embed in the PDF, prioritizing the WooCommerce email header image.
+         *
+         * @since 4.4.2
+         */
+        private function get_pdf_logo_image() : ?array {
+                $logo_url = (string) get_option( 'woocommerce_email_header_image', '' );
+
+                if ( '' === $logo_url ) {
+                        $custom_logo_id = get_theme_mod( 'custom_logo' );
+                        if ( $custom_logo_id ) {
+                                $custom_logo = wp_get_attachment_image_src( $custom_logo_id, 'full' );
+                                if ( $custom_logo && ! empty( $custom_logo[0] ) ) {
+                                        $logo_url = $custom_logo[0];
+                                }
+                        }
+                }
+
+                if ( '' === $logo_url ) {
+                        return null;
+                }
+
+                $image_bytes = $this->get_image_bytes( $logo_url );
+
+                if ( '' === $image_bytes ) {
+                        return null;
+                }
+
+                $image_size = @getimagesizefromstring( $image_bytes );
+
+                if ( ! $image_size || empty( $image_size[0] ) || empty( $image_size[1] ) ) {
+                        return null;
+                }
+
+                $mime = isset( $image_size['mime'] ) ? (string) $image_size['mime'] : '';
+
+                if ( 'image/jpeg' !== $mime ) {
+                        if ( ! function_exists( 'imagecreatefromstring' ) || ! function_exists( 'imagejpeg' ) ) {
+                                return null;
+                        }
+
+                        $image_resource = @imagecreatefromstring( $image_bytes );
+
+                        if ( false === $image_resource ) {
+                                return null;
+                        }
+
+                        ob_start();
+                        imagejpeg( $image_resource, null, 90 );
+                        $image_bytes = (string) ob_get_clean();
+                        imagedestroy( $image_resource );
+
+                        $image_size = @getimagesizefromstring( $image_bytes );
+
+                        if ( ! $image_size || empty( $image_size[0] ) || empty( $image_size[1] ) ) {
+                                return null;
+                        }
+                }
+
+                return [
+                        'data'   => $image_bytes,
+                        'width'  => (int) $image_size[0],
+                        'height' => (int) $image_size[1],
+                ];
+        }
+
+        /**
+         * Retrieve the store address formatted for the PDF header.
+         *
+         * @since 4.4.2
+         */
+        private function get_store_address_label() : string {
+                $store_name = get_bloginfo( 'name' );
+                $address_1  = (string) get_option( 'woocommerce_store_address', '' );
+                $address_2  = (string) get_option( 'woocommerce_store_address_2', '' );
+                $city       = (string) get_option( 'woocommerce_store_city', '' );
+                $postcode   = (string) get_option( 'woocommerce_store_postcode', '' );
+                $country    = (string) get_option( 'woocommerce_default_country', '' );
+
+                $country_label = '';
+                if ( ! empty( $country ) && function_exists( 'wc' ) && wc()->countries ) {
+                        $countries = wc()->countries->countries;
+                        if ( isset( $countries[ $country ] ) ) {
+                                $country_label = $countries[ $country ];
+                        }
+                }
+
+                $location_parts = array_filter( [ $city, $postcode, $country_label ] );
+                $address_parts  = array_filter( [ $address_1, $address_2, implode( ', ', $location_parts ) ] );
+                $label_parts    = array_filter( [ $store_name, implode( ' · ', $address_parts ) ] );
+
+                return trim( implode( ' — ', $label_parts ) );
+        }
+
+        /**
+         * Safely download an image for PDF embedding.
+         *
+         * @since 4.4.2
+         */
+        private function get_image_bytes( string $url ) : string {
+                $response = wp_remote_get( $url, [ 'timeout' => 10 ] );
+
+                if ( is_wp_error( $response ) ) {
+                        return '';
+                }
+
+                $status_code = wp_remote_retrieve_response_code( $response );
+
+                if ( 200 !== $status_code ) {
+                        return '';
+                }
+
+                $body = wp_remote_retrieve_body( $response );
+
+                if ( ! is_string( $body ) ) {
+                        return '';
+                }
+
+                if ( strlen( $body ) > 2 * 1024 * 1024 ) {
+                        return '';
+                }
+
+                return $body;
         }
 
         /**
