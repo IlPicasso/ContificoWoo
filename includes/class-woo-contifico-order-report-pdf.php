@@ -165,6 +165,7 @@ class Woo_Contifico_Order_Report_Pdf {
             $pdf->SetXY( $text_offset, $brand_block_end_y + 1 );
 
             foreach ( $this->brand_details as $line ) {
+                $pdf->SetX( $text_offset );
                 $pdf->MultiCell( $text_width, 5, $this->encode_text( $line ), 0, 'L' );
             }
 
