@@ -2638,12 +2638,9 @@ return $value;
                 }
 
                 $preferred_logo = $plugin_dir . 'assets/adams-logo.png';
-                $fallback_logo  = $plugin_dir . 'assets/contifico-logo.png';
 
-                foreach ( [ $preferred_logo, $fallback_logo ] as $candidate ) {
-                        if ( file_exists( $candidate ) ) {
-                                return $candidate;
-                        }
+                if ( file_exists( $preferred_logo ) ) {
+                        return $preferred_logo;
                 }
 
                 $embedded_candidates = array(
@@ -2681,6 +2678,12 @@ return $value;
                         }
                 }
 
+                $fallback_logo = $plugin_dir . 'assets/contifico-logo.png';
+
+                if ( file_exists( $fallback_logo ) ) {
+                        return $fallback_logo;
+                }
+
                 return '';
         }
 
@@ -2700,7 +2703,7 @@ return $value;
                         return '';
                 }
 
-                if ( file_exists( $temp_path ) && filesize( $temp_path ) > 0 ) {
+                if ( file_exists( $temp_path ) && $this->is_valid_image_file( $temp_path ) ) {
                         return $temp_path;
                 }
 
@@ -2713,17 +2716,45 @@ return $value;
                 $code = (int) wp_remote_retrieve_response_code( $response );
                 $body = (string) wp_remote_retrieve_body( $response );
 
-                if ( 200 !== $code || '' === $body ) {
+                if ( 200 !== $code || '' === $body || ! $this->is_valid_image_bytes( $body ) ) {
                         return '';
                 }
 
                 $written = @file_put_contents( $temp_path, $body );
 
-                if ( false === $written ) {
+                if ( false === $written || ! $this->is_valid_image_file( $temp_path ) ) {
                         return '';
                 }
 
                 return $temp_path;
+        }
+
+        /**
+         * Confirm that a stored image can be read by getimagesize.
+         *
+         * @since 4.4.3
+         */
+        private function is_valid_image_file( string $path ) : bool {
+                if ( '' === $path || ! file_exists( $path ) || ! is_readable( $path ) ) {
+                        return false;
+                }
+
+                return $this->is_valid_image_bytes( (string) file_get_contents( $path ) );
+        }
+
+        /**
+         * Confirm that a raw string represents a valid image.
+         *
+         * @since 4.4.3
+         */
+        private function is_valid_image_bytes( string $content ) : bool {
+                if ( '' === $content ) {
+                        return false;
+                }
+
+                $image_info = @getimagesizefromstring( $content );
+
+                return is_array( $image_info ) && ! empty( $image_info[0] ) && ! empty( $image_info[1] );
         }
 
         /**
