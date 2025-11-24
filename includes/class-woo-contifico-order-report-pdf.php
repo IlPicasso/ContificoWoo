@@ -193,10 +193,12 @@ class Woo_Contifico_Order_Report_Pdf {
         $usable_width    = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
         $recipient_width = ( $usable_width - $this->column_gap ) * 0.48;
         $summary_width   = $usable_width - $recipient_width - $this->column_gap;
-        $summary_start_x = $pdf->GetX() + $recipient_width + $this->column_gap;
-        $start_x        = $pdf->GetX();
-        $start_y        = $pdf->GetY();
-        $max_y          = $start_y;
+        $start_x         = $this->margin_left;
+        $summary_start_x = $start_x + $recipient_width + $this->column_gap;
+        $start_y         = $pdf->GetY();
+        $max_y           = $start_y;
+
+        $pdf->SetX( $start_x );
 
         // Recipient / address block.
         $pdf->SetFont( 'Arial', 'B', 11 );

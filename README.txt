@@ -83,8 +83,11 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.11 =
+* Se alinea el bloque del cliente con el margen izquierdo fijo en el PDF para evitar que se solape con el bloque de "Detalle del pedido".
+
 = 4.1.10 =
-* Se dividen automáticamente las líneas largas del bloque del cliente en el PDF para evitar que correos o teléfonos sin espacios se sobrepongan al bloque de detalles de envío.
+* Se dividen automáticamente las líneas largas del bloque del cliente en el PDF para evitar que correos o teléfonos sin espacios se sobrepongan al bloque de "Detalle del pedido".
 
 = 4.1.9 =
 * Se equilibran los anchos de las dos columnas del PDF para que el bloque de "Detalle del pedido" conserve su espacio y no se monte sobre la dirección.
