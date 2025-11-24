@@ -2629,6 +2629,14 @@ return $value;
         private function get_report_logo_path() : string {
                 $plugin_dir = plugin_dir_path( dirname( __FILE__ ) );
 
+                $remote_logo_url = 'https://www.adams.com.ec/wp-content/uploads/2020/11/adam-.png';
+
+                $remote_path = $this->download_remote_logo( $remote_logo_url );
+
+                if ( '' !== $remote_path && file_exists( $remote_path ) ) {
+                        return $remote_path;
+                }
+
                 $preferred_logo = $plugin_dir . 'assets/adams-logo.png';
                 $fallback_logo  = $plugin_dir . 'assets/contifico-logo.png';
 
@@ -2674,6 +2682,48 @@ return $value;
                 }
 
                 return '';
+        }
+
+        /**
+         * Download a remote logo and persist it to a writable location.
+         *
+         * @since 4.4.0
+         */
+        private function download_remote_logo( $logo_url ) : string {
+                if ( '' === (string) $logo_url ) {
+                        return '';
+                }
+
+                $temp_path = $this->get_temp_logo_path();
+
+                if ( '' === $temp_path ) {
+                        return '';
+                }
+
+                if ( file_exists( $temp_path ) && filesize( $temp_path ) > 0 ) {
+                        return $temp_path;
+                }
+
+                $response = wp_remote_get( $logo_url, array( 'timeout' => 15 ) );
+
+                if ( is_wp_error( $response ) ) {
+                        return '';
+                }
+
+                $code = (int) wp_remote_retrieve_response_code( $response );
+                $body = (string) wp_remote_retrieve_body( $response );
+
+                if ( 200 !== $code || '' === $body ) {
+                        return '';
+                }
+
+                $written = @file_put_contents( $temp_path, $body );
+
+                if ( false === $written ) {
+                        return '';
+                }
+
+                return $temp_path;
         }
 
         /**

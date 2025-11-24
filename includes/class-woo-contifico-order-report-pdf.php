@@ -129,6 +129,37 @@ class Woo_Contifico_Order_Report_Pdf {
         $start_x      = $pdf->GetX();
         $start_y      = $pdf->GetY();
 
+        $logo_width = 0;
+        $logo_height = 0;
+
+        if ( '' !== $this->brand_logo_path && file_exists( $this->brand_logo_path ) ) {
+            $logo_max_height = 18;
+            $logo_size       = @getimagesize( $this->brand_logo_path );
+
+            if ( is_array( $logo_size ) && isset( $logo_size[0], $logo_size[1] ) && (int) $logo_size[1] > 0 ) {
+                $ratio       = $logo_max_height / $logo_size[1];
+                $logo_width  = $logo_size[0] * $ratio;
+                $logo_height = $logo_max_height;
+            } else {
+                $logo_width  = 42;
+                $logo_height = $logo_max_height;
+            }
+
+            $pdf->Image( $this->brand_logo_path, $start_x, $start_y, $logo_width, $logo_height );
+        }
+
+        $text_offset = $start_x;
+
+        if ( $logo_width > 0 ) {
+            $text_offset += $logo_width + 6;
+        }
+    }
+
+    function render_branding( $pdf ) {
+        $usable_width = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
+        $start_x      = $pdf->GetX();
+        $start_y      = $pdf->GetY();
+
         $logo_width  = 0;
         $logo_height = 0;
 
@@ -145,15 +176,6 @@ class Woo_Contifico_Order_Report_Pdf {
                 $logo_width  = $logo_max_width;
                 $logo_height = $logo_max_height;
             }
-
-            $pdf->Image( $this->brand_logo_path, $start_x, $start_y, $logo_width, $logo_height );
-        }
-
-        $text_offset = $start_x;
-
-        if ( $logo_width > 0 ) {
-            $text_offset += $logo_width + 6;
-        }
 
         $text_width = $usable_width - ( $text_offset - $start_x );
 
@@ -181,7 +203,7 @@ class Woo_Contifico_Order_Report_Pdf {
             $brand_block_end_y = max( $brand_block_end_y, $start_y + $logo_height );
         }
 
-        $pdf->SetY( $brand_block_end_y + 12 );
+        $pdf->SetY( $brand_block_end_y + 10 );
     }
 
     function render_title( $pdf ) {
