@@ -83,6 +83,22 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.9 =
+* Se equilibran los anchos de las dos columnas del PDF para que el bloque de "Detalle del pedido" conserve su espacio y no se monte sobre la dirección.
+
+= 4.1.8 =
+* Se desplaza la columna de "Detalle del pedido" hacia la derecha y se estrecha levemente el ancho de ambos bloques para evitar que el número de pedido invada el espacio de la dirección.
+
+= 4.1.7 =
+* Se aumenta el interlineado y se agrega separación extra en el bloque de datos del cliente en el PDF para que no se superpongan con otros textos.
+
+= 4.1.6 =
+* Se agrega espacio extra entre las líneas del bloque "Detalle del pedido" del PDF para evitar que se superpongan.
+* Los movimientos y transferencias muestran los nombres mapeados en MultiLoca para las bodegas en lugar de solo el código.
+
+= 4.1.5 =
+* Se corrige la alineación del encabezado en el PDF para evitar que las líneas de dirección se sobrepongan con el área del logo.
+
 = 4.1.4 =
 * El refresco de stock en tiempo real se activa en páginas de producto también cuando las variaciones administran su propio inventario.
 * Se excluye el script de actualización de stock de la optimización de carga diferida de WP Rocket para mantener las peticiones AJAX en caché activa.
