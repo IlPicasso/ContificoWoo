@@ -6,6 +6,7 @@ class Woo_Contifico_Order_Report_Pdf {
     private $current_y = 0;
     private $margin_left = 40;
     private $max_chars = 105;
+    private $images = [];
 
     public function __construct() {
         $this->add_page();
@@ -18,6 +19,47 @@ class Woo_Contifico_Order_Report_Pdf {
 
     public function add_subheading( string $text ) : void {
         $this->add_wrapped_text( $text, 13, 20 );
+        $this->add_spacer( 4 );
+    }
+
+    public function add_image( string $image_data, int $image_width, int $image_height, int $max_width = 160 ) : void {
+        if ( '' === $image_data || $image_width <= 0 || $image_height <= 0 ) {
+            return;
+        }
+
+        $scale             = min( 1, $max_width / $image_width );
+        $display_width     = (int) round( $image_width * $scale );
+        $display_height    = (int) round( $image_height * $scale );
+        $image_hash        = md5( $image_data );
+        $image_object_name = null;
+
+        if ( ! isset( $this->images[ $image_hash ] ) ) {
+            $image_object_name          = 'Im' . ( count( $this->images ) + 1 );
+            $this->images[ $image_hash ] = [
+                'name'   => $image_object_name,
+                'data'   => $image_data,
+                'width'  => $image_width,
+                'height' => $image_height,
+            ];
+        } else {
+            $image_object_name = $this->images[ $image_hash ]['name'];
+        }
+
+        $this->ensure_space( $display_height + 10 );
+        $y_position = max( 40, $this->current_y - $display_height );
+        $x_position = $this->margin_left;
+
+        $this->pages[ $this->current_page ]['commands'][] = sprintf(
+            'q %1$d 0 0 %2$d %3$d %4$d cm /%5$s Do Q',
+            $display_width,
+            $display_height,
+            $x_position,
+            $y_position,
+            $image_object_name
+        );
+
+        $this->pages[ $this->current_page ]['xobjects'][] = $image_object_name;
+        $this->current_y                                   = $y_position - 10;
     }
 
     private function add_wrapped_text( string $text, int $font_size, int $line_height ) : void {
@@ -48,11 +90,24 @@ class Woo_Contifico_Order_Report_Pdf {
         $font_obj = $next_id++;
         $objects[ $font_obj ] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
 
+        foreach ( $this->images as $hash => $image ) {
+            $image_obj_id                = $next_id++;
+            $this->images[ $hash ]['id'] = $image_obj_id;
+            $objects[ $image_obj_id ]    = sprintf(
+                "<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length %d >>\nstream\n%s\nendstream",
+                $image['width'],
+                $image['height'],
+                strlen( $image['data'] ),
+                $image['data']
+            );
+        }
+
         $page_objects = [];
         $kid_refs     = [];
 
-        foreach ( $this->pages as $commands ) {
-            $stream = implode( "\n", $commands );
+        foreach ( $this->pages as $page ) {
+            $commands = isset( $page['commands'] ) ? $page['commands'] : [];
+            $stream   = implode( "\n", $commands );
 
             if ( '' === trim( $stream ) ) {
                 $stream = 'BT /F1 12 Tf 40 760 Td ( ) Tj ET';
@@ -61,7 +116,27 @@ class Woo_Contifico_Order_Report_Pdf {
             $content_id = $next_id++;
             $objects[ $content_id ] = sprintf( "<< /Length %d >>\nstream\n%s\nendstream", strlen( $stream ), $stream );
 
-            $page_template  = '<< /Type /Page /Parent __PARENT__ /MediaBox [0 0 612 792] /Resources << /Font << /F1 ' . $font_obj . ' 0 R >> >> /Contents ' . $content_id . ' 0 R >>';
+            $resource_parts = [ '/Font << /F1 ' . $font_obj . ' 0 R >>' ];
+
+            if ( isset( $page['xobjects'] ) && ! empty( $page['xobjects'] ) ) {
+                $xobject_entries = [];
+
+                foreach ( array_unique( $page['xobjects'] ) as $object_name ) {
+                    foreach ( $this->images as $image ) {
+                        if ( $image['name'] === $object_name && isset( $image['id'] ) ) {
+                            $xobject_entries[] = sprintf( '/%1$s %2$d 0 R', $object_name, $image['id'] );
+                            break;
+                        }
+                    }
+                }
+
+                if ( ! empty( $xobject_entries ) ) {
+                    $resource_parts[] = '/XObject << ' . implode( ' ', $xobject_entries ) . ' >>';
+                }
+            }
+
+            $resource_block = '/Resources << ' . implode( ' ', $resource_parts ) . ' >>';
+            $page_template  = '<< /Type /Page /Parent __PARENT__ /MediaBox [0 0 612 792] ' . $resource_block . ' /Contents ' . $content_id . ' 0 R >>';
             $page_object_id = $next_id++;
             $objects[ $page_object_id ] = $page_template;
             $page_objects[]             = $page_object_id;
@@ -99,7 +174,10 @@ class Woo_Contifico_Order_Report_Pdf {
     }
 
     private function add_page() : void {
-        $this->pages[]     = [];
+        $this->pages[]     = [
+            'commands' => [],
+            'xobjects' => [],
+        ];
         $this->current_page = count( $this->pages ) - 1;
         $this->current_y    = 780;
     }
@@ -113,7 +191,7 @@ class Woo_Contifico_Order_Report_Pdf {
         $this->ensure_space( $line_height );
         $text = $this->escape_text( $text );
         $y    = max( 40, $this->current_y );
-        $this->pages[ $this->current_page ][] = sprintf( 'BT /F1 %d Tf %d %d Td (%s) Tj ET', $font_size, $this->margin_left, $y, $text );
+        $this->pages[ $this->current_page ]['commands'][] = sprintf( 'BT /F1 %d Tf %d %d Td (%s) Tj ET', $font_size, $this->margin_left, $y, $text );
         $this->current_y -= $line_height;
     }
 
