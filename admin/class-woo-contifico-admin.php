@@ -2683,6 +2683,12 @@ return $value;
                         return $fallback_logo;
                 }
 
+                $fallback_logo = $plugin_dir . 'assets/contifico-logo.png';
+
+                if ( file_exists( $fallback_logo ) ) {
+                        return $fallback_logo;
+                }
+
                 return '';
         }
 
