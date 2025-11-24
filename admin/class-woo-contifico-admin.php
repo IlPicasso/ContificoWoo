@@ -2880,6 +2880,7 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                         'start_date' => '',
                         'end_date'   => '',
                         'product_id' => 0,
+                        'category_id' => 0,
                         'sku'        => '',
                         'period'     => 'day',
                         'scope'      => 'all',
@@ -2889,6 +2890,7 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 $filters['start_date'] = $this->sanitize_inventory_report_date( $filters['start_date'] );
                 $filters['end_date']   = $this->sanitize_inventory_report_date( $filters['end_date'] );
                 $filters['product_id'] = absint( $filters['product_id'] );
+                $filters['category_id'] = absint( $filters['category_id'] );
                 $filters['sku']        = strtoupper( sanitize_text_field( (string) $filters['sku'] ) );
                 $filters['period']     = in_array( $filters['period'], [ 'day', 'week', 'month' ], true ) ? $filters['period'] : 'day';
                 $filters['scope']      = in_array( $filters['scope'], [ 'all', 'global', 'product' ], true ) ? $filters['scope'] : 'all';
@@ -2898,6 +2900,80 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 $filters['end_timestamp']   = '' !== $filters['end_date'] ? strtotime( $filters['end_date'] . ' 23:59:59' ) : null;
 
                 return $filters;
+        }
+
+        /**
+         * Retrieve the product categories for a WooCommerce product id.
+         *
+         * @since 4.3.1
+         */
+        private function get_inventory_movement_product_categories( int $product_id ) : array {
+                static $cache = [];
+
+                if ( isset( $cache[ $product_id ] ) ) {
+                        return $cache[ $product_id ];
+                }
+
+                if ( $product_id <= 0 ) {
+                        return [];
+                }
+
+                $terms = get_the_terms( $product_id, 'product_cat' );
+
+                if ( is_wp_error( $terms ) || empty( $terms ) ) {
+                        $cache[ $product_id ] = [];
+
+                        return $cache[ $product_id ];
+                }
+
+                $cache[ $product_id ] = array_map(
+                        static function ( $term ) {
+                                return (string) $term->name;
+                        },
+                        $terms
+                );
+
+                return $cache[ $product_id ];
+        }
+
+        /**
+         * Retrieve the product category IDs (including ancestors) for a WooCommerce product id.
+         *
+         * @since 4.4.1
+         */
+        private function get_inventory_movement_product_category_ids( int $product_id ) : array {
+                static $cache = [];
+
+                if ( isset( $cache[ $product_id ] ) ) {
+                        return $cache[ $product_id ];
+                }
+
+                if ( $product_id <= 0 ) {
+                        return [];
+                }
+
+                $terms = get_the_terms( $product_id, 'product_cat' );
+
+                if ( is_wp_error( $terms ) || empty( $terms ) ) {
+                        $cache[ $product_id ] = [];
+
+                        return $cache[ $product_id ];
+                }
+
+                $ids = [];
+
+                foreach ( $terms as $term ) {
+                        $term_id = (int) $term->term_id;
+                        $ids[]   = $term_id;
+
+                        foreach ( get_ancestors( $term_id, 'product_cat' ) as $ancestor_id ) {
+                                $ids[] = (int) $ancestor_id;
+                        }
+                }
+
+                $cache[ $product_id ] = array_values( array_unique( $ids ) );
+
+                return $cache[ $product_id ];
         }
 
 	/**
@@ -2933,6 +3009,7 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 $totals           = [ 'ingresos' => 0.0, 'egresos' => 0.0, 'balance' => 0.0 ];
                 $period_totals    = [];
                 $product_totals   = [];
+                $category_totals  = [];
 
                 foreach ( $entries as $entry ) {
                         $timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
@@ -2951,6 +3028,14 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                         if ( '' !== $filters['sku'] && strtoupper( (string) $entry['sku'] ) !== $filters['sku'] ) {
                                 continue;
+                        }
+
+                        if ( $filters['category_id'] ) {
+                                $product_categories = $this->get_inventory_movement_product_category_ids( (int) $entry['wc_product_id'] );
+
+                                if ( ! in_array( $filters['category_id'], $product_categories, true ) ) {
+                                        continue;
+                                }
                         }
 
                         if ( 'all' !== $filters['scope'] && $filters['scope'] !== $entry['sync_type'] ) {
@@ -3015,6 +3100,33 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                         $product_totals[ $product_key ]['balance']       = $product_totals[ $product_key ]['ingresos'] - $product_totals[ $product_key ]['egresos'];
                         $product_totals[ $product_key ]['last_movement'] = max( $product_totals[ $product_key ]['last_movement'], $timestamp );
+
+                        $categories = $this->get_inventory_movement_product_categories( (int) $entry['wc_product_id'] );
+
+                        if ( empty( $categories ) ) {
+                                $categories = [ __( 'Sin categoría', 'woo-contifico' ) ];
+                        }
+
+                        foreach ( $categories as $category_label ) {
+                                if ( ! isset( $category_totals[ $category_label ] ) ) {
+                                        $category_totals[ $category_label ] = [
+                                                'category'      => $category_label,
+                                                'ingresos'      => 0.0,
+                                                'egresos'       => 0.0,
+                                                'balance'       => 0.0,
+                                                'last_movement' => $timestamp,
+                                        ];
+                                }
+
+                                if ( 'ingreso' === $event ) {
+                                        $category_totals[ $category_label ]['ingresos'] += $quantity;
+                                } else {
+                                        $category_totals[ $category_label ]['egresos']  += $quantity;
+                                }
+
+                                $category_totals[ $category_label ]['balance']       = $category_totals[ $category_label ]['ingresos'] - $category_totals[ $category_label ]['egresos'];
+                                $category_totals[ $category_label ]['last_movement'] = max( $category_totals[ $category_label ]['last_movement'], $timestamp );
+                        }
                 }
 
                 usort( $filtered_entries, static function ( $a, $b ) {
@@ -3028,6 +3140,10 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 } );
 
                 usort( $product_totals, static function ( $a, $b ) {
+                        return ( $b['last_movement'] ?? 0 ) <=> ( $a['last_movement'] ?? 0 );
+                } );
+
+                usort( $category_totals, static function ( $a, $b ) {
                         return ( $b['last_movement'] ?? 0 ) <=> ( $a['last_movement'] ?? 0 );
                 } );
 
@@ -3048,7 +3164,8 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                         'entries'           => $filtered_entries,
                         'totals'            => $totals,
                         'totals_by_period'  => $period_totals,
-                        'totals_by_product' => $product_totals,
+                        'totals_by_product'  => $product_totals,
+                        'totals_by_category' => $category_totals,
                         'chart_data'        => [
                                 'periods'  => $chart_periods,
                                 'products' => $chart_products,
@@ -3103,6 +3220,7 @@ $filters = [
 'start_date' => isset( $_GET['start_date'] ) ? sanitize_text_field( wp_unslash( $_GET['start_date'] ) ) : '',
 'end_date'   => isset( $_GET['end_date'] ) ? sanitize_text_field( wp_unslash( $_GET['end_date'] ) ) : '',
 'product_id' => isset( $_GET['product_id'] ) ? absint( wp_unslash( $_GET['product_id'] ) ) : 0,
+'category_id' => isset( $_GET['category_id'] ) ? absint( wp_unslash( $_GET['category_id'] ) ) : 0,
 'sku'        => isset( $_GET['sku'] ) ? sanitize_text_field( wp_unslash( $_GET['sku'] ) ) : '',
 'period'     => isset( $_GET['period'] ) ? sanitize_key( wp_unslash( $_GET['period'] ) ) : 'day',
 'scope'      => isset( $_GET['scope'] ) ? sanitize_key( wp_unslash( $_GET['scope'] ) ) : 'all',
@@ -3112,13 +3230,14 @@ $filters = [
 	$report = $this->get_inventory_movements_report( $filters );
 
 	if ( 'json' === $format ) {
-	wp_send_json( [
-	'filters'           => $report['filters'],
-	'totals'            => $report['totals'],
-	'entries'           => $report['entries'],
-	'totals_by_product' => $report['totals_by_product'],
-	] );
-	}
+        wp_send_json( [
+        'filters'           => $report['filters'],
+        'totals'            => $report['totals'],
+        'entries'           => $report['entries'],
+        'totals_by_product' => $report['totals_by_product'],
+        'totals_by_category' => $report['totals_by_category'],
+        ] );
+        }
 
 	nocache_headers();
 	$filename = sprintf( 'woo-contifico-inventory-movements-%s.csv', gmdate( 'Ymd-His' ) );
@@ -3182,11 +3301,11 @@ $filters = [
 	 *
 	 * @since 4.3.1
 	 */
-	private function resolve_inventory_movement_period_key( int $timestamp, string $period ) : array {
-	switch ( $period ) {
-	case 'week':
-	$key   = wp_date( 'o-\WW', $timestamp );
-	$label = sprintf(
+        private function resolve_inventory_movement_period_key( int $timestamp, string $period ) : array {
+        switch ( $period ) {
+        case 'week':
+        $key   = wp_date( 'o-\WW', $timestamp );
+        $label = sprintf(
 	/* translators: 1: ISO week number. 2: year. */
 	__( 'Semana %1$s · %2$s', 'woo-contifico' ),
 	wp_date( 'W', $timestamp ),
@@ -3205,7 +3324,7 @@ $filters = [
 	}
 
 	return [ $key, $label ];
-	}
+        }
 
         /**
          * Build a list of product choices discovered in the movement log.
@@ -3245,6 +3364,51 @@ $filters = [
 
                 uasort( $choices, static function ( $a, $b ) {
                         return strcmp( $a['label'], $b['label'] );
+                } );
+
+                return array_values( $choices );
+        }
+
+        /**
+         * Build a list of category choices with hierarchical labels.
+         *
+         * @since 4.4.1
+         */
+        private function get_inventory_movement_category_choices() : array {
+                $choices = [];
+
+                foreach ( get_terms( [ 'taxonomy' => 'product_cat', 'hide_empty' => false ] ) as $term ) {
+                        if ( is_wp_error( $term ) ) {
+                                continue;
+                        }
+
+                        $ancestors = array_reverse( get_ancestors( $term->term_id, 'product_cat' ) );
+                        $label     = [];
+
+                        foreach ( $ancestors as $ancestor_id ) {
+                                $ancestor = get_term( $ancestor_id, 'product_cat' );
+
+                                if ( is_wp_error( $ancestor ) || ! $ancestor ) {
+                                        continue;
+                                }
+
+                                $label[] = $ancestor->name;
+                        }
+
+                        $label[] = $term->name;
+
+                        $choices[ $term->term_id ] = [
+                                'id'    => (int) $term->term_id,
+                                'label' => implode( ' › ', $label ),
+                        ];
+                }
+
+                if ( empty( $choices ) ) {
+                        return [];
+                }
+
+                uasort( $choices, static function ( $a, $b ) {
+                        return strcasecmp( $a['label'], $b['label'] );
                 } );
 
                 return array_values( $choices );
