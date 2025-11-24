@@ -199,9 +199,12 @@ class Woo_Contifico_Order_Report_Pdf {
         $pdf->SetFont( 'Arial', 'B', 11 );
         $pdf->Cell( $column_width, 6, $this->encode_text( $this->recipient_heading ), 0, 1, 'L' );
         $pdf->SetFont( 'Arial', '', 10 );
+
         foreach ( $this->recipient_lines as $line ) {
-            $pdf->Cell( $column_width, 5.5, $this->encode_text( $line ), 0, 1, 'L' );
+            $pdf->SetX( $start_x );
+            $pdf->MultiCell( $column_width, 5.5, $this->encode_text( $line ), 0, 'L' );
         }
+
         $max_y = max( $max_y, $pdf->GetY() );
 
         // Order summary block.
