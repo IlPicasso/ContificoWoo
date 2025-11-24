@@ -6673,8 +6673,6 @@ $order_note = sprintf(
                                 $event_label   = 'ingreso' === $movement['event_type'] ? __( 'Ingreso', $this->plugin_name ) : __( 'Egreso', $this->plugin_name );
                                 $from_label    = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['from'] ) ? $movement['warehouses']['from'] : [] );
                                 $to_label      = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : [] );
-                                $from_label    = $from_label ?: __( 'Bodega no especificada', $this->plugin_name );
-                                $to_label      = $to_label ?: __( 'Bodega no especificada', $this->plugin_name );
                                 $reference     = $movement['reference'] ?: __( 'Sin referencia', $this->plugin_name );
                                 $location      = isset( $movement['location']['label'] ) && '' !== $movement['location']['label']
                                         ? $movement['location']['label']
@@ -6689,14 +6687,14 @@ $order_note = sprintf(
 
                                 $pdf->add_inventory_movement_line(
                                         sprintf(
-                                                __( '[%1$s] %2$s de %3$s uds · %4$s → %5$s · Producto: %6$s (SKU: %7$s) · Ref: %8$s%9$s', $this->plugin_name ),
+                                                __( '%1$s · %2$s de %3$s uds · Producto: %4$s (SKU %5$s) · De: %6$s · Hacia: %7$s · Ref: %8$s%9$s', $this->plugin_name ),
                                                 $movement_date,
                                                 $event_label,
                                                 $quantity,
-                                                $from_label,
-                                                $to_label,
                                                 $product_name,
                                                 $sku_label,
+                                                $from_label ?: __( 'Bodega no especificada', $this->plugin_name ),
+                                                $to_label ?: __( 'Bodega no especificada', $this->plugin_name ),
                                                 $reference,
                                                 $location_fragment
                                         )
@@ -6715,9 +6713,9 @@ $order_note = sprintf(
 
                                 $pdf->add_transfer_summary_line(
                                         sprintf(
-                                                __( '%1$s → %2$s · Ref: %3$s · Productos: %4$s', $this->plugin_name ),
-                                                $from_label,
-                                                $to_label,
+                                                __( 'De: %1$s · A: %2$s · Ref: %3$s · Productos: %4$s', $this->plugin_name ),
+                                                $from_label ?: __( 'Bodega no especificada', $this->plugin_name ),
+                                                $to_label ?: __( 'Bodega no especificada', $this->plugin_name ),
                                                 $summary['reference'],
                                                 implode( '; ', $summary['products'] )
                                         )
