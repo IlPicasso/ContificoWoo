@@ -2606,6 +2606,151 @@ return $value;
                 return $context;
         }
 
+        private function build_store_location_line() : string {
+                $city          = (string) get_option( 'woocommerce_store_city' );
+                $base_location = wc_get_base_location();
+                $state         = isset( $base_location['state'] ) ? (string) $base_location['state'] : '';
+                $country       = isset( $base_location['country'] ) ? (string) $base_location['country'] : '';
+
+                $line = implode( ', ', array_filter( [ $city, $state ] ) );
+
+                if ( '' !== $country ) {
+                        $line = '' !== $line ? $line . ' ' . $country : $country;
+                }
+
+                return $line;
+        }
+
+        /**
+         * Resolve a usable logo path for the order report PDF without relying on tracked binary assets.
+         *
+         * @since 4.4.0
+         */
+        private function get_report_logo_path() : string {
+                $plugin_dir = plugin_dir_path( dirname( __FILE__ ) );
+
+                $preferred_logo = $plugin_dir . 'assets/adams-logo.png';
+                $fallback_logo  = $plugin_dir . 'assets/contifico-logo.png';
+
+                foreach ( [ $preferred_logo, $fallback_logo ] as $candidate ) {
+                        if ( file_exists( $candidate ) ) {
+                                return $candidate;
+                        }
+                }
+
+                $embedded_candidates = array(
+                        $plugin_dir . 'assets/adams-logo.base64.txt',
+                        $plugin_dir . 'assets/contifico-logo.base64.txt',
+                );
+
+                foreach ( $embedded_candidates as $embedded_logo ) {
+                        if ( ! file_exists( $embedded_logo ) ) {
+                                continue;
+                        }
+
+                        $encoded = trim( (string) file_get_contents( $embedded_logo ) );
+
+                        if ( '' === $encoded ) {
+                                continue;
+                        }
+
+                        $binary = base64_decode( $encoded, true );
+
+                        if ( false === $binary ) {
+                                continue;
+                        }
+
+                        $temp_path = $this->get_temp_logo_path();
+
+                        if ( '' === $temp_path ) {
+                                continue;
+                        }
+
+                        $result = @file_put_contents( $temp_path, $binary );
+
+                        if ( false !== $result ) {
+                                return $temp_path;
+                        }
+                }
+
+                return '';
+        }
+
+        /**
+         * Provide a writable path for the decoded logo image.
+         *
+         * @since 4.4.0
+         */
+        private function get_temp_logo_path() : string {
+                $upload_dir = wp_upload_dir();
+                $base_dir   = isset( $upload_dir['basedir'] ) ? (string) $upload_dir['basedir'] : '';
+                $temp_dir   = '';
+
+                if ( '' !== $base_dir ) {
+                        $candidate = trailingslashit( $base_dir ) . 'contifico';
+
+                        if ( ! is_dir( $candidate ) ) {
+                                wp_mkdir_p( $candidate );
+                        }
+
+                        if ( is_dir( $candidate ) && is_writable( $candidate ) ) {
+                                $temp_dir = $candidate;
+                        }
+                }
+
+                if ( '' === $temp_dir ) {
+                        $fallback = sys_get_temp_dir();
+
+                        if ( is_writable( $fallback ) ) {
+                                $temp_dir = $fallback;
+                        }
+                }
+
+                if ( '' === $temp_dir ) {
+                        return '';
+                }
+
+                return rtrim( $temp_dir, '/\\' ) . '/adams-logo.png';
+        }
+
+        private function build_shipping_city_line( WC_Order $order ) : string {
+                $city    = (string) $order->get_shipping_city();
+                $state   = (string) $order->get_shipping_state();
+                $country = (string) $order->get_shipping_country();
+
+                if ( '' === $city && '' === $state && '' === $country ) {
+                        $city    = (string) $order->get_billing_city();
+                        $state   = (string) $order->get_billing_state();
+                        $country = (string) $order->get_billing_country();
+                }
+
+                $line = implode( ', ', array_filter( [ $city, $state ] ) );
+
+                if ( '' !== $country ) {
+                        $line = '' !== $line ? $line . ' ' . $country : $country;
+                }
+
+                return $line;
+        }
+
+        private function build_item_attribute_lines( WC_Order_Item_Product $item ) : array {
+                $lines = [];
+                $meta  = $item->get_formatted_meta_data( '', false );
+
+                foreach ( $meta as $meta_item ) {
+                        $label = isset( $meta_item->display_key ) ? wp_strip_all_tags( (string) $meta_item->display_key ) : '';
+                        $value = isset( $meta_item->display_value ) ? wp_strip_all_tags( (string) $meta_item->display_value ) : '';
+
+                        if ( '' === $value || '' === $label || '_' === substr( $label, 0, 1 ) ) {
+                                continue;
+                        }
+
+                        $lines[] = sprintf( '%s: %s', $label, $value );
+                }
+
+                return $lines;
+        }
+
         /**
          * Build a human readable label for inventory notes based on the context.
          *
@@ -2646,6 +2791,27 @@ return $value;
                 }
 
                 return __( 'Ubicación predeterminada', 'woo-contifico' );
+        }
+
+        private function format_warehouse_label_with_code( array $warehouse ) : string {
+                $label = isset( $warehouse['label'] ) ? (string) $warehouse['label'] : '';
+                $code  = isset( $warehouse['code'] ) ? (string) $warehouse['code'] : '';
+
+                if ( '' === $code && isset( $warehouse['id'] ) ) {
+                        $code = (string) $warehouse['id'];
+                }
+
+                $label = '' !== $label ? $label : $code;
+
+                if ( '' === $label ) {
+                        return '';
+                }
+
+                if ( '' !== $code && false === stripos( $label, '(' . $code . ')' ) ) {
+                        return sprintf( '%s (%s)', $label, $code );
+                }
+
+                return $label;
         }
 
         /**
@@ -6475,9 +6641,13 @@ $order_note = sprintf(
                 $filename = sprintf( 'contifico-order-%s.pdf', $order->get_order_number() );
 
                 nocache_headers();
+                $content_length = function_exists( 'mb_strlen' )
+                        ? (int) mb_strlen( $pdf_content, '8bit' )
+                        : strlen( $pdf_content );
+
                 header( 'Content-Type: application/pdf' );
                 header( 'Content-Disposition: attachment; filename="' . sanitize_file_name( $filename ) . '"' );
-                header( 'Content-Length: ' . strlen( $pdf_content ) );
+                header( 'Content-Length: ' . $content_length );
                 echo $pdf_content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
                 exit;
         }
@@ -6494,7 +6664,6 @@ $order_note = sprintf(
                 $order_date   = $order->get_date_created();
                 $date_label   = $order_date ? wc_format_datetime( $order_date, $date_format ) : __( 'Sin fecha registrada', $this->plugin_name );
                 $status_label = wc_get_order_status_name( $order->get_status() );
-                $total_label  = wp_strip_all_tags( $order->get_formatted_order_total() );
                 $shipping_methods = $order->get_shipping_methods();
                 $shipping_label   = empty( $shipping_methods )
                         ? __( 'Sin método de envío', $this->plugin_name )
@@ -6504,33 +6673,55 @@ $order_note = sprintf(
                 $fulfillment_label = $this->order_has_store_pickup( $order )
                         ? __( 'Retiro en tienda', $this->plugin_name )
                         : __( 'Despacho / entrega', $this->plugin_name );
+                $payment_label = $order->get_payment_method_title();
 
-                $pdf->add_title( sprintf( __( 'Reporte Contífico del pedido #%s', $this->plugin_name ), $order_number ) );
-                $pdf->add_text_line( sprintf( __( 'Fecha del pedido: %s', $this->plugin_name ), $date_label ) );
-                $pdf->add_text_line( sprintf( __( 'Estado actual: %s', $this->plugin_name ), $status_label ) );
-                $pdf->add_text_line( sprintf( __( 'Total: %s', $this->plugin_name ), $total_label ) );
-                $pdf->add_text_line( sprintf( __( 'Método de envío: %s', $this->plugin_name ), $shipping_label ) );
-                $pdf->add_text_line( sprintf( __( 'Modalidad de entrega: %s', $this->plugin_name ), $fulfillment_label ) );
-                $pdf->add_spacer( 12 );
+                $store_name   = wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES );
+                $store_lines  = array_filter( array(
+                        get_option( 'woocommerce_store_address' ),
+                        get_option( 'woocommerce_store_address_2' ),
+                        $this->build_store_location_line(),
+                ) );
 
-                $customer_name_parts = array_filter( [ $order->get_billing_first_name(), $order->get_billing_last_name() ] );
-                $customer_name       = trim( implode( ' ', $customer_name_parts ) );
+                $pdf->set_branding( $store_name, $store_lines );
 
-                if ( '' === $customer_name ) {
-                        $customer_name = __( 'No disponible', $this->plugin_name );
+                $logo_path = $this->get_report_logo_path();
+
+                if ( '' !== $logo_path ) {
+                        $pdf->set_brand_logo_path( $logo_path );
+                }
+                $pdf->set_document_title( __( 'Resumen del pedido', $this->plugin_name ) );
+
+                $shipping_name_parts = array_filter( [ $order->get_shipping_first_name(), $order->get_shipping_last_name() ] );
+                $shipping_name       = trim( implode( ' ', $shipping_name_parts ) );
+
+                if ( '' === $shipping_name ) {
+                        $billing_name_parts = array_filter( [ $order->get_billing_first_name(), $order->get_billing_last_name() ] );
+                        $shipping_name      = trim( implode( ' ', $billing_name_parts ) );
                 }
 
-                $pdf->add_subheading( __( 'Datos del cliente', $this->plugin_name ) );
-                $pdf->add_text_line( sprintf( __( 'Cliente: %s', $this->plugin_name ), $customer_name ) );
-                $pdf->add_text_line( sprintf( __( 'Correo: %s', $this->plugin_name ), $order->get_billing_email() ?: __( 'No disponible', $this->plugin_name ) ) );
-                $pdf->add_text_line( sprintf( __( 'Teléfono: %s', $this->plugin_name ), $order->get_billing_phone() ?: __( 'No disponible', $this->plugin_name ) ) );
-                $billing_address = $order->get_formatted_billing_address();
-                if ( $billing_address ) {
-                        $pdf->add_text_line( sprintf( __( 'Dirección de facturación: %s', $this->plugin_name ), wp_strip_all_tags( $billing_address ) ) );
-                }
-                $pdf->add_spacer( 10 );
+                $shipping_name  = $shipping_name ?: __( 'Destinatario no definido', $this->plugin_name );
+                $recipient_lines = array_filter( [
+                        $order->get_shipping_company(),
+                        $order->get_shipping_address_1(),
+                        $order->get_shipping_address_2(),
+                        $this->build_shipping_city_line( $order ),
+                        $order->get_billing_email(),
+                        $order->get_billing_phone(),
+                ] );
 
-                $pdf->add_subheading( __( 'Productos y bodegas asignadas', $this->plugin_name ) );
+                $pdf->set_recipient_block( $shipping_name, $recipient_lines );
+
+                $order_summary = [
+                        [ 'label' => __( 'Número de pedido', $this->plugin_name ), 'value' => $order_number ],
+                        [ 'label' => __( 'Fecha de pedido', $this->plugin_name ), 'value' => $date_label ],
+                        [ 'label' => __( 'Estado', $this->plugin_name ), 'value' => $status_label ],
+                        [ 'label' => __( 'Método de pago', $this->plugin_name ), 'value' => $payment_label ],
+                        [ 'label' => __( 'Método de envío', $this->plugin_name ), 'value' => $shipping_label ],
+                        [ 'label' => __( 'Modalidad de entrega', $this->plugin_name ), 'value' => $fulfillment_label ],
+                ];
+
+                $pdf->set_order_summary( $order_summary );
+
                 $origin_code       = isset( $this->woo_contifico->settings['bodega'] ) ? (string) $this->woo_contifico->settings['bodega'] : '';
                 $default_origin_id = (string) ( $this->contifico->get_id_bodega( $origin_code ) ?? '' );
                 $items_added       = false;
@@ -6546,85 +6737,95 @@ $order_note = sprintf(
                                 continue;
                         }
 
-                        $context        = $this->resolve_order_item_location_inventory_context( $order, $item, $origin_code, $default_origin_id );
-                        $warehouse_label = isset( $context['label'] ) ? $context['label'] : $origin_code;
+                        $context         = $this->resolve_order_item_location_inventory_context( $order, $item, $origin_code, $default_origin_id );
+                        $warehouse_label = $this->format_warehouse_label_with_code( $context );
                         $location_label  = $this->describe_inventory_location_for_note( $context );
                         $quantity_label  = wc_format_decimal( $item->get_quantity(), 2 );
                         $sku_label       = $wc_product->get_sku() ?: __( 'Sin SKU', $this->plugin_name );
                         $product_name    = wp_strip_all_tags( $item->get_name() );
 
-                        $pdf->add_list_item(
-                                sprintf(
-                                        __( '%1$s · Cantidad: %2$s · SKU: %3$s · Bodega: %4$s · Ubicación: %5$s', $this->plugin_name ),
-                                        $product_name,
-                                        $quantity_label,
-                                        $sku_label,
-                                        $warehouse_label,
-                                        $location_label
-                                )
-                        );
-                        $items_added = true;
-                }
+                        $details = [];
+
+                        if ( '' !== $sku_label ) {
+                                $details[] = sprintf( __( 'SKU: %s', $this->plugin_name ), $sku_label );
+                        }
+
+                        $meta_lines = $this->build_item_attribute_lines( $item );
+
+                        if ( ! empty( $meta_lines ) ) {
+                                $details[] = implode( ' · ', $meta_lines );
+                        }
+
+                        if ( '' !== $warehouse_label ) {
+                                $details[] = sprintf( __( 'Bodega: %s', $this->plugin_name ), $warehouse_label );
+                        }
+
+                        if ( '' !== $location_label ) {
+                                $details[] = sprintf( __( 'Ubicación: %s', $this->plugin_name ), $location_label );
+                        }
+
+                $pdf->add_product_row( $product_name, $quantity_label, $details );
+                $items_added = true;
+        }
 
                 if ( ! $items_added ) {
-                        $pdf->add_text_line( __( 'No hay productos asociados al pedido.', $this->plugin_name ) );
+                        $pdf->add_product_row( __( 'No hay productos asociados al pedido.', $this->plugin_name ), '—' );
                 }
 
-                $pdf->add_spacer( 10 );
-                $pdf->add_subheading( __( 'Movimientos de inventario', $this->plugin_name ) );
                 $movements = $this->get_order_inventory_movements_for_order( $order->get_id() );
 
                 if ( empty( $movements ) ) {
-                        $pdf->add_text_line( __( 'No se han registrado movimientos para este pedido.', $this->plugin_name ) );
+                        $pdf->add_inventory_movement_line( __( 'Aún no hay movimientos registrados para este pedido.', $this->plugin_name ) );
                 } else {
                         foreach ( $movements as $movement ) {
                                 $timestamp     = isset( $movement['timestamp'] ) ? (int) $movement['timestamp'] : 0;
                                 $movement_date = $timestamp ? date_i18n( $date_format, $timestamp ) : __( 'Sin fecha', $this->plugin_name );
                                 $event_label   = 'ingreso' === $movement['event_type'] ? __( 'Ingreso', $this->plugin_name ) : __( 'Egreso', $this->plugin_name );
-                                $from_label    = isset( $movement['warehouses']['from']['label'] ) ? $movement['warehouses']['from']['label'] : '';
-                                $to_label      = isset( $movement['warehouses']['to']['label'] ) ? $movement['warehouses']['to']['label'] : '';
-                                $from_label    = $from_label ?: ( $movement['warehouses']['from']['id'] ?? __( 'Desconocida', $this->plugin_name ) );
-                                $to_label      = $to_label ?: ( $movement['warehouses']['to']['id'] ?? __( 'Desconocida', $this->plugin_name ) );
-                                $reference     = $movement['reference'] ?: __( 'Sin código', $this->plugin_name );
+                                $from_label    = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['from'] ) ? $movement['warehouses']['from'] : [] );
+                                $to_label      = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : [] );
+                                $reference     = $movement['reference'] ?: __( 'Sin referencia', $this->plugin_name );
                                 $location      = isset( $movement['location']['label'] ) && '' !== $movement['location']['label']
                                         ? $movement['location']['label']
-                                        : __( 'No definida', $this->plugin_name );
+                                        : '';
                                 $product_name  = wp_strip_all_tags( (string) $movement['product_name'] );
                                 $sku_label     = $movement['sku'] ?: __( 'Sin SKU', $this->plugin_name );
                                 $quantity      = wc_format_decimal( $movement['quantity'], 2 );
 
-                                $pdf->add_list_item(
+                                $location_fragment = '' !== $location
+                                        ? sprintf( __( ' · Ubicación: %s', $this->plugin_name ), $location )
+                                        : '';
+
+                                $pdf->add_inventory_movement_line(
                                         sprintf(
-                                                __( '[%1$s] %2$s de %3$s uds · %4$s → %5$s · Producto: %6$s (%7$s) · Ref: %8$s · Ubicación: %9$s', $this->plugin_name ),
+                                                __( '%1$s — %2$s de %3$s uds de %4$s (SKU %5$s). De: %6$s · Hacia: %7$s%8$s · Ref: %9$s', $this->plugin_name ),
                                                 $movement_date,
                                                 $event_label,
                                                 $quantity,
-                                                $from_label,
-                                                $to_label,
                                                 $product_name,
                                                 $sku_label,
-                                                $reference,
-                                                $location
+                                                $from_label ?: __( 'Bodega no especificada', $this->plugin_name ),
+                                                $to_label ?: __( 'Bodega no especificada', $this->plugin_name ),
+                                                $location_fragment,
+                                                $reference
                                         )
                                 );
                         }
                 }
 
                 $transfer_summaries = $this->build_order_transfer_summaries( $movements );
-                $pdf->add_spacer( 10 );
-                $pdf->add_subheading( __( 'Transferencias registradas', $this->plugin_name ) );
 
                 if ( empty( $transfer_summaries ) ) {
-                        $pdf->add_text_line( __( 'No hay transferencias registradas en Contífico para este pedido.', $this->plugin_name ) );
+                        $pdf->add_transfer_summary_line( __( 'Aún no se registran transferencias en Contífico para este pedido.', $this->plugin_name ) );
                 } else {
                         foreach ( $transfer_summaries as $summary ) {
-                                $from_label = $summary['from'];
-                                $to_label   = $summary['to'];
-                                $pdf->add_list_item(
+                                $from_label = $this->format_warehouse_label_with_code( [ 'label' => $summary['from'] ] );
+                                $to_label   = $this->format_warehouse_label_with_code( [ 'label' => $summary['to'] ] );
+
+                                $pdf->add_transfer_summary_line(
                                         sprintf(
-                                                __( '%1$s → %2$s · Ref: %3$s · Productos: %4$s', $this->plugin_name ),
-                                                $from_label,
-                                                $to_label,
+                                                __( 'De %1$s a %2$s · Ref: %3$s · Productos: %4$s', $this->plugin_name ),
+                                                $from_label ?: __( 'Bodega no especificada', $this->plugin_name ),
+                                                $to_label ?: __( 'Bodega no especificada', $this->plugin_name ),
                                                 $summary['reference'],
                                                 implode( '; ', $summary['products'] )
                                         )
@@ -6681,9 +6882,9 @@ $order_note = sprintf(
                 $summaries = [];
 
                 foreach ( $movements as $movement ) {
-                        $reference = $movement['reference'] ?: __( 'Sin código', $this->plugin_name );
-                        $from_label = isset( $movement['warehouses']['from']['label'] ) ? $movement['warehouses']['from']['label'] : $movement['warehouses']['from']['id'];
-                        $to_label   = isset( $movement['warehouses']['to']['label'] ) ? $movement['warehouses']['to']['label'] : $movement['warehouses']['to']['id'];
+                        $reference  = $movement['reference'] ?: __( 'Sin código', $this->plugin_name );
+                        $from_label = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['from'] ) ? $movement['warehouses']['from'] : [] );
+                        $to_label   = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : [] );
                         $key        = md5( implode( '|', [ $reference, $from_label, $to_label, $movement['event_type'] ] ) );
 
                         if ( ! isset( $summaries[ $key ] ) ) {
