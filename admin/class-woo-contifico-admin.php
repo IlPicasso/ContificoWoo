@@ -6682,7 +6682,28 @@ $order_note = sprintf(
                         $this->build_store_location_line(),
                 ) );
 
-                $pdf->set_branding( $store_name, $store_lines );
+                $logo_image = $this->get_pdf_logo_image();
+
+                if ( $logo_image ) {
+                        $pdf->add_image( $logo_image['data'], $logo_image['width'], $logo_image['height'], 180 );
+                }
+
+                $pdf->add_title( sprintf( __( 'Resumen del pedido #%s', $this->plugin_name ), $order_number ) );
+
+                $store_address_label = $this->get_store_address_label();
+                if ( '' !== $store_address_label ) {
+                        $pdf->add_text_line( $store_address_label );
+                        $pdf->add_spacer( 4 );
+                }
+
+                $pdf->add_text_line( sprintf( __( 'Fecha del pedido: %s', $this->plugin_name ), $date_label ) );
+                $pdf->add_text_line( sprintf( __( 'Estado: %s', $this->plugin_name ), $status_label ) );
+                $pdf->add_text_line( sprintf( __( 'Total del pedido: %s', $this->plugin_name ), $total_label ) );
+                $pdf->add_text_line( sprintf( __( 'Método de envío: %s', $this->plugin_name ), $shipping_label ) );
+                $pdf->add_text_line( sprintf( __( 'Modalidad de entrega: %s', $this->plugin_name ), $fulfillment_label ) );
+                $pdf->add_spacer( 10 );
+                $pdf->add_text_line( __( 'Gracias por su compra. A continuación encontrará un detalle claro de su pedido y los movimientos de inventario registrados.', $this->plugin_name ) );
+                $pdf->add_spacer( 12 );
 
                 $logo_path = $this->get_report_logo_path();
 
@@ -6698,6 +6719,7 @@ $order_note = sprintf(
                         $billing_name_parts = array_filter( [ $order->get_billing_first_name(), $order->get_billing_last_name() ] );
                         $shipping_name      = trim( implode( ' ', $billing_name_parts ) );
                 }
+                $pdf->add_spacer( 12 );
 
                 $shipping_name  = $shipping_name ?: __( 'Destinatario no definido', $this->plugin_name );
                 $recipient_lines = array_filter( [
@@ -6772,6 +6794,8 @@ $order_note = sprintf(
                         $pdf->add_product_row( __( 'No hay productos asociados al pedido.', $this->plugin_name ), '—' );
                 }
 
+                $pdf->add_spacer( 12 );
+                $pdf->add_subheading( __( 'Movimientos de inventario', $this->plugin_name ) );
                 $movements = $this->get_order_inventory_movements_for_order( $order->get_id() );
 
                 if ( empty( $movements ) ) {
@@ -6813,6 +6837,8 @@ $order_note = sprintf(
                 }
 
                 $transfer_summaries = $this->build_order_transfer_summaries( $movements );
+                $pdf->add_spacer( 12 );
+                $pdf->add_subheading( __( 'Transferencias registradas', $this->plugin_name ) );
 
                 if ( empty( $transfer_summaries ) ) {
                         $pdf->add_transfer_summary_line( __( 'Aún no se registran transferencias en Contífico para este pedido.', $this->plugin_name ) );
@@ -6834,6 +6860,131 @@ $order_note = sprintf(
                 }
 
                 return $pdf->render();
+        }
+
+        /**
+         * Resolve the logo image to embed in the PDF, prioritizing the WooCommerce email header image.
+         *
+         * @since 4.4.2
+         */
+        private function get_pdf_logo_image() : ?array {
+                $logo_url = (string) get_option( 'woocommerce_email_header_image', '' );
+
+                if ( '' === $logo_url ) {
+                        $custom_logo_id = get_theme_mod( 'custom_logo' );
+                        if ( $custom_logo_id ) {
+                                $custom_logo = wp_get_attachment_image_src( $custom_logo_id, 'full' );
+                                if ( $custom_logo && ! empty( $custom_logo[0] ) ) {
+                                        $logo_url = $custom_logo[0];
+                                }
+                        }
+                }
+
+                if ( '' === $logo_url ) {
+                        return null;
+                }
+
+                $image_bytes = $this->get_image_bytes( $logo_url );
+
+                if ( '' === $image_bytes ) {
+                        return null;
+                }
+
+                $image_size = @getimagesizefromstring( $image_bytes );
+
+                if ( ! $image_size || empty( $image_size[0] ) || empty( $image_size[1] ) ) {
+                        return null;
+                }
+
+                $mime = isset( $image_size['mime'] ) ? (string) $image_size['mime'] : '';
+
+                if ( 'image/jpeg' !== $mime ) {
+                        if ( ! function_exists( 'imagecreatefromstring' ) || ! function_exists( 'imagejpeg' ) ) {
+                                return null;
+                        }
+
+                        $image_resource = @imagecreatefromstring( $image_bytes );
+
+                        if ( false === $image_resource ) {
+                                return null;
+                        }
+
+                        ob_start();
+                        imagejpeg( $image_resource, null, 90 );
+                        $image_bytes = (string) ob_get_clean();
+                        imagedestroy( $image_resource );
+
+                        $image_size = @getimagesizefromstring( $image_bytes );
+
+                        if ( ! $image_size || empty( $image_size[0] ) || empty( $image_size[1] ) ) {
+                                return null;
+                        }
+                }
+
+                return [
+                        'data'   => $image_bytes,
+                        'width'  => (int) $image_size[0],
+                        'height' => (int) $image_size[1],
+                ];
+        }
+
+        /**
+         * Retrieve the store address formatted for the PDF header.
+         *
+         * @since 4.4.2
+         */
+        private function get_store_address_label() : string {
+                $store_name = get_bloginfo( 'name' );
+                $address_1  = (string) get_option( 'woocommerce_store_address', '' );
+                $address_2  = (string) get_option( 'woocommerce_store_address_2', '' );
+                $city       = (string) get_option( 'woocommerce_store_city', '' );
+                $postcode   = (string) get_option( 'woocommerce_store_postcode', '' );
+                $country    = (string) get_option( 'woocommerce_default_country', '' );
+
+                $country_label = '';
+                if ( ! empty( $country ) && function_exists( 'wc' ) && wc()->countries ) {
+                        $countries = wc()->countries->countries;
+                        if ( isset( $countries[ $country ] ) ) {
+                                $country_label = $countries[ $country ];
+                        }
+                }
+
+                $location_parts = array_filter( [ $city, $postcode, $country_label ] );
+                $address_parts  = array_filter( [ $address_1, $address_2, implode( ', ', $location_parts ) ] );
+                $label_parts    = array_filter( [ $store_name, implode( ' · ', $address_parts ) ] );
+
+                return trim( implode( ' — ', $label_parts ) );
+        }
+
+        /**
+         * Safely download an image for PDF embedding.
+         *
+         * @since 4.4.2
+         */
+        private function get_image_bytes( string $url ) : string {
+                $response = wp_remote_get( $url, [ 'timeout' => 10 ] );
+
+                if ( is_wp_error( $response ) ) {
+                        return '';
+                }
+
+                $status_code = wp_remote_retrieve_response_code( $response );
+
+                if ( 200 !== $status_code ) {
+                        return '';
+                }
+
+                $body = wp_remote_retrieve_body( $response );
+
+                if ( ! is_string( $body ) ) {
+                        return '';
+                }
+
+                if ( strlen( $body ) > 2 * 1024 * 1024 ) {
+                        return '';
+                }
+
+                return $body;
         }
 
         /**

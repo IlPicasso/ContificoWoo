@@ -10,42 +10,12 @@ if ( ! class_exists( 'FPDF' ) ) {
 }
 
 class Woo_Contifico_Order_Report_Pdf {
-    var $brand_name;
-    var $brand_details;
-    var $brand_logo_path;
-    var $document_title;
-
-    var $recipient_heading;
-    var $recipient_lines;
-
-    var $order_summary;
-    var $product_rows;
-    var $movement_lines;
-    var $transfer_lines;
-
-    var $margin_left;   // mm
-    var $top_margin;    // mm
-    var $bottom_margin; // mm
-    var $column_gap;    // mm
-
-    // PHP 4 compatibility
-    function Woo_Contifico_Order_Report_Pdf() {
-        $this->__construct();
-    }
-
-    function __construct() {
-        $this->brand_name      = '';
-        $this->brand_details   = array();
-        $this->brand_logo_path = '';
-        $this->document_title  = '';
-
-        $this->recipient_heading = '';
-        $this->recipient_lines   = array();
-
-        $this->order_summary  = array();
-        $this->product_rows   = array();
-        $this->movement_lines = array();
-        $this->transfer_lines = array();
+    private $pages = [];
+    private $current_page = 0;
+    private $current_y = 0;
+    private $margin_left = 40;
+    private $max_chars = 105;
+    private $images = [];
 
         $this->margin_left   = 20;
         $this->top_margin    = 16;
@@ -58,8 +28,49 @@ class Woo_Contifico_Order_Report_Pdf {
         $this->brand_details = $brand_details;
     }
 
-    function set_brand_logo_path( $logo_path ) {
-        $this->brand_logo_path = $logo_path;
+    public function add_subheading( string $text ) : void {
+        $this->add_wrapped_text( $text, 13, 20 );
+        $this->add_spacer( 4 );
+    }
+
+    public function add_image( string $image_data, int $image_width, int $image_height, int $max_width = 160 ) : void {
+        if ( '' === $image_data || $image_width <= 0 || $image_height <= 0 ) {
+            return;
+        }
+
+        $scale             = min( 1, $max_width / $image_width );
+        $display_width     = (int) round( $image_width * $scale );
+        $display_height    = (int) round( $image_height * $scale );
+        $image_hash        = md5( $image_data );
+        $image_object_name = null;
+
+        if ( ! isset( $this->images[ $image_hash ] ) ) {
+            $image_object_name          = 'Im' . ( count( $this->images ) + 1 );
+            $this->images[ $image_hash ] = [
+                'name'   => $image_object_name,
+                'data'   => $image_data,
+                'width'  => $image_width,
+                'height' => $image_height,
+            ];
+        } else {
+            $image_object_name = $this->images[ $image_hash ]['name'];
+        }
+
+        $this->ensure_space( $display_height + 10 );
+        $y_position = max( 40, $this->current_y - $display_height );
+        $x_position = $this->margin_left;
+
+        $this->pages[ $this->current_page ]['commands'][] = sprintf(
+            'q %1$d 0 0 %2$d %3$d %4$d cm /%5$s Do Q',
+            $display_width,
+            $display_height,
+            $x_position,
+            $y_position,
+            $image_object_name
+        );
+
+        $this->pages[ $this->current_page ]['xobjects'][] = $image_object_name;
+        $this->current_y                                   = $y_position - 10;
     }
 
     function set_document_title( $title ) {
@@ -87,12 +98,24 @@ class Woo_Contifico_Order_Report_Pdf {
         $this->movement_lines[] = $text;
     }
 
-    function add_transfer_summary_line( $text ) {
-        $this->transfer_lines[] = $text;
-    }
+        foreach ( $this->images as $hash => $image ) {
+            $image_obj_id                = $next_id++;
+            $this->images[ $hash ]['id'] = $image_obj_id;
+            $objects[ $image_obj_id ]    = sprintf(
+                "<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length %d >>\nstream\n%s\nendstream",
+                $image['width'],
+                $image['height'],
+                strlen( $image['data'] ),
+                $image['data']
+            );
+        }
 
-    function render() {
-        $this->require_fpdf();
+        $page_objects = [];
+        $kid_refs     = [];
+
+        foreach ( $this->pages as $page ) {
+            $commands = isset( $page['commands'] ) ? $page['commands'] : [];
+            $stream   = implode( "\n", $commands );
 
         $pdf = new FPDF( 'P', 'mm', 'A4' );
         $pdf->SetMargins( $this->margin_left, $this->top_margin, $this->margin_left );
@@ -109,9 +132,31 @@ class Woo_Contifico_Order_Report_Pdf {
         return $pdf->Output( 'S' );
     }
 
-    function require_fpdf() {
-        if ( class_exists( 'FPDF' ) ) {
-            return;
+            $resource_parts = [ '/Font << /F1 ' . $font_obj . ' 0 R >>' ];
+
+            if ( isset( $page['xobjects'] ) && ! empty( $page['xobjects'] ) ) {
+                $xobject_entries = [];
+
+                foreach ( array_unique( $page['xobjects'] ) as $object_name ) {
+                    foreach ( $this->images as $image ) {
+                        if ( $image['name'] === $object_name && isset( $image['id'] ) ) {
+                            $xobject_entries[] = sprintf( '/%1$s %2$d 0 R', $object_name, $image['id'] );
+                            break;
+                        }
+                    }
+                }
+
+                if ( ! empty( $xobject_entries ) ) {
+                    $resource_parts[] = '/XObject << ' . implode( ' ', $xobject_entries ) . ' >>';
+                }
+            }
+
+            $resource_block = '/Resources << ' . implode( ' ', $resource_parts ) . ' >>';
+            $page_template  = '<< /Type /Page /Parent __PARENT__ /MediaBox [0 0 612 792] ' . $resource_block . ' /Contents ' . $content_id . ' 0 R >>';
+            $page_object_id = $next_id++;
+            $objects[ $page_object_id ] = $page_template;
+            $page_objects[]             = $page_object_id;
+            $kid_refs[]                 = $page_object_id . ' 0 R';
         }
 
         $fpdf_path = dirname( __FILE__ ) . '/../libraries/fpdf.php';
@@ -180,7 +225,13 @@ class Woo_Contifico_Order_Report_Pdf {
             $details_end_y = $pdf->GetY();
         }
 
-        $pdf->SetY( max( $brand_block_end_y, $details_end_y ) + 10 );
+    private function add_page() : void {
+        $this->pages[]     = [
+            'commands' => [],
+            'xobjects' => [],
+        ];
+        $this->current_page = count( $this->pages ) - 1;
+        $this->current_y    = 780;
     }
 
     function render_title( $pdf ) {
@@ -188,44 +239,11 @@ class Woo_Contifico_Order_Report_Pdf {
             return;
         }
 
-        $pdf->SetFont( 'Arial', 'B', 20 );
-        $pdf->Cell( 0, 12, $this->encode_text( $this->document_title ), 0, 1, 'L' );
-        $pdf->Ln( 4 );
-    }
-
-    function render_info_columns( $pdf ) {
-        $usable_width = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
-        $column_width = ( $usable_width - $this->column_gap ) / 2;
-        $start_x      = $pdf->GetX();
-        $start_y      = $pdf->GetY();
-        $max_y        = $start_y;
-
-        // Recipient / address block.
-        $pdf->SetFont( 'Arial', 'B', 11 );
-        $pdf->Cell( $column_width, 6, $this->encode_text( $this->recipient_heading ), 0, 1, 'L' );
-        $pdf->SetFont( 'Arial', '', 10 );
-        foreach ( $this->recipient_lines as $line ) {
-            $pdf->Cell( $column_width, 5.5, $this->encode_text( $line ), 0, 1, 'L' );
-        }
-        $max_y = max( $max_y, $pdf->GetY() );
-
-        // Order summary block.
-        $pdf->SetXY( $start_x + $column_width + $this->column_gap, $start_y );
-        if ( ! empty( $this->order_summary ) ) {
-            $pdf->SetFont( 'Arial', 'B', 11 );
-            $title = function_exists( '__' ) ? __( 'Detalle del pedido', 'woo-contifico' ) : 'Detalle del pedido';
-            $pdf->Cell( $column_width, 6, $this->encode_text( $title ), 0, 1, 'L' );
-            $pdf->SetFont( 'Arial', '', 10 );
-            foreach ( $this->order_summary as $row ) {
-                $label = isset( $row['label'] ) ? (string) $row['label'] : '';
-                $value = isset( $row['value'] ) ? (string) $row['value'] : '';
-                $pdf->Cell( $column_width * 0.55, 5.5, $this->encode_text( $label ), 0, 0, 'L' );
-                $pdf->Cell( $column_width * 0.45, 5.5, $this->encode_text( $value ), 0, 1, 'L' );
-            }
-            $max_y = max( $max_y, $pdf->GetY() );
-        }
-
-        $pdf->SetY( $max_y + 6 );
+        $this->ensure_space( $line_height );
+        $text = $this->escape_text( $text );
+        $y    = max( 40, $this->current_y );
+        $this->pages[ $this->current_page ]['commands'][] = sprintf( 'BT /F1 %d Tf %d %d Td (%s) Tj ET', $font_size, $this->margin_left, $y, $text );
+        $this->current_y -= $line_height;
     }
 
     function render_products_table( $pdf ) {
