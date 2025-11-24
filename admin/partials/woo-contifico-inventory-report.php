@@ -145,6 +145,7 @@ $raw_filters = [
         'start_date' => isset( $_GET['start_date'] ) ? sanitize_text_field( wp_unslash( $_GET['start_date'] ) ) : '',
         'end_date'   => isset( $_GET['end_date'] ) ? sanitize_text_field( wp_unslash( $_GET['end_date'] ) ) : '',
         'product_id' => isset( $_GET['product_id'] ) ? absint( wp_unslash( $_GET['product_id'] ) ) : 0,
+        'category_id' => isset( $_GET['category_id'] ) ? absint( wp_unslash( $_GET['category_id'] ) ) : 0,
         'sku'        => isset( $_GET['sku'] ) ? sanitize_text_field( wp_unslash( $_GET['sku'] ) ) : '',
         'period'     => isset( $_GET['period'] ) ? sanitize_key( wp_unslash( $_GET['period'] ) ) : 'day',
         'scope'      => isset( $_GET['scope'] ) ? sanitize_key( wp_unslash( $_GET['scope'] ) ) : 'all',
@@ -154,6 +155,7 @@ $raw_filters = [
 $report           = $this->get_inventory_movements_report( $raw_filters );
 $filters          = $report['filters'];
 $product_choices  = $this->get_inventory_movement_product_choices();
+$category_choices = $this->get_inventory_movement_category_choices();
 $location_choices = $this->get_inventory_movement_location_choices();
 $table            = new Woo_Contifico_Inventory_Movements_Table();
 $table->set_table_items( $report['totals_by_product'] );
@@ -174,6 +176,7 @@ $export_base     = [
         'start_date' => $filters['start_date'],
         'end_date'   => $filters['end_date'],
         'product_id' => $filters['product_id'],
+        'category_id' => $filters['category_id'],
         'sku'        => $filters['sku'],
         'period'     => $filters['period'],
         'scope'      => $filters['scope'],
@@ -221,6 +224,15 @@ $json_url = esc_url( add_query_arg( array_merge( $export_base, [ 'format' => 'js
                                         <option value="0"><?php esc_html_e( 'Todos los productos', 'woo-contifico' ); ?></option>
                                         <?php foreach ( $product_choices as $choice ) : ?>
                                                 <option value="<?php echo esc_attr( $choice['id'] ); ?>" <?php selected( $filters['product_id'], $choice['id'] ); ?>><?php echo esc_html( $choice['label'] ); ?></option>
+                                        <?php endforeach; ?>
+                                </select>
+                        </label>
+                        <label>
+                                <?php esc_html_e( 'Categoría', 'woo-contifico' ); ?>
+                                <select name="category_id">
+                                        <option value="0"><?php esc_html_e( 'Todas las categorías', 'woo-contifico' ); ?></option>
+                                        <?php foreach ( $category_choices as $choice ) : ?>
+                                                <option value="<?php echo esc_attr( $choice['id'] ); ?>" <?php selected( $filters['category_id'], $choice['id'] ); ?>><?php echo esc_html( $choice['label'] ); ?></option>
                                         <?php endforeach; ?>
                                 </select>
                         </label>
