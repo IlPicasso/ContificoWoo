@@ -190,22 +190,25 @@ class Woo_Contifico_Order_Report_Pdf {
     }
 
     function render_info_columns( $pdf ) {
-        $usable_width = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
-        $column_width = ( $usable_width - $this->column_gap ) / 2;
-        $start_x      = $pdf->GetX();
-        $start_y      = $pdf->GetY();
-        $max_y        = $start_y;
+        $usable_width   = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
+        $column_width   = ( $usable_width - $this->column_gap ) / 2;
+        $recipient_width = $column_width - 2;
+        $summary_width   = $column_width - 2;
+        $summary_start_x = $pdf->GetX() + $column_width + $this->column_gap + 2;
+        $start_x        = $pdf->GetX();
+        $start_y        = $pdf->GetY();
+        $max_y          = $start_y;
 
         // Recipient / address block.
         $pdf->SetFont( 'Arial', 'B', 11 );
-        $pdf->Cell( $column_width, 6, $this->encode_text( $this->recipient_heading ), 0, 1, 'L' );
+        $pdf->Cell( $recipient_width, 6, $this->encode_text( $this->recipient_heading ), 0, 1, 'L' );
         $pdf->SetFont( 'Arial', '', 10 );
 
         $recipient_line_height = 6.5;
 
         foreach ( $this->recipient_lines as $line ) {
             $pdf->SetX( $start_x );
-            $pdf->MultiCell( $column_width, $recipient_line_height, $this->encode_text( $line ), 0, 'L' );
+            $pdf->MultiCell( $recipient_width, $recipient_line_height, $this->encode_text( $line ), 0, 'L' );
         }
 
         $pdf->Ln( 1 );
@@ -213,14 +216,14 @@ class Woo_Contifico_Order_Report_Pdf {
         $max_y = max( $max_y, $pdf->GetY() );
 
         // Order summary block.
-        $pdf->SetXY( $start_x + $column_width + $this->column_gap, $start_y );
+        $pdf->SetXY( $summary_start_x, $start_y );
         if ( ! empty( $this->order_summary ) ) {
             $pdf->SetFont( 'Arial', 'B', 11 );
             $title = function_exists( '__' ) ? __( 'Detalle del pedido', 'woo-contifico' ) : 'Detalle del pedido';
-            $pdf->Cell( $column_width, 6, $this->encode_text( $title ), 0, 1, 'L' );
+            $pdf->Cell( $summary_width, 6, $this->encode_text( $title ), 0, 1, 'L' );
             $pdf->SetFont( 'Arial', '', 10 );
-            $label_width = $column_width * 0.55;
-            $value_width = $column_width * 0.45;
+            $label_width = $summary_width * 0.55;
+            $value_width = $summary_width * 0.45;
             $line_height = 5.5;
 
             foreach ( $this->order_summary as $row ) {
