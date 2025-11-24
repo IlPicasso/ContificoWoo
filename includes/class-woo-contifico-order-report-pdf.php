@@ -205,7 +205,9 @@ class Woo_Contifico_Order_Report_Pdf {
 
         $recipient_line_height = 6.5;
 
-        foreach ( $this->recipient_lines as $line ) {
+        $recipient_lines = $this->wrap_lines_for_width( $pdf, $this->recipient_lines, $recipient_width );
+
+        foreach ( $recipient_lines as $line ) {
             $pdf->SetX( $start_x );
             $pdf->MultiCell( $recipient_width, $recipient_line_height, $this->encode_text( $line ), 0, 'L' );
         }
@@ -337,6 +339,98 @@ class Woo_Contifico_Order_Report_Pdf {
         $text = preg_replace( "/[\n\r]/", "\n", $text );
 
         return $this->to_win1252( $text );
+    }
+
+    function wrap_lines_for_width( $pdf, $lines, $max_width ) {
+        $wrapped_lines = array();
+
+        foreach ( (array) $lines as $line ) {
+            $normalized_line = preg_replace( "/[\r\n]+/", "\n", (string) $line );
+            $split_lines     = explode( "\n", $normalized_line );
+
+            foreach ( $split_lines as $single_line ) {
+                $single_line = (string) $single_line;
+
+                if ( '' === $single_line ) {
+                    $wrapped_lines[] = '';
+                    continue;
+                }
+
+                $wrapped_lines = array_merge( $wrapped_lines, $this->split_line_to_fit_width( $pdf, $single_line, $max_width ) );
+            }
+        }
+
+        return $wrapped_lines;
+    }
+
+    function split_line_to_fit_width( $pdf, $line, $max_width ) {
+        $line_segments = array();
+        $current_line  = '';
+
+        $tokens = preg_split( '/(\s+)/u', $line, -1, PREG_SPLIT_DELIM_CAPTURE );
+
+        foreach ( $tokens as $token ) {
+            if ( '' === $token ) {
+                continue;
+            }
+
+            $trimmed_token = trim( $token );
+
+            if ( '' !== $trimmed_token && $pdf->GetStringWidth( $trimmed_token ) > $max_width ) {
+                $chunks = $this->chunk_string_for_width( $pdf, $trimmed_token, $max_width );
+
+                foreach ( $chunks as $chunk ) {
+                    $current_line = $this->append_token_to_line( $pdf, $current_line, $chunk, $max_width, $line_segments );
+                }
+
+                continue;
+            }
+
+            $current_line = $this->append_token_to_line( $pdf, $current_line, $token, $max_width, $line_segments );
+        }
+
+        if ( '' !== $current_line ) {
+            $line_segments[] = rtrim( $current_line );
+        }
+
+        return $line_segments;
+    }
+
+    function append_token_to_line( $pdf, $current_line, $token, $max_width, &$lines ) {
+        $candidate = $current_line . $token;
+
+        if ( '' !== $current_line && $pdf->GetStringWidth( $candidate ) > $max_width ) {
+            $lines[]     = rtrim( $current_line );
+            $current_line = ltrim( $token );
+        } else {
+            $current_line = $candidate;
+        }
+
+        return $current_line;
+    }
+
+    function chunk_string_for_width( $pdf, $text, $max_width ) {
+        $chunks  = array();
+        $current = '';
+
+        $characters = preg_split( '//u', $text, -1, PREG_SPLIT_NO_EMPTY );
+
+        foreach ( $characters as $character ) {
+            $candidate = $current . $character;
+
+            if ( '' !== $current && $pdf->GetStringWidth( $candidate ) > $max_width ) {
+                $chunks[] = $current;
+                $current  = $character;
+            } else {
+                $current = $candidate;
+            }
+        }
+
+        if ( '' !== $current ) {
+            $chunks[] = $current;
+        }
+
+        return $chunks;
     }
 
     function to_win1252( $text ) {
