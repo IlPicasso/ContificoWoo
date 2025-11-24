@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.7 =
+* Se aumenta el interlineado y se agrega separación extra en el bloque de datos del cliente en el PDF para que no se superpongan con otros textos.
+
 = 4.1.6 =
 * Se agrega espacio extra entre las líneas del bloque "Detalle del pedido" del PDF para evitar que se superpongan.
 * Los movimientos y transferencias muestran los nombres mapeados en MultiLoca para las bodegas en lugar de solo el código.

@@ -201,10 +201,14 @@ class Woo_Contifico_Order_Report_Pdf {
         $pdf->Cell( $column_width, 6, $this->encode_text( $this->recipient_heading ), 0, 1, 'L' );
         $pdf->SetFont( 'Arial', '', 10 );
 
+        $recipient_line_height = 6.5;
+
         foreach ( $this->recipient_lines as $line ) {
             $pdf->SetX( $start_x );
-            $pdf->MultiCell( $column_width, 5.5, $this->encode_text( $line ), 0, 'L' );
+            $pdf->MultiCell( $column_width, $recipient_line_height, $this->encode_text( $line ), 0, 'L' );
         }
+
+        $pdf->Ln( 1 );
 
         $max_y = max( $max_y, $pdf->GetY() );
 
