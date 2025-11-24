@@ -83,6 +83,10 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.6 =
+* Se agrega espacio extra entre las líneas del bloque "Detalle del pedido" del PDF para evitar que se superpongan.
+* Los movimientos y transferencias muestran los nombres mapeados en MultiLoca para las bodegas en lugar de solo el código.
+
 = 4.1.5 =
 * Se corrige la alineación del encabezado en el PDF para evitar que las líneas de dirección se sobrepongan con el área del logo.
 

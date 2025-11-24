@@ -233,7 +233,7 @@ class Woo_Contifico_Order_Report_Pdf {
                 $pdf->MultiCell( $value_width, $line_height, $this->encode_text( $value ), 0, 'L' );
                 $value_height = $pdf->GetY() - $row_start_y;
 
-                $row_height = max( $label_height, $value_height );
+                $row_height = max( $label_height, $value_height ) + 1;
                 $pdf->SetXY( $row_start_x, $row_start_y + $row_height );
             }
             $max_y = max( $max_y, $pdf->GetY() );

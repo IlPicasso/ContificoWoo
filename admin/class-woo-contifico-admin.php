@@ -2901,6 +2901,15 @@ return $value;
         private function format_warehouse_label_with_code( array $warehouse ) : string {
                 $label = isset( $warehouse['label'] ) ? (string) $warehouse['label'] : '';
                 $code  = isset( $warehouse['code'] ) ? (string) $warehouse['code'] : '';
+                $id    = isset( $warehouse['id'] ) ? (string) $warehouse['id'] : '';
+
+                if ( '' !== $code ) {
+                        $mapped_label = $this->resolve_warehouse_location_label( $code, $id );
+
+                        if ( '' !== $mapped_label ) {
+                                $label = $mapped_label;
+                        }
+                }
 
                 if ( '' === $code && isset( $warehouse['id'] ) ) {
                         $code = (string) $warehouse['id'];
