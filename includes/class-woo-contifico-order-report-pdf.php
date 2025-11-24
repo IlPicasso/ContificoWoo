@@ -153,7 +153,6 @@ class Woo_Contifico_Order_Report_Pdf {
         if ( $logo_width > 0 ) {
             $text_offset += $logo_width + 6;
         }
-    }
 
         $text_width = $usable_width - ( $text_offset - $start_x );
 
