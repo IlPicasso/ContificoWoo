@@ -2633,17 +2633,18 @@ return $value;
 
                 $remote_path = $this->download_remote_logo( $remote_logo_url );
 
+                if ( $this->is_inline_logo_source( $remote_path ) ) {
+                        return $remote_path;
+                }
+
                 if ( '' !== $remote_path && file_exists( $remote_path ) ) {
                         return $remote_path;
                 }
 
                 $preferred_logo = $plugin_dir . 'assets/adams-logo.png';
-                $fallback_logo  = $plugin_dir . 'assets/contifico-logo.png';
 
-                foreach ( [ $preferred_logo, $fallback_logo ] as $candidate ) {
-                        if ( file_exists( $candidate ) ) {
-                                return $candidate;
-                        }
+                if ( file_exists( $preferred_logo ) ) {
+                        return $preferred_logo;
                 }
 
                 $embedded_candidates = array(
@@ -2658,27 +2659,28 @@ return $value;
 
                         $encoded = trim( (string) file_get_contents( $embedded_logo ) );
 
-                        if ( '' === $encoded ) {
+                        if ( '' === $encoded || ! $this->is_valid_image_bytes( (string) base64_decode( $encoded, true ) ) ) {
                                 continue;
                         }
 
-                        $binary = base64_decode( $encoded, true );
-
-                        if ( false === $binary ) {
-                                continue;
-                        }
-
+                        $binary    = base64_decode( $encoded, true );
                         $temp_path = $this->get_temp_logo_path();
 
-                        if ( '' === $temp_path ) {
-                                continue;
+                        if ( '' !== $temp_path ) {
+                                $result = @file_put_contents( $temp_path, $binary );
+
+                                if ( false !== $result && $this->is_valid_image_file( $temp_path ) ) {
+                                        return $temp_path;
+                                }
                         }
 
-                        $result = @file_put_contents( $temp_path, $binary );
+                        return '@' . $binary;
+                }
 
-                        if ( false !== $result ) {
-                                return $temp_path;
-                        }
+                $fallback_logo = $plugin_dir . 'assets/contifico-logo.png';
+
+                if ( file_exists( $fallback_logo ) ) {
+                        return $fallback_logo;
                 }
 
                 return '';
@@ -2700,7 +2702,7 @@ return $value;
                         return '';
                 }
 
-                if ( file_exists( $temp_path ) && filesize( $temp_path ) > 0 ) {
+                if ( file_exists( $temp_path ) && $this->is_valid_image_file( $temp_path ) ) {
                         return $temp_path;
                 }
 
@@ -2713,17 +2715,58 @@ return $value;
                 $code = (int) wp_remote_retrieve_response_code( $response );
                 $body = (string) wp_remote_retrieve_body( $response );
 
-                if ( 200 !== $code || '' === $body ) {
+                if ( 200 !== $code || '' === $body || ! $this->is_valid_image_bytes( $body ) ) {
                         return '';
                 }
 
                 $written = @file_put_contents( $temp_path, $body );
 
-                if ( false === $written ) {
-                        return '';
+                if ( false === $written || ! $this->is_valid_image_file( $temp_path ) ) {
+                        if ( file_exists( $temp_path ) ) {
+                                @unlink( $temp_path );
+                        }
+
+                        return '@' . $body;
                 }
 
                 return $temp_path;
+        }
+
+        /**
+         * Confirm that a stored image can be read by getimagesize.
+         *
+         * @since 4.4.3
+         */
+        private function is_valid_image_file( string $path ) : bool {
+                if ( '' === $path || ! file_exists( $path ) || ! is_readable( $path ) ) {
+                        return false;
+                }
+
+                return $this->is_valid_image_bytes( (string) file_get_contents( $path ) );
+        }
+
+        /**
+         * Confirm that a raw string represents a valid image.
+         *
+         * @since 4.4.3
+         */
+        private function is_valid_image_bytes( string $content ) : bool {
+                if ( '' === $content ) {
+                        return false;
+                }
+
+                $image_info = @getimagesizefromstring( $content );
+
+                return is_array( $image_info ) && ! empty( $image_info[0] ) && ! empty( $image_info[1] );
+        }
+
+        /**
+         * Determine whether the logo source uses inline image data for FPDF.
+         *
+         * @since 4.4.3
+         */
+        private function is_inline_logo_source( string $source ) : bool {
+                return 0 === strpos( $source, '@' );
         }
 
         /**
