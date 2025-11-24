@@ -123,10 +123,13 @@ class Woo_Contifico_Order_Report_Pdf {
         $logo_width  = 0;
         $logo_height = 0;
 
-        if ( '' !== $this->brand_logo_path && file_exists( $this->brand_logo_path ) ) {
+        $logo_source     = $this->brand_logo_path;
+        $has_inline_logo = is_string( $logo_source ) && 0 === strpos( $logo_source, '@' );
+
+        if ( '' !== $logo_source && ( $has_inline_logo || file_exists( $logo_source ) ) ) {
             $logo_max_height = 18;
             $logo_max_width  = 48;
-            $logo_size       = @getimagesize( $this->brand_logo_path );
+            $logo_size       = $has_inline_logo ? @getimagesizefromstring( substr( $logo_source, 1 ) ) : @getimagesize( $logo_source );
 
             if ( is_array( $logo_size ) && isset( $logo_size[0], $logo_size[1] ) && (int) $logo_size[0] > 0 && (int) $logo_size[1] > 0 ) {
                 $ratio       = min( $logo_max_width / $logo_size[0], $logo_max_height / $logo_size[1] );
@@ -137,7 +140,7 @@ class Woo_Contifico_Order_Report_Pdf {
                 $logo_height = $logo_max_height;
             }
 
-            $pdf->Image( $this->brand_logo_path, $start_x, $start_y, $logo_width, $logo_height );
+            $pdf->Image( $logo_source, $start_x, $start_y, $logo_width, $logo_height );
         }
 
         $text_offset = $start_x;

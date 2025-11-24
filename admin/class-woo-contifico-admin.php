@@ -2633,6 +2633,10 @@ return $value;
 
                 $remote_path = $this->download_remote_logo( $remote_logo_url );
 
+                if ( $this->is_inline_logo_source( $remote_path ) ) {
+                        return $remote_path;
+                }
+
                 if ( '' !== $remote_path && file_exists( $remote_path ) ) {
                         return $remote_path;
                 }
@@ -2655,27 +2659,28 @@ return $value;
 
                         $encoded = trim( (string) file_get_contents( $embedded_logo ) );
 
-                        if ( '' === $encoded ) {
+                        if ( '' === $encoded || ! $this->is_valid_image_bytes( (string) base64_decode( $encoded, true ) ) ) {
                                 continue;
                         }
 
-                        $binary = base64_decode( $encoded, true );
-
-                        if ( false === $binary ) {
-                                continue;
-                        }
-
+                        $binary    = base64_decode( $encoded, true );
                         $temp_path = $this->get_temp_logo_path();
 
-                        if ( '' === $temp_path ) {
-                                continue;
+                        if ( '' !== $temp_path ) {
+                                $result = @file_put_contents( $temp_path, $binary );
+
+                                if ( false !== $result && $this->is_valid_image_file( $temp_path ) ) {
+                                        return $temp_path;
+                                }
                         }
 
-                        $result = @file_put_contents( $temp_path, $binary );
+                        return '@' . $binary;
+                }
 
-                        if ( false !== $result ) {
-                                return $temp_path;
-                        }
+                $fallback_logo = $plugin_dir . 'assets/contifico-logo.png';
+
+                if ( file_exists( $fallback_logo ) ) {
+                        return $fallback_logo;
                 }
 
                 $fallback_logo = $plugin_dir . 'assets/contifico-logo.png';
@@ -2723,7 +2728,11 @@ return $value;
                 $written = @file_put_contents( $temp_path, $body );
 
                 if ( false === $written || ! $this->is_valid_image_file( $temp_path ) ) {
-                        return '';
+                        if ( file_exists( $temp_path ) ) {
+                                @unlink( $temp_path );
+                        }
+
+                        return '@' . $body;
                 }
 
                 return $temp_path;
@@ -2755,6 +2764,15 @@ return $value;
                 $image_info = @getimagesizefromstring( $content );
 
                 return is_array( $image_info ) && ! empty( $image_info[0] ) && ! empty( $image_info[1] );
+        }
+
+        /**
+         * Determine whether the logo source uses inline image data for FPDF.
+         *
+         * @since 4.4.3
+         */
+        private function is_inline_logo_source( string $source ) : bool {
+                return 0 === strpos( $source, '@' );
         }
 
         /**
