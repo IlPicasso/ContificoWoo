@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.12 =
+* Se fija la columna de "Detalle del pedido" en el margen derecho después del título para que no retome el margen izquierdo tras imprimir el encabezado.
+
 = 4.1.11 =
 * Se alinea el bloque del cliente con el margen izquierdo fijo en el PDF para evitar que se solape con el bloque de "Detalle del pedido".
 

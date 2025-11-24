@@ -225,6 +225,7 @@ class Woo_Contifico_Order_Report_Pdf {
             $title = function_exists( '__' ) ? __( 'Detalle del pedido', 'woo-contifico' ) : 'Detalle del pedido';
             $pdf->Cell( $summary_width, 6, $this->encode_text( $title ), 0, 1, 'L' );
             $pdf->SetFont( 'Arial', '', 10 );
+            $pdf->SetXY( $summary_start_x, $pdf->GetY() );
             $label_width = $summary_width * 0.55;
             $value_width = $summary_width * 0.45;
             $line_height = 5.5;
