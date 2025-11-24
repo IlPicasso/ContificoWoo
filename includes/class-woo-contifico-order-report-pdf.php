@@ -126,8 +126,6 @@ class Woo_Contifico_Order_Report_Pdf {
 
     function render_branding( $pdf ) {
         $usable_width = $pdf->GetPageWidth() - ( 2 * $this->margin_left );
-        $left_width   = $usable_width * 0.5;
-        $right_width  = $usable_width * 0.5;
         $start_x      = $pdf->GetX();
         $start_y      = $pdf->GetY();
 
@@ -155,20 +153,27 @@ class Woo_Contifico_Order_Report_Pdf {
         if ( $logo_width > 0 ) {
             $text_offset += $logo_width + 6;
         }
+    }
+
+        $text_width = $usable_width - ( $text_offset - $start_x );
 
         $brand_block_end_y = $start_y;
 
         if ( '' !== $this->brand_name ) {
             $pdf->SetFont( 'Arial', 'B', 16 );
             $pdf->SetXY( $text_offset, $start_y );
-            $pdf->Cell(
-                max( 0, $left_width - ( $text_offset - $start_x ) ),
-                8,
-                $this->encode_text( $this->brand_name ),
-                0,
-                1,
-                'L'
-            );
+            $pdf->MultiCell( $text_width, 8, $this->encode_text( $this->brand_name ), 0, 'L' );
+            $brand_block_end_y = max( $brand_block_end_y, $pdf->GetY() );
+        }
+
+        if ( ! empty( $this->brand_details ) ) {
+            $pdf->SetFont( 'Arial', '', 10 );
+            $pdf->SetXY( $text_offset, $brand_block_end_y + 1 );
+
+            foreach ( $this->brand_details as $line ) {
+                $pdf->MultiCell( $text_width, 5, $this->encode_text( $line ), 0, 'L' );
+            }
+
             $brand_block_end_y = max( $brand_block_end_y, $pdf->GetY() );
         }
 
@@ -176,18 +181,7 @@ class Woo_Contifico_Order_Report_Pdf {
             $brand_block_end_y = max( $brand_block_end_y, $start_y + $logo_height );
         }
 
-        $details_end_y = $start_y;
-
-        if ( ! empty( $this->brand_details ) ) {
-            $pdf->SetFont( 'Arial', '', 10 );
-            $pdf->SetXY( $start_x + $left_width, $start_y );
-            foreach ( $this->brand_details as $line ) {
-                $pdf->Cell( $right_width, 5, $this->encode_text( $line ), 0, 2, 'R' );
-            }
-            $details_end_y = $pdf->GetY();
-        }
-
-        $pdf->SetY( max( $brand_block_end_y, $details_end_y ) + 10 );
+        $pdf->SetY( $brand_block_end_y + 10 );
     }
 
     function render_title( $pdf ) {
