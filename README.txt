@@ -83,6 +83,18 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.16 =
+* Los PDFs de movimientos y transferencias ahora recuperan el nombre amigable de MultiLoca aun cuando solo está disponible el identificador de ubicación, evitando que se muestre solo el código de bodega.
+
+= 4.1.15 =
+* Se usa el nombre amigable configurado en MultiLoca (junto al código de bodega) en todas las secciones del PDF, incluidos los listados de movimientos y transferencias.
+
+= 4.1.14 =
+* Los PDFs de movimientos y transferencias ahora muestran el nombre amigable configurado en MultiLoca para las bodegas asociadas y conservan el código de bodega entre paréntesis para mayor claridad.
+
+= 4.1.13 =
+* Los PDFs de movimientos y transferencias priorizan el nombre mapeado de MultiLoca para las bodegas y muestran entre paréntesis el código de bodega en lugar del ID interno.
+
 = 4.1.12 =
 * Se fija la columna de "Detalle del pedido" en el margen derecho después del título para que no retome el margen izquierdo tras imprimir el encabezado.
 
