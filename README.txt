@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.28 =
+* Muestra en el PDF que el pedido está completado y la factura fue generada cuando exista una factura asociada al pedido.
+
 = 4.1.27 =
 * Añade en los movimientos del PDF el motivo del ajuste de inventario usando la causa reportada (venta, reintegro, sincronización manual, etc.).
 

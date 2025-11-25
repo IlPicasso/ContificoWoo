@@ -7068,11 +7068,15 @@ $order_note = sprintf(
          */
         private function generate_order_inventory_report_pdf( WC_Order $order ) : string {
                 $pdf = new Woo_Contifico_Order_Report_Pdf();
-                $order_number = $order->get_order_number();
-                $date_format  = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
-                $order_date   = $order->get_date_created();
-                $date_label   = $order_date ? wc_format_datetime( $order_date, $date_format ) : __( 'Sin fecha registrada', $this->plugin_name );
-                $status_label = wc_get_order_status_name( $order->get_status() );
+                $order_number      = $order->get_order_number();
+                $date_format       = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+                $order_date        = $order->get_date_created();
+                $date_label        = $order_date ? wc_format_datetime( $order_date, $date_format ) : __( 'Sin fecha registrada', $this->plugin_name );
+                $status            = $order->get_status();
+                $status_label      = wc_get_order_status_name( $status );
+                $invoice_number    = trim( (string) $order->get_meta( '_numero_factura' ) );
+                $invoice_id        = trim( (string) $order->get_meta( '_id_factura' ) );
+                $invoice_reference = $invoice_number ?: $invoice_id;
                 $shipping_methods = $order->get_shipping_methods();
                 $shipping_label   = empty( $shipping_methods )
                         ? __( 'Sin método de envío', $this->plugin_name )
@@ -7128,6 +7132,17 @@ $order_note = sprintf(
                         [ 'label' => __( 'Método de envío', $this->plugin_name ), 'value' => $shipping_label ],
                         [ 'label' => __( 'Modalidad de entrega', $this->plugin_name ), 'value' => $fulfillment_label ],
                 ];
+
+                if ( 'completed' === $status && '' !== $invoice_reference ) {
+                        $invoice_label = '' !== $invoice_reference
+                                ? sprintf( __( 'Pedido completado y factura generada (%s).', $this->plugin_name ), $invoice_reference )
+                                : __( 'Pedido completado y factura generada.', $this->plugin_name );
+
+                        $order_summary[] = [
+                                'label' => __( 'Facturación', $this->plugin_name ),
+                                'value' => $invoice_label,
+                        ];
+                }
 
                 $pdf->set_order_summary( $order_summary );
 
