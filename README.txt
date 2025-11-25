@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.25 =
+* Recupera los nombres oficiales de las bodegas desde la API de Contífico cuando los mapas de MultiLoca no proveen etiquetas, evitando que los PDFs repitan nombres amigables incorrectos.
+
 = 4.1.24 =
 * Conserva los nombres de cada bodega al formatear etiquetas para movimientos y transferencias, usando los alias mapeados solo cuando faltan los nombres propios.
 

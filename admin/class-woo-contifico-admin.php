@@ -3002,6 +3002,12 @@ return $value;
                $location_label = isset( $warehouse['location_label'] ) ? (string) $warehouse['location_label'] : '';
                $is_mapped      = isset( $warehouse['mapped'] ) ? (bool) $warehouse['mapped'] : false;
 
+               $contifico_label = $this->resolve_contifico_warehouse_label( $code, $id );
+
+               if ( '' !== $contifico_label && ( '' === $label || $label === $code || $label === $id ) ) {
+                       $label = $contifico_label;
+               }
+
                if ( '' !== $location_label ) {
                        if ( '' === $label ) {
                                $label = $location_label;
@@ -3034,6 +3040,29 @@ return $value;
                }
 
                return $label;
+       }
+
+       private function resolve_contifico_warehouse_label( string $code, string $id ) : string {
+               $code = trim( $code );
+               $id   = trim( $id );
+
+               if ( '' !== $code && method_exists( $this->contifico, 'get_warehouse_label_by_code' ) ) {
+                       $label = (string) $this->contifico->get_warehouse_label_by_code( $code );
+
+                       if ( '' !== $label ) {
+                               return $label;
+                       }
+               }
+
+               if ( '' !== $id && method_exists( $this->contifico, 'get_warehouse_label_by_id' ) ) {
+                       $label = (string) $this->contifico->get_warehouse_label_by_id( $id );
+
+                       if ( '' !== $label ) {
+                               return $label;
+                       }
+               }
+
+               return '';
        }
 
        /**
