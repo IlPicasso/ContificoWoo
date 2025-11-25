@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.27 =
+* Añade en los movimientos del PDF el motivo del ajuste de inventario usando la causa reportada (venta, reintegro, sincronización manual, etc.).
+
 = 4.1.26 =
 * Usa el campo `nombre` entregado por la API de Contífico como etiqueta principal de las bodegas para que los PDFs muestren los nombres oficiales en lugar de los códigos.
 

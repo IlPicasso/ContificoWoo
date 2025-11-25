@@ -2039,6 +2039,7 @@ return $value;
                        'order_trigger'    => isset( $entry['order_trigger'] ) ? (string) $entry['order_trigger'] : '',
                        'context'          => isset( $entry['context'] ) ? (string) $entry['context'] : '',
                        'order_source'     => isset( $entry['order_source'] ) ? (string) $entry['order_source'] : '',
+                       'reason'           => isset( $entry['reason'] ) ? (string) $entry['reason'] : '',
                        'order_item_id'    => isset( $entry['order_item_id'] ) ? (int) $entry['order_item_id'] : 0,
                        'reference'        => isset( $entry['reference'] ) ? (string) $entry['reference'] : '',
                        'error_message'    => isset( $entry['error_message'] ) ? (string) $entry['error_message'] : '',
@@ -2185,21 +2186,26 @@ return $value;
                 $quantity   = abs( $delta );
                 $warehouses = $this->resolve_manual_sync_movement_warehouses( $event_type, $sync_scope );
 
-                return $this->build_inventory_movement_entry( [
-                        'event_type'   => $event_type,
-                        'product_id'   => isset( $product_entry['id'] ) ? (string) $product_entry['id'] : '',
-                        'wc_product_id'=> $wc_product->get_id(),
-                        'sku'          => (string) $wc_product->get_sku(),
-                        'product_name' => $wc_product->get_name(),
-                        'quantity'     => $quantity,
-                        'warehouses'   => $warehouses,
-                        'context'      => 'manual_sync',
-                        'order_source' => 'manual_sync_' . $sync_scope,
-                        'order_trigger'=> 'manual_sync',
-                        'status'       => 'success',
-                        'sync_type'    => in_array( $sync_scope, [ 'global', 'product' ], true ) ? $sync_scope : 'global',
-                ] );
-        }
+               $scope_reason = 'product' === $sync_scope
+                       ? __( 'sincronización manual por producto', $this->plugin_name )
+                       : __( 'sincronización manual global', $this->plugin_name );
+
+               return $this->build_inventory_movement_entry( [
+                       'event_type'    => $event_type,
+                       'product_id'    => isset( $product_entry['id'] ) ? (string) $product_entry['id'] : '',
+                       'wc_product_id' => $wc_product->get_id(),
+                       'sku'           => (string) $wc_product->get_sku(),
+                       'product_name'  => $wc_product->get_name(),
+                       'quantity'      => $quantity,
+                       'warehouses'    => $warehouses,
+                       'context'       => 'manual_sync',
+                       'order_source'  => 'manual_sync_' . $sync_scope,
+                       'order_trigger' => 'manual_sync',
+                       'status'        => 'success',
+                       'sync_type'     => in_array( $sync_scope, [ 'global', 'product' ], true ) ? $sync_scope : 'global',
+                       'reason'        => $scope_reason,
+               ] );
+       }
 
         /**
          * Build inventory movement entries from stored manual sync history updates.
@@ -2255,6 +2261,7 @@ return $value;
                                 'order_trigger' => 'manual_sync_summary',
                                 'status'        => $entry_status,
                                 'sync_type'     => 'global',
+                                'reason'        => __( 'resumen de sincronización global', $this->plugin_name ),
                         ] );
                 }
 
@@ -3099,6 +3106,56 @@ return $value;
                }
 
                return [ 'from' => $from_label, 'to' => $to_label ];
+       }
+
+       /**
+        * Describe why a specific inventory movement occurred.
+        *
+        * @since 4.1.27
+        */
+       private function describe_inventory_movement_reason_for_report( array $movement ) : string {
+               $reason = isset( $movement['reason'] ) ? trim( (string) $movement['reason'] ) : '';
+
+               if ( '' !== $reason ) {
+                       return $reason;
+               }
+
+               $context      = isset( $movement['context'] ) ? (string) $movement['context'] : '';
+               $order_source = isset( $movement['order_source'] ) ? (string) $movement['order_source'] : '';
+               $order_trigger = isset( $movement['order_trigger'] ) ? (string) $movement['order_trigger'] : '';
+               $order_id     = isset( $movement['order_id'] ) ? (int) $movement['order_id'] : 0;
+
+               if ( 'manual_sync' === $context || 0 === strpos( $order_source, 'manual_sync' ) ) {
+                       $scope = str_replace( 'manual_sync_', '', $order_source );
+
+                       if ( 'product' === $scope ) {
+                               return __( 'sincronización manual por producto', $this->plugin_name );
+                       }
+
+                       return __( 'sincronización manual de inventario', $this->plugin_name );
+               }
+
+               if (
+                       'woocommerce_restore_order_stock' === $order_trigger
+                       || 'woocommerce_order_refunded' === $order_trigger
+                       || 'restore' === $context
+               ) {
+                       return $order_id
+                               ? sprintf( __( 'reintegro de stock de la orden #%d', $this->plugin_name ), $order_id )
+                               : __( 'reintegro de stock de la orden', $this->plugin_name );
+               }
+
+               if (
+                       'transfer' === $context
+                       || 'woocommerce_reduce_order_stock' === $order_trigger
+                       || 'order' === $order_source
+               ) {
+                       return $order_id
+                               ? sprintf( __( 'despacho de la orden #%d', $this->plugin_name ), $order_id )
+                               : __( 'despacho de pedido en línea', $this->plugin_name );
+               }
+
+               return '';
        }
 
         /**
@@ -5939,10 +5996,14 @@ $filters = [
                                         $product_id   = $this->contifico->get_product_id( $sku );
                                         $quantity     = (float) $item->get_quantity();
 
-                                        $transfer_stock['detalles'][] = [
-                                                'producto_id' => $product_id,
-                                                'cantidad'    => $quantity,
-                                        ];
+                                       $transfer_stock['detalles'][] = [
+                                               'producto_id' => $product_id,
+                                               'cantidad'    => $quantity,
+                                       ];
+
+                                       $movement_reason = $order_id
+                                               ? sprintf( __( 'despacho de la orden #%d', $this->plugin_name ), $order_id )
+                                               : __( 'despacho de pedido en línea', $this->plugin_name );
 
                                                 $group_entries[] = $this->build_inventory_movement_entry( [
                                                         'order_id'      => $order_id,
@@ -5971,6 +6032,7 @@ $filters = [
                                                         'order_trigger' => 'woocommerce_reduce_order_stock',
                                                         'context'       => 'transfer',
                                                         'order_source'  => 'order',
+                                                        'reason'        => $movement_reason,
                                                 'order_item_id' => $item->get_id(),
                                                 'sync_type'     => 'global',
                                                 'location'      => [
@@ -6177,6 +6239,7 @@ $filters = [
                                                         'id'    => isset( $item_context['location_id'] ) ? $item_context['location_id'] : $group_context['location_id'],
                                                         'label' => isset( $item_context['location_label'] ) ? $item_context['location_label'] : $group_context['location_label'],
                                                 ],
+                                                'reason'        => $reason_label,
                                         ] );
                                 }
 
@@ -7171,14 +7234,18 @@ $order_note = sprintf(
                                 $product_name  = wp_strip_all_tags( (string) $movement['product_name'] );
                                 $sku_label     = $movement['sku'] ?: __( 'Sin SKU', $this->plugin_name );
                                 $quantity      = wc_format_decimal( $movement['quantity'], 2 );
+                                $reason        = $this->describe_inventory_movement_reason_for_report( $movement );
 
                                 $location_fragment = '' !== $location
                                         ? sprintf( __( ' en la ubicación %s', $this->plugin_name ), $location )
                                         : '';
+                                $reason_fragment = '' !== $reason
+                                        ? ' ' . sprintf( __( 'Motivo: %s', $this->plugin_name ), $reason )
+                                        : '';
 
                                 $pdf->add_inventory_movement_line(
                                         sprintf(
-                                                __( 'El %1$s se registró un %2$s de %3$s unidades de %4$s (SKU %5$s) desde %6$s hacia %7$s%8$s. Ref: %9$s', $this->plugin_name ),
+                                                __( 'El %1$s se registró un %2$s de %3$s unidades de %4$s (SKU %5$s) desde %6$s hacia %7$s%8$s%9$s. Ref: %10$s', $this->plugin_name ),
                                                 $movement_date,
                                                 strtolower( $event_label ),
                                                 $quantity,
@@ -7187,6 +7254,7 @@ $order_note = sprintf(
                                                 $from_label ?: __( 'bodega no especificada', $this->plugin_name ),
                                                 $to_label ?: __( 'bodega no especificada', $this->plugin_name ),
                                                 $location_fragment,
+                                                $reason_fragment,
                                                 $reference
                                         )
                                 );
