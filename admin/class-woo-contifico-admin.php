@@ -2019,12 +2019,20 @@ return $value;
                        'quantity'         => isset( $entry['quantity'] ) ? (float) $entry['quantity'] : 0.0,
                        'warehouses'       => [
                                'from' => [
-                                       'id'    => isset( $entry['warehouses']['from']['id'] ) ? (string) $entry['warehouses']['from']['id'] : '',
-                                       'label' => isset( $entry['warehouses']['from']['label'] ) ? (string) $entry['warehouses']['from']['label'] : '',
+                                       'id'             => isset( $entry['warehouses']['from']['id'] ) ? (string) $entry['warehouses']['from']['id'] : '',
+                                       'code'           => isset( $entry['warehouses']['from']['code'] ) ? (string) $entry['warehouses']['from']['code'] : '',
+                                       'label'          => isset( $entry['warehouses']['from']['label'] ) ? (string) $entry['warehouses']['from']['label'] : '',
+                                       'location_id'    => isset( $entry['warehouses']['from']['location_id'] ) ? (string) $entry['warehouses']['from']['location_id'] : '',
+                                       'location_label' => isset( $entry['warehouses']['from']['location_label'] ) ? (string) $entry['warehouses']['from']['location_label'] : '',
+                                       'mapped'         => isset( $entry['warehouses']['from']['mapped'] ) ? (bool) $entry['warehouses']['from']['mapped'] : false,
                                ],
                                'to'   => [
-                                       'id'    => isset( $entry['warehouses']['to']['id'] ) ? (string) $entry['warehouses']['to']['id'] : '',
-                                       'label' => isset( $entry['warehouses']['to']['label'] ) ? (string) $entry['warehouses']['to']['label'] : '',
+                                       'id'             => isset( $entry['warehouses']['to']['id'] ) ? (string) $entry['warehouses']['to']['id'] : '',
+                                       'code'           => isset( $entry['warehouses']['to']['code'] ) ? (string) $entry['warehouses']['to']['code'] : '',
+                                       'label'          => isset( $entry['warehouses']['to']['label'] ) ? (string) $entry['warehouses']['to']['label'] : '',
+                                       'location_id'    => isset( $entry['warehouses']['to']['location_id'] ) ? (string) $entry['warehouses']['to']['location_id'] : '',
+                                       'location_label' => isset( $entry['warehouses']['to']['location_label'] ) ? (string) $entry['warehouses']['to']['location_label'] : '',
+                                       'mapped'         => isset( $entry['warehouses']['to']['mapped'] ) ? (bool) $entry['warehouses']['to']['mapped'] : false,
                                ],
                        ],
                        'order_status'     => isset( $entry['order_status'] ) ? (string) $entry['order_status'] : '',
@@ -2898,35 +2906,39 @@ return $value;
                 return __( 'Ubicación predeterminada', 'woo-contifico' );
         }
 
-        private function format_warehouse_label_with_code( array $warehouse ) : string {
-                $label = isset( $warehouse['label'] ) ? (string) $warehouse['label'] : '';
-                $code  = isset( $warehouse['code'] ) ? (string) $warehouse['code'] : '';
-                $id    = isset( $warehouse['id'] ) ? (string) $warehouse['id'] : '';
+       private function format_warehouse_label_with_code( array $warehouse ) : string {
+               $label          = isset( $warehouse['label'] ) ? (string) $warehouse['label'] : '';
+               $code           = isset( $warehouse['code'] ) ? (string) $warehouse['code'] : '';
+               $id             = isset( $warehouse['id'] ) ? (string) $warehouse['id'] : '';
+               $location_id    = isset( $warehouse['location_id'] ) ? (string) $warehouse['location_id'] : '';
+               $location_label = isset( $warehouse['location_label'] ) ? (string) $warehouse['location_label'] : '';
 
-                if ( '' !== $code ) {
-                        $mapped_label = $this->resolve_warehouse_location_label( $code, $id );
+               if ( '' !== $location_label ) {
+                       $label = $location_label;
+               }
 
-                        if ( '' !== $mapped_label ) {
-                                $label = $mapped_label;
-                        }
-                }
+               if ( '' !== $code ) {
+                       $mapped_label = $this->resolve_warehouse_location_label( $code, $location_id );
 
-                if ( '' === $code && isset( $warehouse['id'] ) ) {
-                        $code = (string) $warehouse['id'];
-                }
+                       if ( '' !== $mapped_label ) {
+                               $label = $mapped_label;
+                       }
+               }
 
-                $label = '' !== $label ? $label : $code;
+               if ( '' === $label ) {
+                       $label = '' !== $code ? $code : $id;
+               }
 
-                if ( '' === $label ) {
-                        return '';
-                }
+               if ( '' === $label ) {
+                       return '';
+               }
 
-                if ( '' !== $code && false === stripos( $label, '(' . $code . ')' ) ) {
-                        return sprintf( '%s (%s)', $label, $code );
-                }
+               if ( '' !== $code && false === stripos( $label, '(' . $code . ')' ) ) {
+                       return sprintf( '%s (%s)', $label, $code );
+               }
 
-                return $label;
-        }
+               return $label;
+       }
 
         /**
          * Group order items by their resolved location context.
@@ -5734,22 +5746,33 @@ $filters = [
                                                 'cantidad'    => $quantity,
                                         ];
 
-                                        $group_entries[] = $this->build_inventory_movement_entry( [
-                                                'order_id'      => $order_id,
-                                                'event_type'    => 'egreso',
-                                                'product_id'    => $product_id,
-                                                'wc_product_id' => $wc_product->get_id(),
-                                                'sku'           => $sku,
-                                                'product_name'  => $wc_product->get_name(),
-                                                'quantity'      => $quantity,
-                                                'warehouses'    => [
-                                                        'from' => [ 'id' => (string) $group_context['id'], 'label' => $group_context['label'] ],
-                                                        'to'   => [ 'id' => (string) $id_destination_warehouse, 'label' => $destination_code ],
-                                                ],
-                                                'order_status'  => $order->get_status(),
-                                                'order_trigger' => 'woocommerce_reduce_order_stock',
-                                                'context'       => 'transfer',
-                                                'order_source'  => 'order',
+                                                $group_entries[] = $this->build_inventory_movement_entry( [
+                                                        'order_id'      => $order_id,
+                                                        'event_type'    => 'egreso',
+                                                        'product_id'    => $product_id,
+                                                        'wc_product_id' => $wc_product->get_id(),
+                                                        'sku'           => $sku,
+                                                        'product_name'  => $wc_product->get_name(),
+                                                        'quantity'      => $quantity,
+                                                        'warehouses'    => [
+                                                                'from' => [
+                                                                        'id'             => (string) $group_context['id'],
+                                                                        'code'           => (string) $group_context['code'],
+                                                                        'label'          => $group_context['label'],
+                                                                        'location_id'    => (string) $group_context['location_id'],
+                                                                        'location_label' => (string) $group_context['location_label'],
+                                                                        'mapped'         => (bool) $group_context['mapped'],
+                                                                ],
+                                                                'to'   => [
+                                                                        'id'    => (string) $id_destination_warehouse,
+                                                                        'code'  => (string) $destination_code,
+                                                                        'label' => $destination_code,
+                                                                ],
+                                                        ],
+                                                        'order_status'  => $order->get_status(),
+                                                        'order_trigger' => 'woocommerce_reduce_order_stock',
+                                                        'context'       => 'transfer',
+                                                        'order_source'  => 'order',
                                                 'order_item_id' => $item->get_id(),
                                                 'sync_type'     => 'global',
                                                 'location'      => [
@@ -5923,22 +5946,33 @@ $filters = [
                                                 'cantidad'    => $item_quantity,
                                         ];
 
-                                        $group_entries[] = $this->build_inventory_movement_entry( [
-                                                'order_id'      => $order_id,
-                                                'event_type'    => 'ingreso',
-                                                'product_id'    => $product_id,
-                                                'wc_product_id' => $wc_product->get_id(),
-                                                'sku'           => $sku,
-                                                'product_name'  => $wc_product->get_name(),
-                                                'quantity'      => $item_quantity,
-                                                'warehouses'    => [
-                                                        'from' => [ 'id' => (string) $id_origin_warehouse, 'label' => $origin_code ],
-                                                        'to'   => [ 'id' => (string) $group_context['id'], 'label' => $group_context['label'] ],
-                                                ],
-                                                'order_status'  => $order->get_status(),
-                                                'order_trigger' => $trigger,
-                                                'context'       => 'restore',
-                                                'order_source'  => $order_source,
+                                                $group_entries[] = $this->build_inventory_movement_entry( [
+                                                        'order_id'      => $order_id,
+                                                        'event_type'    => 'ingreso',
+                                                        'product_id'    => $product_id,
+                                                        'wc_product_id' => $wc_product->get_id(),
+                                                        'sku'           => $sku,
+                                                        'product_name'  => $wc_product->get_name(),
+                                                        'quantity'      => $item_quantity,
+                                                        'warehouses'    => [
+                                                                'from' => [
+                                                                        'id'    => (string) $id_origin_warehouse,
+                                                                        'code'  => (string) $origin_code,
+                                                                        'label' => $origin_code,
+                                                                ],
+                                                                'to'   => [
+                                                                        'id'             => (string) $group_context['id'],
+                                                                        'code'           => (string) $group_context['code'],
+                                                                        'label'          => $group_context['label'],
+                                                                        'location_id'    => (string) $group_context['location_id'],
+                                                                        'location_label' => (string) $group_context['location_label'],
+                                                                        'mapped'         => (bool) $group_context['mapped'],
+                                                                ],
+                                                        ],
+                                                        'order_status'  => $order->get_status(),
+                                                        'order_trigger' => $trigger,
+                                                        'context'       => 'restore',
+                                                        'order_source'  => $order_source,
                                                 'order_item_id' => $item->get_id(),
                                                 'sync_type'     => 'global',
                                                 'location'      => [
