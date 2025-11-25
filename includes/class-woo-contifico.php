@@ -821,6 +821,9 @@ class Woo_Contifico
         $this->loader->add_action('admin_post_woo_contifico_export_inventory_movements', $plugin_admin, 'export_inventory_movements');
         $this->loader->add_action('admin_post_woo_contifico_order_pdf', $plugin_admin, 'download_order_inventory_report');
 
+        $this->loader->add_filter('manage_edit-shop_order_columns', $plugin_admin, 'register_shop_order_invoice_column', 20, 1);
+        $this->loader->add_action('manage_shop_order_posts_custom_column', $plugin_admin, 'render_shop_order_invoice_column', 20, 2);
+
         # Plugin settings link in plugins list table
         $plugin_basename = $this->plugin_name . '/' . $this->get_plugin_name();
         $this->loader->add_filter("plugin_action_links_{$plugin_basename}.php", $plugin_admin, 'add_settings_link');

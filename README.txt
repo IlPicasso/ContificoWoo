@@ -83,6 +83,10 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.30 =
+* Hace clicable el número de factura en el PDF para abrir el RIDE cuando exista enlace disponible.
+* Añade enlaces rápidos al RIDE y al reporte PDF desde la lista de pedidos y el detalle de la orden en WooCommerce.
+
 = 4.1.29 =
 * Almacena la ID y el enlace RIDE de la factura generada para mostrarlos en el PDF cuando el pedido esté completado.
 

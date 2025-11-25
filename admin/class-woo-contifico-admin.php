@@ -7002,9 +7002,47 @@ $order_note = sprintf(
 		$fields                           = $this->woo_contifico->get_account_fields();
 		$fields['tax_type']['value']      = $tax_type;
 		$fields['tax_id']['value']        = $tax_id;
-		$fields['taxpayer_type']['value'] = $taxpayer_type;
+                $fields['taxpayer_type']['value'] = $taxpayer_type;
 
                 require_once plugin_dir_path( __FILE__ ) . 'partials/woo-contifico-admin-edit-fields.php';
+
+                $invoice_details = $this->resolve_order_invoice_details_for_report( $order );
+                $invoice_number  = $invoice_details['number'];
+                $ride_url        = $invoice_details['ride_url'];
+
+                if ( '' !== $invoice_number || '' !== $ride_url ) {
+                        $ride_link = '' !== $ride_url
+                                ? sprintf(
+                                        '<a href="%1$s" target="_blank" rel="noopener noreferrer">%2$s</a>',
+                                        esc_url( $ride_url ),
+                                        '' !== $invoice_number
+                                                ? esc_html( $invoice_number )
+                                                : esc_html__( 'Ver RIDE de factura', $this->plugin_name )
+                                )
+                                : esc_html( $invoice_number );
+
+                        printf(
+                                '<p><strong>%1$s</strong><br>%2$s</p>',
+                                esc_html__( 'Factura Contífico', $this->plugin_name ),
+                                $ride_link
+                        );
+                }
+        }
+
+        private function get_order_pdf_download_url( WC_Order $order ) : string {
+                $order_id = $order->get_id();
+
+                return wp_nonce_url(
+                        add_query_arg(
+                                [
+                                        'action'   => 'woo_contifico_order_pdf',
+                                        'order_id' => $order_id,
+                                ],
+                                admin_url( 'admin-post.php' )
+                        ),
+                        'woo_contifico_order_pdf_' . $order_id,
+                        '_wccontifico_nonce'
+                );
         }
 
         /**
@@ -7021,18 +7059,7 @@ $order_note = sprintf(
                         return;
                 }
 
-                $order_id = $order->get_id();
-                $url      = wp_nonce_url(
-                        add_query_arg(
-                                [
-                                        'action'   => 'woo_contifico_order_pdf',
-                                        'order_id' => $order_id,
-                                ],
-                                admin_url( 'admin-post.php' )
-                        ),
-                        'woo_contifico_order_pdf_' . $order_id,
-                        '_wccontifico_nonce'
-                );
+                $url = $this->get_order_pdf_download_url( $order );
 
                 printf(
                         '<p class="form-field"><a class="button button-primary" href="%1$s">%2$s</a></p>',
@@ -7082,6 +7109,122 @@ $order_note = sprintf(
                 header( 'Content-Length: ' . $content_length );
                 echo $pdf_content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
                 exit;
+        }
+
+        public function register_shop_order_invoice_column( array $columns ) : array {
+                $insertion_point = 'order_status';
+                $new_columns     = [];
+
+                foreach ( $columns as $key => $label ) {
+                        $new_columns[ $key ] = $label;
+
+                        if ( $insertion_point === $key ) {
+                                $new_columns['woo_contifico_invoice'] = __( 'Contífico', $this->plugin_name );
+                        }
+                }
+
+                if ( ! isset( $new_columns['woo_contifico_invoice'] ) ) {
+                        $new_columns['woo_contifico_invoice'] = __( 'Contífico', $this->plugin_name );
+                }
+
+                return $new_columns;
+        }
+
+        public function render_shop_order_invoice_column( string $column, int $post_id ) : void {
+                if ( 'woo_contifico_invoice' !== $column ) {
+                        return;
+                }
+
+                $order = wc_get_order( $post_id );
+
+                if ( ! $order ) {
+                        echo '&mdash;';
+                        return;
+                }
+
+                $invoice_details = $this->resolve_order_invoice_details_for_report( $order, false );
+                $ride_url        = $invoice_details['ride_url'];
+                $invoice_ref     = $invoice_details['number'] ?: $invoice_details['id'];
+
+                $actions = [];
+
+                if ( '' !== $ride_url && '' !== $invoice_ref ) {
+                        $actions[] = sprintf(
+                                '<a class="button button-small" href="%1$s" target="_blank" rel="noopener noreferrer">%2$s</a>',
+                                esc_url( $ride_url ),
+                                esc_html( sprintf( __( 'Factura %s', $this->plugin_name ), $invoice_ref ) )
+                        );
+                } elseif ( '' !== $ride_url ) {
+                        $actions[] = sprintf(
+                                '<a class="button button-small" href="%1$s" target="_blank" rel="noopener noreferrer">%2$s</a>',
+                                esc_url( $ride_url ),
+                                esc_html__( 'Ver RIDE', $this->plugin_name )
+                        );
+                } elseif ( '' !== $invoice_ref ) {
+                        $actions[] = esc_html( $invoice_ref );
+                }
+
+                $pdf_url = $this->get_order_pdf_download_url( $order );
+                $actions[] = sprintf(
+                        '<a class="button button-small" href="%1$s">%2$s</a>',
+                        esc_url( $pdf_url ),
+                        esc_html__( 'Reporte Contífico', $this->plugin_name )
+                );
+
+                echo wp_kses_post( implode( '<br>', $actions ) );
+        }
+
+        /**
+         * Retrieve invoice identifiers and the RIDE URL for PDF rendering.
+         *
+         * @since 4.1.29
+         *
+         * @param bool $hydrate_missing Whether to fetch missing RIDE links using the Contífico API when absent.
+         *
+         * @return array{number:string,id:string,ride_url:string}
+         */
+        private function resolve_order_invoice_details_for_report( WC_Order $order, bool $hydrate_missing = true ) : array {
+                $invoice_number = trim( (string) $order->get_meta( '_numero_factura' ) );
+                $invoice_id     = trim( (string) $order->get_meta( '_id_factura' ) );
+                $ride_url       = trim( (string) $order->get_meta( '_contifico_invoice_ride_url' ) );
+
+                if ( $hydrate_missing && '' === $ride_url && '' !== $invoice_id ) {
+                        try {
+                                $document = $this->contifico->get_invoice_document_by_id( $invoice_id );
+                        } catch ( Exception $exception ) {
+                                $document = [];
+                        }
+
+                        if ( is_array( $document ) && ! empty( $document ) ) {
+                                $fetched_number = isset( $document['documento'] ) ? trim( (string) $document['documento'] ) : '';
+                                $fetched_ride   = isset( $document['url_ride'] ) ? trim( (string) $document['url_ride'] ) : '';
+                                $fetched_id     = isset( $document['id'] ) ? trim( (string) $document['id'] ) : '';
+
+                                $invoice_number = $invoice_number ?: $fetched_number;
+                                $ride_url       = $fetched_ride ?: $ride_url;
+                                $invoice_id     = $invoice_id ?: $fetched_id;
+
+                                if ( '' !== $invoice_number ) {
+                                        $order->update_meta_data( '_numero_factura', $invoice_number );
+                                }
+
+                                if ( '' !== $ride_url ) {
+                                        $order->update_meta_data( '_contifico_invoice_ride_url', esc_url_raw( $ride_url ) );
+                                }
+
+                                if ( '' !== $invoice_id ) {
+                                        $order->update_meta_data( '_id_factura', $invoice_id );
+                                }
+
+                                $order->save();
+                        }
+                }
+
+                return [
+                        'number'   => $invoice_number,
+                        'id'       => $invoice_id,
+                        'ride_url' => $ride_url,
+                ];
         }
 
         /**
@@ -7214,14 +7357,19 @@ $order_note = sprintf(
                                 ? sprintf( __( 'Pedido completado y factura generada (%s).', $this->plugin_name ), $invoice_reference )
                                 : __( 'Pedido completado y factura generada.', $this->plugin_name );
 
-                        if ( '' !== $invoice_ride_url ) {
-                                $invoice_label .= ' ' . sprintf( __( 'RIDE: %s', $this->plugin_name ), esc_url( $invoice_ride_url ) );
-                        }
-
-                        $order_summary[] = [
+                        $summary_row = [
                                 'label' => __( 'Facturación', $this->plugin_name ),
                                 'value' => $invoice_label,
                         ];
+
+                        if ( '' !== $invoice_ride_url ) {
+                                $summary_row['value_link']       = $invoice_ride_url;
+                                $summary_row['value_link_label'] = '' !== $invoice_reference
+                                        ? sprintf( __( 'Factura %s (RIDE)', $this->plugin_name ), $invoice_reference )
+                                        : __( 'RIDE de factura', $this->plugin_name );
+                        }
+
+                        $order_summary[] = $summary_row;
                 }
 
                 $pdf->set_order_summary( $order_summary );
