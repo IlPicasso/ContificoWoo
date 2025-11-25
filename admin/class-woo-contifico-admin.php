@@ -3146,6 +3146,12 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 $warehouse_code = trim( $warehouse_code );
                 $location_id    = trim( $location_id );
 
+                $invoice_label = $this->resolve_invoice_warehouse_label( $warehouse_code, $location_id );
+
+                if ( '' !== $invoice_label ) {
+                        return $invoice_label;
+                }
+
                 if ( ! ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) ) {
                         return '';
                 }
@@ -3189,6 +3195,30 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                         if ( '' !== $label ) {
                                 return $label;
                         }
+                }
+
+                return '';
+        }
+
+        /**
+         * Resolve a friendly label for the Contífico invoice warehouse when it is not mapped in MultiLoca.
+         *
+         * @since 4.1.17
+         */
+        private function resolve_invoice_warehouse_label( string $warehouse_code, string $location_id ) : string {
+                $invoice_code  = isset( $this->woo_contifico->settings['bodega_facturacion'] ) ? trim( (string) $this->woo_contifico->settings['bodega_facturacion'] ) : '';
+                $invoice_label = isset( $this->woo_contifico->settings['bodega_facturacion_label'] ) ? trim( (string) $this->woo_contifico->settings['bodega_facturacion_label'] ) : '';
+
+                if ( '' === $invoice_code || '' === $invoice_label ) {
+                        return '';
+                }
+
+                if ( '' !== $warehouse_code && strcasecmp( $warehouse_code, $invoice_code ) === 0 ) {
+                        return $invoice_label;
+                }
+
+                if ( '' !== $location_id && strcasecmp( $location_id, $invoice_code ) === 0 ) {
+                        return $invoice_label;
                 }
 
                 return '';

@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.17 =
+* Se permite asignar un nombre amigable a la bodega de facturación (por ejemplo, "Bodega WEB") para que aparezca en PDFs y mensajes incluso cuando no está asociada a una ubicación de MultiLoca.
+
 = 4.1.16 =
 * Los PDFs de movimientos y transferencias ahora recuperan el nombre amigable de MultiLoca aun cuando solo está disponible el identificador de ubicación, evitando que se muestre solo el código de bodega.
 
