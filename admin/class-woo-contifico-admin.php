@@ -2980,7 +2980,7 @@ return $value;
                $location_id    = isset( $warehouse['location_id'] ) ? (string) $warehouse['location_id'] : '';
                $location_label = isset( $warehouse['location_label'] ) ? (string) $warehouse['location_label'] : '';
 
-               if ( '' !== $location_label ) {
+               if ( '' !== $location_label && ( '' === $label || $label === $code || $label === $id ) ) {
                        $label = $location_label;
                }
 
@@ -7014,7 +7014,27 @@ $order_note = sprintf(
 
                 $origin_code       = isset( $this->woo_contifico->settings['bodega'] ) ? (string) $this->woo_contifico->settings['bodega'] : '';
                 $default_origin_id = (string) ( $this->contifico->get_id_bodega( $origin_code ) ?? '' );
-                $items_added       = false;
+                $movements         = array_map( [ $this, 'hydrate_inventory_movement_for_report' ], $this->get_order_inventory_movements_for_order( $order->get_id() ) );
+                $movement_labels   = [];
+
+                foreach ( $movements as $movement_entry ) {
+                        $item_id = isset( $movement_entry['order_item_id'] ) ? (int) $movement_entry['order_item_id'] : 0;
+
+                        if ( $item_id <= 0 ) {
+                                continue;
+                        }
+
+                        $labels = $this->format_distinct_warehouse_labels(
+                                isset( $movement_entry['warehouses']['from'] ) ? $movement_entry['warehouses']['from'] : [],
+                                isset( $movement_entry['warehouses']['to'] ) ? $movement_entry['warehouses']['to'] : []
+                        );
+
+                        if ( ! isset( $movement_labels[ $item_id ] ) ) {
+                                $movement_labels[ $item_id ] = $labels;
+                        }
+                }
+
+                $items_added = false;
 
                 foreach ( $order->get_items() as $item ) {
                         if ( ! is_a( $item, 'WC_Order_Item_Product' ) ) {
@@ -7054,6 +7074,19 @@ $order_note = sprintf(
                                 $details[] = sprintf( __( 'Ubicación: %s', $this->plugin_name ), $location_label );
                         }
 
+                        if ( isset( $movement_labels[ $item->get_id() ] ) ) {
+                                $from_label = $movement_labels[ $item->get_id() ]['from'];
+                                $to_label   = $movement_labels[ $item->get_id() ]['to'];
+
+                                if ( '' !== $from_label ) {
+                                        $details[] = sprintf( __( 'Bodega origen: %s', $this->plugin_name ), $from_label );
+                                }
+
+                                if ( '' !== $to_label ) {
+                                        $details[] = sprintf( __( 'Bodega destino: %s', $this->plugin_name ), $to_label );
+                                }
+                        }
+
                 $pdf->add_product_row( $product_name, $quantity_label, $details );
                 $items_added = true;
         }
@@ -7061,8 +7094,6 @@ $order_note = sprintf(
                 if ( ! $items_added ) {
                         $pdf->add_product_row( __( 'No hay productos asociados al pedido.', $this->plugin_name ), '—' );
                 }
-
-                $movements = array_map( [ $this, 'hydrate_inventory_movement_for_report' ], $this->get_order_inventory_movements_for_order( $order->get_id() ) );
 
                 if ( empty( $movements ) ) {
                         $pdf->add_inventory_movement_line( __( 'Aún no hay movimientos registrados para este pedido.', $this->plugin_name ) );

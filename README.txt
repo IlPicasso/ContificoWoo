@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.21 =
+* Ajusta las etiquetas de bodega para conservar los nombres específicos cuando hay coincidencias de ubicación y añade en las filas de productos la bodega de origen y destino usada en los movimientos.
+
 = 4.1.20 =
 * Evita que las transferencias y movimientos del PDF muestren la misma bodega en origen y destino al reetiquetar con códigos o IDs cuando comparten nombre amigable.
 
