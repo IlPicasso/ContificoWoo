@@ -408,6 +408,14 @@ class Woo_Contifico
                                 'size' => 10
                         ],
                         [
+                                'id' => 'bodega_facturacion_label',
+                                'label' => __('Nombre amigable de la bodega de facturación', $this->plugin_name),
+                                'description' => __('<br>Etiqueta opcional que se mostrará en los PDFs y mensajes cuando se use la bodega de facturación (por ejemplo, "Bodega WEB"), útil si no está asociada a una ubicación de MultiLoca.', $this->plugin_name),
+                                'required' => false,
+                                'type' => 'text',
+                                'size' => 30
+                        ],
+                        [
                                 'id' => 'multiloca_manual_enable',
                                 'label' => __('Activar compatibilidad MultiLoca manualmente', $this->plugin_name),
                                 'description' => __('Marca esta casilla para mostrar el mapeo de ubicaciones aunque el plugin no se detecte automáticamente.', $this->plugin_name),
