@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.18 =
+* Corrige los textos de movimientos y transferencias en PDF para que ya no repitan la misma bodega de origen y destino cuando solo se conoce la ubicación principal.
+
 = 4.1.17 =
 * Se permite asignar un nombre amigable a la bodega de facturación (por ejemplo, "Bodega WEB") para que aparezca en PDFs y mensajes incluso cuando no está asociada a una ubicación de MultiLoca.
 

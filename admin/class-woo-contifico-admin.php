@@ -2072,7 +2072,10 @@ return $value;
                                : $location_id;
                        $warehouse_location_label = isset( $movement['warehouses'][ $side ]['location_label'] )
                                ? (string) $movement['warehouses'][ $side ]['location_label']
-                               : $location_label;
+                               : '';
+                       $warehouse_label = isset( $movement['warehouses'][ $side ]['label'] )
+                               ? (string) $movement['warehouses'][ $side ]['label']
+                               : '';
 
                        $resolved_label = $this->resolve_warehouse_location_label(
                                isset( $movement['warehouses'][ $side ]['code'] ) ? (string) $movement['warehouses'][ $side ]['code'] : '',
@@ -2081,15 +2084,25 @@ return $value;
 
                        if ( '' !== $resolved_label ) {
                                $warehouse_location_label = $resolved_label;
-                               $movement['warehouses'][ $side ]['label'] = $resolved_label;
+                               $warehouse_label          = $resolved_label;
                                $movement['warehouses'][ $side ]['mapped'] = true;
                        }
+
+                       if ( '' === $warehouse_label && isset( $movement['warehouses'][ $side ]['label'] ) ) {
+                               $warehouse_label = (string) $movement['warehouses'][ $side ]['label'];
+                       }
+
+                       if ( '' === $warehouse_label && isset( $movement['warehouses'][ $side ]['code'] ) ) {
+                               $warehouse_label = (string) $movement['warehouses'][ $side ]['code'];
+                       }
+
+                       $movement['warehouses'][ $side ]['label'] = $warehouse_label;
 
                        if ( ! isset( $movement['warehouses'][ $side ]['location_id'] ) || '' === $movement['warehouses'][ $side ]['location_id'] ) {
                                $movement['warehouses'][ $side ]['location_id'] = $warehouse_location_id;
                        }
 
-                       if ( ! isset( $movement['warehouses'][ $side ]['location_label'] ) || '' === $movement['warehouses'][ $side ]['location_label'] ) {
+                       if ( '' !== $warehouse_location_label ) {
                                $movement['warehouses'][ $side ]['location_label'] = $warehouse_location_label;
                        }
                }
