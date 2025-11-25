@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.26 =
+* Usa el campo `nombre` entregado por la API de Contífico como etiqueta principal de las bodegas para que los PDFs muestren los nombres oficiales en lugar de los códigos.
+
 = 4.1.25 =
 * Recupera los nombres oficiales de las bodegas desde la API de Contífico cuando los mapas de MultiLoca no proveen etiquetas, evitando que los PDFs repitan nombres amigables incorrectos.
 

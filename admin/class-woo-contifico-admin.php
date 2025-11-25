@@ -3004,11 +3004,9 @@ return $value;
 
                $contifico_label = $this->resolve_contifico_warehouse_label( $code, $id );
 
-               if ( '' !== $contifico_label && ( '' === $label || $label === $code || $label === $id ) ) {
+               if ( '' !== $contifico_label ) {
                        $label = $contifico_label;
-               }
-
-               if ( '' !== $location_label ) {
+               } elseif ( '' !== $location_label ) {
                        if ( '' === $label ) {
                                $label = $location_label;
                        } elseif ( $is_mapped && ( $label === $code || $label === $id ) ) {
