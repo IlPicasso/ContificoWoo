@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.31 =
+* Corrige un fatal error de redeclaración al resolver los detalles de factura para los reportes e informes PDF.
+
 = 4.1.30 =
 * Hace clicable el número de factura en el PDF para abrir el RIDE cuando exista enlace disponible.
 * Añade enlaces rápidos al RIDE y al reporte PDF desde la lista de pedidos y el detalle de la orden en WooCommerce.

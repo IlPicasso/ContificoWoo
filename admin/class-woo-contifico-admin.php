@@ -7006,7 +7006,7 @@ $order_note = sprintf(
 
                 require_once plugin_dir_path( __FILE__ ) . 'partials/woo-contifico-admin-edit-fields.php';
 
-                $invoice_details = $this->resolve_order_invoice_details_for_report( $order );
+                $invoice_details = $this->resolve_order_invoice_report_details( $order );
                 $invoice_number  = $invoice_details['number'];
                 $ride_url        = $invoice_details['ride_url'];
 
@@ -7142,7 +7142,7 @@ $order_note = sprintf(
                         return;
                 }
 
-                $invoice_details = $this->resolve_order_invoice_details_for_report( $order, false );
+                $invoice_details = $this->resolve_order_invoice_report_details( $order, false );
                 $ride_url        = $invoice_details['ride_url'];
                 $invoice_ref     = $invoice_details['number'] ?: $invoice_details['id'];
 
@@ -7183,63 +7183,12 @@ $order_note = sprintf(
          *
          * @return array{number:string,id:string,ride_url:string}
          */
-        private function resolve_order_invoice_details_for_report( WC_Order $order, bool $hydrate_missing = true ) : array {
+        private function resolve_order_invoice_report_details( WC_Order $order, bool $hydrate_missing = true ) : array {
                 $invoice_number = trim( (string) $order->get_meta( '_numero_factura' ) );
                 $invoice_id     = trim( (string) $order->get_meta( '_id_factura' ) );
                 $ride_url       = trim( (string) $order->get_meta( '_contifico_invoice_ride_url' ) );
 
                 if ( $hydrate_missing && '' === $ride_url && '' !== $invoice_id ) {
-                        try {
-                                $document = $this->contifico->get_invoice_document_by_id( $invoice_id );
-                        } catch ( Exception $exception ) {
-                                $document = [];
-                        }
-
-                        if ( is_array( $document ) && ! empty( $document ) ) {
-                                $fetched_number = isset( $document['documento'] ) ? trim( (string) $document['documento'] ) : '';
-                                $fetched_ride   = isset( $document['url_ride'] ) ? trim( (string) $document['url_ride'] ) : '';
-                                $fetched_id     = isset( $document['id'] ) ? trim( (string) $document['id'] ) : '';
-
-                                $invoice_number = $invoice_number ?: $fetched_number;
-                                $ride_url       = $fetched_ride ?: $ride_url;
-                                $invoice_id     = $invoice_id ?: $fetched_id;
-
-                                if ( '' !== $invoice_number ) {
-                                        $order->update_meta_data( '_numero_factura', $invoice_number );
-                                }
-
-                                if ( '' !== $ride_url ) {
-                                        $order->update_meta_data( '_contifico_invoice_ride_url', esc_url_raw( $ride_url ) );
-                                }
-
-                                if ( '' !== $invoice_id ) {
-                                        $order->update_meta_data( '_id_factura', $invoice_id );
-                                }
-
-                                $order->save();
-                        }
-                }
-
-                return [
-                        'number'   => $invoice_number,
-                        'id'       => $invoice_id,
-                        'ride_url' => $ride_url,
-                ];
-        }
-
-        /**
-         * Retrieve invoice identifiers and the RIDE URL for PDF rendering.
-         *
-         * @since 4.1.29
-         *
-         * @return array{number:string,id:string,ride_url:string}
-         */
-        private function resolve_order_invoice_details_for_report( WC_Order $order ) : array {
-                $invoice_number = trim( (string) $order->get_meta( '_numero_factura' ) );
-                $invoice_id     = trim( (string) $order->get_meta( '_id_factura' ) );
-                $ride_url       = trim( (string) $order->get_meta( '_contifico_invoice_ride_url' ) );
-
-                if ( '' === $ride_url && '' !== $invoice_id ) {
                         try {
                                 $document = $this->contifico->get_invoice_document_by_id( $invoice_id );
                         } catch ( Exception $exception ) {
@@ -7291,7 +7240,7 @@ $order_note = sprintf(
                 $date_label        = $order_date ? wc_format_datetime( $order_date, $date_format ) : __( 'Sin fecha registrada', $this->plugin_name );
                 $status            = $order->get_status();
                 $status_label      = wc_get_order_status_name( $status );
-                $invoice_details   = $this->resolve_order_invoice_details_for_report( $order );
+                $invoice_details   = $this->resolve_order_invoice_report_details( $order );
                 $invoice_number    = $invoice_details['number'];
                 $invoice_id        = $invoice_details['id'];
                 $invoice_reference = $invoice_number ?: $invoice_id;
