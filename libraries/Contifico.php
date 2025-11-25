@@ -51,11 +51,20 @@ class Contifico
         private $inventory_total;
 
         /**
-         * @since 1.5.0
-         * @access private
-         * @var array $warehouses
-         */
+        * @since 1.5.0
+        * @access private
+        * @var array $warehouses
+        */
         private $warehouses;
+
+        /**
+         * Cache of Contífico warehouse labels indexed by warehouse ID.
+         *
+         * @since 4.1.25
+         * @access private
+         * @var array<string,array{code:string,label:string}>
+         */
+        private $warehouse_labels;
 
         /**
          * Cache for product stock lookups grouped by warehouse.
@@ -107,6 +116,10 @@ class Contifico
             $this->warehouses = get_option('woo_contifico_warehouses');
             if ( ! is_array( $this->warehouses ) ) {
                     $this->warehouses = [];
+            }
+            $this->warehouse_labels = get_option( 'woo_contifico_warehouse_labels' );
+            if ( ! is_array( $this->warehouse_labels ) ) {
+                    $this->warehouse_labels = [];
             }
             $this->product_stock_cache = [];
             $this->product_cache_by_id = [];
@@ -324,7 +337,29 @@ class Contifico
                 if( false === $fetched ) {
                         $bodegas          = $this->call( 'bodega/' );
                         $this->warehouses = array_column($bodegas, 'codigo', 'id');
+                        $this->warehouse_labels = [];
+
+                        foreach ( $bodegas as $bodega ) {
+                                if ( ! is_array( $bodega ) ) {
+                                        continue;
+                                }
+
+                                $id    = isset( $bodega['id'] ) ? (string) $bodega['id'] : '';
+                                $code  = isset( $bodega['codigo'] ) ? (string) $bodega['codigo'] : '';
+                                $label = isset( $bodega['nombre'] ) ? (string) $bodega['nombre'] : '';
+
+                                if ( '' === $id && '' === $code ) {
+                                        continue;
+                                }
+
+                                $this->warehouse_labels[ $id ] = [
+                                        'code'  => $code,
+                                        'label' => $label,
+                                ];
+                        }
+
                         update_option( 'woo_contifico_warehouses', $this->warehouses );
+                        update_option( 'woo_contifico_warehouse_labels', $this->warehouse_labels );
                         set_transient('woo_contifico_fetch_warehouses','yes',self::TRANSIENT_TTL);
                 }
                 return count($this->warehouses);
@@ -344,6 +379,123 @@ class Contifico
                 }
 
                 return $this->warehouses;
+        }
+
+        /**
+         * Retrieve a warehouse label by its Contífico code.
+         *
+         * @since 4.1.25
+         */
+        public function get_warehouse_label_by_code( string $warehouse_code ) : string {
+                $warehouse_code = strtoupper( trim( $warehouse_code ) );
+
+                if ( '' === $warehouse_code ) {
+                        return '';
+                }
+
+                $this->prime_warehouse_labels_cache();
+
+                foreach ( $this->warehouse_labels as $warehouse ) {
+                        if ( ! is_array( $warehouse ) ) {
+                                continue;
+                        }
+
+                        $code  = isset( $warehouse['code'] ) ? strtoupper( (string) $warehouse['code'] ) : '';
+                        $label = isset( $warehouse['label'] ) ? (string) $warehouse['label'] : '';
+
+                        if ( '' !== $code && $warehouse_code === $code && '' !== $label ) {
+                                return $label;
+                        }
+                }
+
+                return '';
+        }
+
+        /**
+         * Retrieve a warehouse label by its Contífico identifier.
+         *
+         * @since 4.1.25
+         */
+        public function get_warehouse_label_by_id( string $warehouse_id ) : string {
+                $warehouse_id = trim( $warehouse_id );
+
+                if ( '' === $warehouse_id ) {
+                        return '';
+                }
+
+                $this->prime_warehouse_labels_cache();
+
+                if ( isset( $this->warehouse_labels[ $warehouse_id ]['label'] ) ) {
+                        $label = (string) $this->warehouse_labels[ $warehouse_id ]['label'];
+
+                        if ( '' !== $label ) {
+                                return $label;
+                        }
+                }
+
+                return '';
+        }
+
+        /**
+         * Load warehouse labels from cache or refresh from Contífico if missing.
+         *
+         * @since 4.1.25
+         */
+        private function prime_warehouse_labels_cache() : void {
+                if ( ! is_array( $this->warehouse_labels ) ) {
+                        $this->warehouse_labels = [];
+                }
+
+                if ( ! empty( $this->warehouse_labels ) ) {
+                        return;
+                }
+
+                $labels = get_option( 'woo_contifico_warehouse_labels' );
+
+                if ( is_array( $labels ) && ! empty( $labels ) ) {
+                        $this->warehouse_labels = $labels;
+                        return;
+                }
+
+                try {
+                        $this->fetch_warehouses();
+                } catch ( Exception $exception ) {
+                        return;
+                }
+        }
+
+        /**
+         * Retrieve invoice metadata by its Contífico identifier.
+         *
+         * @since 4.1.29
+         */
+        public function get_invoice_document_by_id( string $invoice_id ) : array {
+                $invoice_id = trim( $invoice_id );
+
+                if ( '' === $invoice_id ) {
+                        return [];
+                }
+
+                $cache_key = 'woo_contifico_invoice_doc_' . sanitize_key( $invoice_id );
+                $cached    = get_transient( $cache_key );
+
+                if ( is_array( $cached ) ) {
+                        return $cached;
+                }
+
+                try {
+                        $document = $this->call( "documento/{$invoice_id}/" );
+                } catch ( Exception $exception ) {
+                        return [];
+                }
+
+                if ( ! is_array( $document ) || empty( $document ) ) {
+                        return [];
+                }
+
+                set_transient( $cache_key, $document, self::TRANSIENT_TTL );
+
+                return $document;
         }
 
         /**
