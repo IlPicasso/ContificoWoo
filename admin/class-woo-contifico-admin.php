@@ -2069,7 +2069,7 @@ return $value;
 
                        $warehouse_location_id = isset( $movement['warehouses'][ $side ]['location_id'] )
                                ? (string) $movement['warehouses'][ $side ]['location_id']
-                               : $location_id;
+                               : '';
                        $warehouse_location_label = isset( $movement['warehouses'][ $side ]['location_label'] )
                                ? (string) $movement['warehouses'][ $side ]['location_label']
                                : '';

@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.19 =
+* Ajusta la construcción de etiquetas de bodega en los PDFs para evitar que origen y destino se dupliquen cuando falta el identificador de ubicación, manteniendo los nombres amigables y códigos cuando estén disponibles.
+
 = 4.1.18 =
 * Corrige los textos de movimientos y transferencias en PDF para que ya no repitan la misma bodega de origen y destino cuando solo se conoce la ubicación principal.
 
