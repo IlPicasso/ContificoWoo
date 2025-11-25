@@ -2054,6 +2054,60 @@ return $value;
        }
 
        /**
+        * Enrich inventory movement data with friendly location labels for PDF output.
+        *
+        * @since 4.1.15
+        */
+       private function hydrate_inventory_movement_for_report( array $movement ) : array {
+               $location_id    = isset( $movement['location']['id'] ) ? (string) $movement['location']['id'] : '';
+               $location_label = isset( $movement['location']['label'] ) ? (string) $movement['location']['label'] : '';
+
+               foreach ( [ 'from', 'to' ] as $side ) {
+                       if ( ! isset( $movement['warehouses'][ $side ] ) || ! is_array( $movement['warehouses'][ $side ] ) ) {
+                               $movement['warehouses'][ $side ] = [];
+                       }
+
+                       $warehouse_location_id = isset( $movement['warehouses'][ $side ]['location_id'] )
+                               ? (string) $movement['warehouses'][ $side ]['location_id']
+                               : $location_id;
+                       $warehouse_location_label = isset( $movement['warehouses'][ $side ]['location_label'] )
+                               ? (string) $movement['warehouses'][ $side ]['location_label']
+                               : $location_label;
+
+                       $resolved_label = $this->resolve_warehouse_location_label(
+                               isset( $movement['warehouses'][ $side ]['code'] ) ? (string) $movement['warehouses'][ $side ]['code'] : '',
+                               $warehouse_location_id
+                       );
+
+                       if ( '' !== $resolved_label ) {
+                               $warehouse_location_label = $resolved_label;
+                               $movement['warehouses'][ $side ]['label'] = $resolved_label;
+                               $movement['warehouses'][ $side ]['mapped'] = true;
+                       }
+
+                       if ( ! isset( $movement['warehouses'][ $side ]['location_id'] ) || '' === $movement['warehouses'][ $side ]['location_id'] ) {
+                               $movement['warehouses'][ $side ]['location_id'] = $warehouse_location_id;
+                       }
+
+                       if ( ! isset( $movement['warehouses'][ $side ]['location_label'] ) || '' === $movement['warehouses'][ $side ]['location_label'] ) {
+                               $movement['warehouses'][ $side ]['location_label'] = $warehouse_location_label;
+                       }
+               }
+
+               $location_context = [
+                       'label'          => isset( $movement['warehouses']['from']['label'] ) ? (string) $movement['warehouses']['from']['label'] : '',
+                       'code'           => isset( $movement['warehouses']['from']['code'] ) ? (string) $movement['warehouses']['from']['code'] : '',
+                       'location_id'    => $location_id,
+                       'location_label' => $location_label,
+               ];
+
+               $movement['location']['label'] = $this->describe_inventory_location_for_note( $location_context );
+               $movement['location']['id']    = $location_id;
+
+               return $movement;
+       }
+
+       /**
         * Helper to build a normalized inventory movement entry from data.
         *
         * @since 4.3.1
@@ -6920,7 +6974,7 @@ $order_note = sprintf(
                         $pdf->add_product_row( __( 'No hay productos asociados al pedido.', $this->plugin_name ), '—' );
                 }
 
-                $movements = $this->get_order_inventory_movements_for_order( $order->get_id() );
+                $movements = array_map( [ $this, 'hydrate_inventory_movement_for_report' ], $this->get_order_inventory_movements_for_order( $order->get_id() ) );
 
                 if ( empty( $movements ) ) {
                         $pdf->add_inventory_movement_line( __( 'Aún no hay movimientos registrados para este pedido.', $this->plugin_name ) );

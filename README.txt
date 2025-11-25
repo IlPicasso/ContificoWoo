@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.15 =
+* Se usa el nombre amigable configurado en MultiLoca (junto al código de bodega) en todas las secciones del PDF, incluidos los listados de movimientos y transferencias.
+
 = 4.1.14 =
 * Los PDFs de movimientos y transferencias ahora muestran el nombre amigable configurado en MultiLoca para las bodegas asociadas y conservan el código de bodega entre paréntesis para mayor claridad.
 
