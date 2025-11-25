@@ -2076,9 +2076,20 @@ return $value;
                        $warehouse_label = isset( $movement['warehouses'][ $side ]['label'] )
                                ? (string) $movement['warehouses'][ $side ]['label']
                                : '';
+                       $warehouse_code = isset( $movement['warehouses'][ $side ]['code'] )
+                               ? (string) $movement['warehouses'][ $side ]['code']
+                               : '';
+                       $warehouse_id = isset( $movement['warehouses'][ $side ]['id'] )
+                               ? (string) $movement['warehouses'][ $side ]['id']
+                               : '';
+
+                       if ( '' === $warehouse_code && '' !== $warehouse_id ) {
+                               $warehouse_code = $warehouse_id;
+                               $movement['warehouses'][ $side ]['code'] = $warehouse_code;
+                       }
 
                        $resolved_label = $this->resolve_warehouse_location_label(
-                               isset( $movement['warehouses'][ $side ]['code'] ) ? (string) $movement['warehouses'][ $side ]['code'] : '',
+                               $warehouse_code,
                                $warehouse_location_id
                        );
 
@@ -2979,9 +2990,14 @@ return $value;
                $id             = isset( $warehouse['id'] ) ? (string) $warehouse['id'] : '';
                $location_id    = isset( $warehouse['location_id'] ) ? (string) $warehouse['location_id'] : '';
                $location_label = isset( $warehouse['location_label'] ) ? (string) $warehouse['location_label'] : '';
+               $is_mapped      = isset( $warehouse['mapped'] ) ? (bool) $warehouse['mapped'] : false;
 
-               if ( '' !== $location_label && ( '' === $label || $label === $code || $label === $id ) ) {
-                       $label = $location_label;
+               if ( '' !== $location_label ) {
+                       if ( '' === $label ) {
+                               $label = $location_label;
+                       } elseif ( $is_mapped && ( $label === $code || $label === $id ) ) {
+                               $label = $location_label;
+                       }
                }
 
                if ( '' !== $code ) {

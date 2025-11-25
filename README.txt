@@ -83,6 +83,12 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.23 =
+* Ajusta la construcción de etiquetas de bodega para usar solo nombres amigables mapeados cuando existan y evitar que se reemplacen por ubicaciones repetidas en los PDFs.
+
+= 4.1.22 =
+* Conserva y reutiliza los códigos o IDs de bodega cuando faltan en el movimiento para que las etiquetas amigables sigan distinguiendo entre origen y destino en el PDF.
+
 = 4.1.21 =
 * Ajusta las etiquetas de bodega para conservar los nombres específicos cuando hay coincidencias de ubicación y añade en las filas de productos la bodega de origen y destino usada en los movimientos.
 
