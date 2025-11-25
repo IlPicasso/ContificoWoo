@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.20 =
+* Evita que las transferencias y movimientos del PDF muestren la misma bodega en origen y destino al reetiquetar con códigos o IDs cuando comparten nombre amigable.
+
 = 4.1.19 =
 * Ajusta la construcción de etiquetas de bodega en los PDFs para evitar que origen y destino se dupliquen cuando falta el identificador de ubicación, manteniendo los nombres amigables y códigos cuando estén disponibles.
 

@@ -2936,7 +2936,7 @@ return $value;
          *
         * @since 4.4.0
          */
-        private function describe_inventory_location_for_note( array $context ) : string {
+       private function describe_inventory_location_for_note( array $context ) : string {
                 $location_label = isset( $context['location_label'] ) ? (string) $context['location_label'] : '';
                 $location_id    = isset( $context['location_id'] ) ? (string) $context['location_id'] : '';
 
@@ -3005,6 +3005,44 @@ return $value;
                }
 
                return $label;
+       }
+
+       /**
+        * Format warehouse labels ensuring origin and destination stay distinct.
+        *
+        * @since 4.1.20
+        */
+       private function format_distinct_warehouse_labels( array $from, array $to ) : array {
+               $from_label = $this->format_warehouse_label_with_code( $from );
+               $to_label   = $this->format_warehouse_label_with_code( $to );
+
+               if ( '' === $from_label && '' === $to_label ) {
+                       return [ 'from' => '', 'to' => '' ];
+               }
+
+               if ( $from_label !== $to_label ) {
+                       return [ 'from' => $from_label, 'to' => $to_label ];
+               }
+
+               $from_code = isset( $from['code'] ) ? (string) $from['code'] : '';
+               $to_code   = isset( $to['code'] ) ? (string) $to['code'] : '';
+               $from_id   = isset( $from['id'] ) ? (string) $from['id'] : '';
+               $to_id     = isset( $to['id'] ) ? (string) $to['id'] : '';
+
+               $from_suffix = '' !== $from_code ? $from_code : $from_id;
+               $to_suffix   = '' !== $to_code ? $to_code : $to_id;
+
+               if ( '' !== $from_suffix ) {
+                       $from_label = sprintf( '%s (%s)', $from_label, $from_suffix );
+               }
+
+               if ( '' !== $to_suffix && $to_suffix !== $from_suffix ) {
+                       $to_label = sprintf( '%s (%s)', $to_label, $to_suffix );
+               } elseif ( '' !== $to_suffix ) {
+                       $to_label = sprintf( '%s (%s)', $to_label, $to_suffix ?: $to_label );
+               }
+
+               return [ 'from' => $from_label, 'to' => $to_label ];
        }
 
         /**
@@ -7033,8 +7071,12 @@ $order_note = sprintf(
                                 $timestamp     = isset( $movement['timestamp'] ) ? (int) $movement['timestamp'] : 0;
                                 $movement_date = $timestamp ? date_i18n( $date_format, $timestamp ) : __( 'Sin fecha', $this->plugin_name );
                                 $event_label   = 'ingreso' === $movement['event_type'] ? __( 'Ingreso', $this->plugin_name ) : __( 'Egreso', $this->plugin_name );
-                                $from_label    = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['from'] ) ? $movement['warehouses']['from'] : [] );
-                                $to_label      = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : [] );
+                               $labels        = $this->format_distinct_warehouse_labels(
+                                       isset( $movement['warehouses']['from'] ) ? $movement['warehouses']['from'] : [],
+                                       isset( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : []
+                               );
+                               $from_label    = $labels['from'];
+                               $to_label      = $labels['to'];
                                 $reference     = $movement['reference'] ?: __( 'Sin referencia', $this->plugin_name );
                                 $location      = isset( $movement['location']['label'] ) && '' !== $movement['location']['label']
                                         ? $movement['location']['label']
@@ -7070,8 +7112,12 @@ $order_note = sprintf(
                         $pdf->add_transfer_summary_line( __( 'Aún no se registran transferencias en Contífico para este pedido.', $this->plugin_name ) );
                 } else {
                         foreach ( $transfer_summaries as $summary ) {
-                                $from_label = $this->format_warehouse_label_with_code( [ 'label' => $summary['from'] ] );
-                                $to_label   = $this->format_warehouse_label_with_code( [ 'label' => $summary['to'] ] );
+                               $pair      = $this->format_distinct_warehouse_labels(
+                                       [ 'label' => $summary['from'] ],
+                                       [ 'label' => $summary['to'] ]
+                               );
+                               $from_label = $pair['from'];
+                               $to_label   = $pair['to'];
 
                                 $pdf->add_transfer_summary_line(
                                         sprintf(
@@ -7260,8 +7306,12 @@ $order_note = sprintf(
 
                 foreach ( $movements as $movement ) {
                         $reference  = $movement['reference'] ?: __( 'Sin código', $this->plugin_name );
-                        $from_label = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['from'] ) ? $movement['warehouses']['from'] : [] );
-                        $to_label   = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : [] );
+                       $labels     = $this->format_distinct_warehouse_labels(
+                               isset( $movement['warehouses']['from'] ) ? $movement['warehouses']['from'] : [],
+                               isset( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : []
+                       );
+                       $from_label = $labels['from'];
+                       $to_label   = $labels['to'];
                         $key        = md5( implode( '|', [ $reference, $from_label, $to_label, $movement['event_type'] ] ) );
 
                         if ( ! isset( $summaries[ $key ] ) ) {
