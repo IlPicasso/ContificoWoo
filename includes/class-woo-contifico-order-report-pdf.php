@@ -231,18 +231,18 @@ class Woo_Contifico_Order_Report_Pdf {
             $line_height = 5.5;
 
             foreach ( $this->order_summary as $row ) {
-                $label = isset( $row['label'] ) ? (string) $row['label'] : '';
-                $value = isset( $row['value'] ) ? (string) $row['value'] : '';
-
-                $row_start_x = $pdf->GetX();
-                $row_start_y = $pdf->GetY();
+                $label         = isset( $row['label'] ) ? (string) $row['label'] : '';
+                $value         = isset( $row['value'] ) ? (string) $row['value'] : '';
+                $value_link    = isset( $row['value_link'] ) ? (string) $row['value_link'] : '';
+                $link_label    = isset( $row['value_link_label'] ) ? (string) $row['value_link_label'] : '';
+                $row_start_x   = $pdf->GetX();
+                $row_start_y   = $pdf->GetY();
 
                 $pdf->MultiCell( $label_width, $line_height, $this->encode_text( $label ), 0, 'L' );
                 $label_height = $pdf->GetY() - $row_start_y;
 
                 $pdf->SetXY( $row_start_x + $label_width, $row_start_y );
-                $pdf->MultiCell( $value_width, $line_height, $this->encode_text( $value ), 0, 'L' );
-                $value_height = $pdf->GetY() - $row_start_y;
+                $value_height = $this->render_summary_value( $pdf, $value_width, $line_height, $value, $link_label, $value_link );
 
                 $row_height = max( $label_height, $value_height ) + 1;
                 $pdf->SetXY( $row_start_x, $row_start_y + $row_height );
@@ -251,6 +251,29 @@ class Woo_Contifico_Order_Report_Pdf {
         }
 
         $pdf->SetY( $max_y + 6 );
+    }
+
+    function render_summary_value( $pdf, $value_width, $line_height, $value, $link_label = '', $link = '' ) {
+        $row_start_y = $pdf->GetY();
+        $row_start_x = $pdf->GetX();
+
+        if ( '' !== $value ) {
+            $pdf->MultiCell( $value_width, $line_height, $this->encode_text( $value ), 0, 'L' );
+        }
+
+        $value_height = $pdf->GetY() - $row_start_y;
+
+        if ( '' !== $link && '' !== $link_label ) {
+            $pdf->SetXY( $row_start_x, $row_start_y + $value_height );
+            $pdf->SetTextColor( 29, 78, 216 );
+            $pdf->SetFont( 'Arial', 'U', 10 );
+            $pdf->Cell( $value_width, $line_height, $this->encode_text( $link_label ), 0, 1, 'L', false, $link );
+            $pdf->SetFont( 'Arial', '', 10 );
+            $pdf->SetTextColor( 0, 0, 0 );
+            $value_height += $line_height;
+        }
+
+        return max( $value_height, $line_height );
     }
 
     function render_products_table( $pdf ) {
