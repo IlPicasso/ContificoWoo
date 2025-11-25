@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.29 =
+* Almacena la ID y el enlace RIDE de la factura generada para mostrarlos en el PDF cuando el pedido esté completado.
+
 = 4.1.28 =
 * Muestra en el PDF que el pedido está completado y la factura fue generada cuando exista una factura asociada al pedido.
 

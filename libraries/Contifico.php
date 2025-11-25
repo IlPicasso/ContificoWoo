@@ -465,6 +465,40 @@ class Contifico
         }
 
         /**
+         * Retrieve invoice metadata by its Contífico identifier.
+         *
+         * @since 4.1.29
+         */
+        public function get_invoice_document_by_id( string $invoice_id ) : array {
+                $invoice_id = trim( $invoice_id );
+
+                if ( '' === $invoice_id ) {
+                        return [];
+                }
+
+                $cache_key = 'woo_contifico_invoice_doc_' . sanitize_key( $invoice_id );
+                $cached    = get_transient( $cache_key );
+
+                if ( is_array( $cached ) ) {
+                        return $cached;
+                }
+
+                try {
+                        $document = $this->call( "documento/{$invoice_id}/" );
+                } catch ( Exception $exception ) {
+                        return [];
+                }
+
+                if ( ! is_array( $document ) || empty( $document ) ) {
+                        return [];
+                }
+
+                set_transient( $cache_key, $document, self::TRANSIENT_TTL );
+
+                return $document;
+        }
+
+        /**
          * Fetch stock from Contífico for the register warehouse and save them in the database.
          *
          * Uses product level stock lookups (producto/{producto_id}/stock/) and caches the

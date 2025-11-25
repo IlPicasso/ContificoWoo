@@ -6872,51 +6872,74 @@ $filters = [
 
 		$json_data = json_encode( $data );
 
-		try {
-			$documento_electronico = $this->contifico->call( 'documento/', $json_data, 'POST' );
-			if ( isset( $documento_electronico['code'] ) ) {
-				$json_error = $documento_electronico['response']['mensaje'];
-				if ( 'FAC' === $this->woo_contifico->settings['tipo_documento'] ) {
-					$this->secuencial_rollback();
-				}
-				$order_note = sprintf(
-					__( 'Contífico retornó errores en la petición. La respuesta del servidor es: %s', $this->plugin_name ),
-					$json_error
-				);
+                try {
+                        $documento_electronico = $this->contifico->call( 'documento/', $json_data, 'POST' );
 
-				if ( '' !== $invoice_location_annotation ) {
-					$order_note .= $invoice_location_annotation;
-				}
+                        if ( isset( $documento_electronico['code'] ) ) {
+                                $json_error = $documento_electronico['response']['mensaje'];
 
-				$order->add_order_note( $order_note );
-			}
-			else {
-                                $order->update_meta_data( '_id_factura', $documento_electronico['id'] );
-                                $order->update_meta_data( '_numero_factura', $documento_electronico['documento'] );
+                                if ( 'FAC' === $this->woo_contifico->settings['tipo_documento'] ) {
+                                        $this->secuencial_rollback();
+                                }
+
+                                $order_note = sprintf(
+                                        __( 'Contífico retornó errores en la petición. La respuesta del servidor es: %s', $this->plugin_name ),
+                                        $json_error
+                                );
+
+                                if ( '' !== $invoice_location_annotation ) {
+                                        $order_note .= $invoice_location_annotation;
+                                }
+
+                                $order->add_order_note( $order_note );
+                        } else {
+                                $invoice_id_value        = isset( $documento_electronico['id'] ) ? (string) $documento_electronico['id'] : '';
+                                $invoice_number_value    = isset( $documento_electronico['documento'] ) ? (string) $documento_electronico['documento'] : '';
+                                $invoice_ride_url_value  = isset( $documento_electronico['url_ride'] ) ? (string) $documento_electronico['url_ride'] : '';
+
+                                if ( '' !== $invoice_id_value ) {
+                                        $order->update_meta_data( '_id_factura', $invoice_id_value );
+                                }
+
+                                if ( '' !== $invoice_number_value ) {
+                                        $order->update_meta_data( '_numero_factura', $invoice_number_value );
+                                }
+
+                                if ( '' !== $invoice_ride_url_value ) {
+                                        $order->update_meta_data( '_contifico_invoice_ride_url', esc_url_raw( $invoice_ride_url_value ) );
+                                }
+
                                 $order->save();
-$order_note = __( 'El documento fue generado correctamente.<br><br>', $this->plugin_name );
-switch( $this->woo_contifico->settings['tipo_documento'] ) {
-case 'FAC':
-$order_note .= sprintf(
-							__( 'El número de la factura es: %s', $this->plugin_name ),
-							$documento_electronico['documento']
-						);
-						break;
-					case 'PRE':
-$order_note .= sprintf(
-__( 'El número de la pre factura es: %s', $this->plugin_name ),
-$documento_electronico['documento']
-);
-}
 
-if ( '' !== $invoice_location_annotation ) {
-$order_note .= $invoice_location_annotation;
-}
+                                $order_note = __( 'El documento fue generado correctamente.<br><br>', $this->plugin_name );
 
-$order->add_order_note( $order_note, 1 );
-			}
-		}
-		catch (Exception $exception) {
+                                switch ( $this->woo_contifico->settings['tipo_documento'] ) {
+                                        case 'FAC':
+                                                $order_note .= sprintf(
+                                                        __( 'El número de la factura es: %s', $this->plugin_name ),
+                                                        $invoice_number_value
+                                                );
+                                                break;
+                                        case 'PRE':
+                                                $order_note .= sprintf(
+                                                        __( 'El número de la pre factura es: %s', $this->plugin_name ),
+                                                        $invoice_number_value
+                                                );
+                                                break;
+                                }
+
+                                if ( '' !== $invoice_ride_url_value ) {
+                                        $order_note .= '<br>' . sprintf( __( 'RIDE: %s', $this->plugin_name ), esc_url( $invoice_ride_url_value ) );
+                                }
+
+                                if ( '' !== $invoice_location_annotation ) {
+                                        $order_note .= $invoice_location_annotation;
+                                }
+
+                                $order->add_order_note( $order_note, 1 );
+                        }
+                }
+                catch (Exception $exception) {
 			if ( 'FAC' === $this->woo_contifico->settings['tipo_documento'] ) {
 				$this->secuencial_rollback();
 			}
@@ -7062,6 +7085,57 @@ $order_note = sprintf(
         }
 
         /**
+         * Retrieve invoice identifiers and the RIDE URL for PDF rendering.
+         *
+         * @since 4.1.29
+         *
+         * @return array{number:string,id:string,ride_url:string}
+         */
+        private function resolve_order_invoice_details_for_report( WC_Order $order ) : array {
+                $invoice_number = trim( (string) $order->get_meta( '_numero_factura' ) );
+                $invoice_id     = trim( (string) $order->get_meta( '_id_factura' ) );
+                $ride_url       = trim( (string) $order->get_meta( '_contifico_invoice_ride_url' ) );
+
+                if ( '' === $ride_url && '' !== $invoice_id ) {
+                        try {
+                                $document = $this->contifico->get_invoice_document_by_id( $invoice_id );
+                        } catch ( Exception $exception ) {
+                                $document = [];
+                        }
+
+                        if ( is_array( $document ) && ! empty( $document ) ) {
+                                $fetched_number = isset( $document['documento'] ) ? trim( (string) $document['documento'] ) : '';
+                                $fetched_ride   = isset( $document['url_ride'] ) ? trim( (string) $document['url_ride'] ) : '';
+                                $fetched_id     = isset( $document['id'] ) ? trim( (string) $document['id'] ) : '';
+
+                                $invoice_number = $invoice_number ?: $fetched_number;
+                                $ride_url       = $fetched_ride ?: $ride_url;
+                                $invoice_id     = $invoice_id ?: $fetched_id;
+
+                                if ( '' !== $invoice_number ) {
+                                        $order->update_meta_data( '_numero_factura', $invoice_number );
+                                }
+
+                                if ( '' !== $ride_url ) {
+                                        $order->update_meta_data( '_contifico_invoice_ride_url', esc_url_raw( $ride_url ) );
+                                }
+
+                                if ( '' !== $invoice_id ) {
+                                        $order->update_meta_data( '_id_factura', $invoice_id );
+                                }
+
+                                $order->save();
+                        }
+                }
+
+                return [
+                        'number'   => $invoice_number,
+                        'id'       => $invoice_id,
+                        'ride_url' => $ride_url,
+                ];
+        }
+
+        /**
          * Build the PDF payload summarizing the order and its inventory movements.
          *
          * @since 4.4.0
@@ -7074,9 +7148,11 @@ $order_note = sprintf(
                 $date_label        = $order_date ? wc_format_datetime( $order_date, $date_format ) : __( 'Sin fecha registrada', $this->plugin_name );
                 $status            = $order->get_status();
                 $status_label      = wc_get_order_status_name( $status );
-                $invoice_number    = trim( (string) $order->get_meta( '_numero_factura' ) );
-                $invoice_id        = trim( (string) $order->get_meta( '_id_factura' ) );
+                $invoice_details   = $this->resolve_order_invoice_details_for_report( $order );
+                $invoice_number    = $invoice_details['number'];
+                $invoice_id        = $invoice_details['id'];
                 $invoice_reference = $invoice_number ?: $invoice_id;
+                $invoice_ride_url  = $invoice_details['ride_url'];
                 $shipping_methods = $order->get_shipping_methods();
                 $shipping_label   = empty( $shipping_methods )
                         ? __( 'Sin método de envío', $this->plugin_name )
@@ -7137,6 +7213,10 @@ $order_note = sprintf(
                         $invoice_label = '' !== $invoice_reference
                                 ? sprintf( __( 'Pedido completado y factura generada (%s).', $this->plugin_name ), $invoice_reference )
                                 : __( 'Pedido completado y factura generada.', $this->plugin_name );
+
+                        if ( '' !== $invoice_ride_url ) {
+                                $invoice_label .= ' ' . sprintf( __( 'RIDE: %s', $this->plugin_name ), esc_url( $invoice_ride_url ) );
+                        }
 
                         $order_summary[] = [
                                 'label' => __( 'Facturación', $this->plugin_name ),
