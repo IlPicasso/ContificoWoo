@@ -19,6 +19,7 @@
 <a href="?page=woo-contifico&tab=sincronizar" class="nav-tab <?php echo $active_tab == 'sincronizar' ? 'nav-tab-active' : ''; ?>"><?php _e('Sincronización manual', $this->plugin_name) ?></a>
 <a href="?page=woo-contifico&tab=historial" class="nav-tab <?php echo $active_tab == 'historial' ? 'nav-tab-active' : ''; ?>"><?php _e( 'Historial de sincronizaciones', $this->plugin_name ); ?></a>
 <a href="?page=woo-contifico&tab=movimientos" class="nav-tab <?php echo $active_tab == 'movimientos' ? 'nav-tab-active' : ''; ?>"><?php _e( 'Movimientos de inventario', $this->plugin_name ); ?></a>
+<a href="?page=woo-contifico&tab=bodega_web" class="nav-tab <?php echo $active_tab == 'bodega_web' ? 'nav-tab-active' : ''; ?>"><?php _e( 'Bodega web', $this->plugin_name ); ?></a>
 <?php endif; ?>
     </h2>
 
@@ -232,6 +233,51 @@
 
 <?php if ( $this->config_status['status'] && $is_active && $active_tab === 'movimientos' ) : ?>
 <?php require_once plugin_dir_path( __FILE__ ) . 'woo-contifico-inventory-report.php'; ?>
+<?php endif; ?>
+
+<?php if ( $this->config_status['status'] && $is_active && $active_tab === 'bodega_web' ) : ?>
+    <?php
+    $pending_web_products = $this->get_web_warehouse_pending_products();
+    $web_warehouse_code   = isset( $this->woo_contifico->settings['bodega_facturacion'] ) ? (string) $this->woo_contifico->settings['bodega_facturacion'] : '';
+    $web_warehouse_label  = isset( $this->woo_contifico->settings['bodega_facturacion_label'] ) ? (string) $this->woo_contifico->settings['bodega_facturacion_label'] : '';
+    $web_warehouse_name   = $web_warehouse_label ? $web_warehouse_label : $web_warehouse_code;
+    ?>
+    <div class="woo-contifico-web-warehouse">
+        <h3><?php esc_html_e( 'Productos pendientes en la bodega web', 'woo-contifico' ); ?></h3>
+        <?php if ( '' === $web_warehouse_code ) : ?>
+            <p><?php esc_html_e( 'Configura la bodega de facturación en la pestaña de integración para ver el estado de los productos pendientes.', 'woo-contifico' ); ?></p>
+        <?php elseif ( empty( $pending_web_products ) ) : ?>
+            <p><?php esc_html_e( 'No hay productos pendientes en la bodega web actualmente.', 'woo-contifico' ); ?></p>
+        <?php else : ?>
+            <p>
+                <?php echo wp_kses_post( sprintf( __( 'Resumen de existencias transferidas a la bodega de facturación %s que aún no se han regresado a su origen.', 'woo-contifico' ), '<strong>' . esc_html( $web_warehouse_name ) . '</strong>' ) ); ?>
+            </p>
+            <table class="widefat fixed striped">
+                <thead>
+                <tr>
+                    <th scope="col"><?php esc_html_e( 'Producto', 'woo-contifico' ); ?></th>
+                    <th scope="col"><?php esc_html_e( 'SKU', 'woo-contifico' ); ?></th>
+                    <th scope="col"><?php esc_html_e( 'Cantidad pendiente', 'woo-contifico' ); ?></th>
+                    <th scope="col"><?php esc_html_e( 'Último movimiento', 'woo-contifico' ); ?></th>
+                </tr>
+                </thead>
+                <tbody>
+                <?php foreach ( $pending_web_products as $product ) :
+                    $last_movement = isset( $product['last_movement'] ) ? (int) $product['last_movement'] : 0;
+                    ?>
+                    <tr>
+                        <td><?php echo esc_html( $product['product_name'] ?? __( 'Sin nombre', 'woo-contifico' ) ); ?></td>
+                        <td><?php echo esc_html( $product['sku'] ?? '' ); ?></td>
+                        <td><?php echo esc_html( number_format_i18n( (float) ( $product['pending'] ?? 0 ) ) ); ?></td>
+                        <td>
+                            <?php echo $last_movement ? esc_html( wp_date( get_option( 'date_format', 'Y-m-d' ) . ' ' . get_option( 'time_format', 'H:i' ), $last_movement ) ) : '—'; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+    </div>
 <?php endif; ?>
 
 <?php if ( $this->config_status['status'] && $is_active && $active_tab === 'diagnostico' ) : ?>

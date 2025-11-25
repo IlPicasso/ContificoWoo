@@ -29,8 +29,8 @@ class Woo_Contifico_Admin {
 	private const INVENTORY_MOVEMENTS_STORAGE = 'woo_contifico_inventory_movements';
 	private const INVENTORY_MOVEMENTS_TRANSIENT = 'woo_contifico_inventory_movements';
 	private const INVENTORY_MOVEMENTS_MAX_ENTRIES = 250;
-	private const INVENTORY_MOVEMENTS_HISTORY_RUNS = 'woo_contifico_inventory_movements_history_runs';
-	private const MAX_INVOICE_SEQUENTIAL_RETRIES = 5;
+        private const INVENTORY_MOVEMENTS_HISTORY_RUNS = 'woo_contifico_inventory_movements_history_runs';
+        private const MAX_INVOICE_SEQUENTIAL_RETRIES = 5;
         private const MANUAL_SYNC_CANCEL_TRANSIENT = 'woo_contifico_manual_sync_cancel';
         private const MANUAL_SYNC_KEEPALIVE_HOOK    = 'woo_contifico_manual_sync_keepalive';
         private const PRODUCT_ID_META_KEY         = '_woo_contifico_product_id';
@@ -654,14 +654,54 @@ class Woo_Contifico_Admin {
 	 *
 	 * @since 1.3.0
 	 */
-	public function admin_init_notice() {
-		# Avoid double notice
-		global $pagenow;
-		if ( strpos( $pagenow, 'option' ) === false ) {
-			settings_errors( 'woo_contifico_init' );
-		}
+        public function admin_init_notice() {
+                # Avoid double notice
+                global $pagenow;
+                if ( strpos( $pagenow, 'option' ) === false ) {
+                        settings_errors( 'woo_contifico_init' );
+                }
 
-	}
+        }
+
+        /**
+         * Highlight recent Contífico issues that can affect inventory accuracy.
+         *
+         * @return void
+         * @noinspection PhpUnused
+         */
+        public function admin_contifico_process_alerts() : void {
+
+                if ( ! current_user_can( 'manage_woocommerce' ) ) {
+                        return;
+                }
+
+                $alerts = $this->get_recent_contifico_process_alerts();
+
+                if ( empty( $alerts ) ) {
+                        return;
+                }
+
+                $settings_url = esc_url( add_query_arg( [ 'page' => 'woo-contifico', 'tab' => 'movimientos' ], admin_url( 'admin.php' ) ) );
+
+                echo '<div class="notice notice-error">';
+                echo '<p><strong>' . esc_html__( 'Contífico: se detectaron problemas recientes en procesos de inventario.', 'woo-contifico' ) . '</strong></p>';
+                echo '<ul>';
+
+                foreach ( $alerts as $alert ) {
+                        $product = isset( $alert['product_name'] ) ? (string) $alert['product_name'] : '';
+                        $sku     = isset( $alert['sku'] ) ? (string) $alert['sku'] : '';
+                        $reason  = isset( $alert['message'] ) ? (string) $alert['message'] : '';
+
+                        $label_parts = array_filter( [ $product, $sku ? "({$sku})" : '' ] );
+                        $label       = empty( $label_parts ) ? __( 'Producto no identificado', 'woo-contifico' ) : implode( ' ', $label_parts );
+
+                        echo '<li>' . esc_html( sprintf( __( '%1$s: %2$s', 'woo-contifico' ), $label, $reason ) ) . '</li>';
+                }
+
+                echo '</ul>';
+                echo '<p><a class="button button-primary" href="' . $settings_url . '">' . esc_html__( 'Revisar movimientos de inventario', 'woo-contifico' ) . '</a></p>';
+                echo '</div>';
+        }
 
 	/**
 	 * Load plugin configuration page
@@ -1753,6 +1793,47 @@ return $value;
                 set_transient( self::INVENTORY_MOVEMENTS_TRANSIENT, $processed, MINUTE_IN_SECONDS );
 
                 return $processed;
+        }
+
+        /**
+         * Collect recent Contífico process errors to surface on the dashboard.
+         *
+         * @return array<int,array<string,mixed>>
+         * @since 4.1.33
+         */
+        private function get_recent_contifico_process_alerts() : array {
+
+                $entries    = $this->get_inventory_movements_storage();
+                $threshold  = current_time( 'timestamp' ) - DAY_IN_SECONDS;
+                $aggregated = [];
+
+                foreach ( $entries as $entry ) {
+                        $status    = isset( $entry['status'] ) ? (string) $entry['status'] : '';
+                        $timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
+
+                        if ( 'error' !== $status || $timestamp < $threshold ) {
+                                continue;
+                        }
+
+                        $product_id = (int) ( $entry['wc_product_id'] ?? 0 );
+                        $key        = $product_id > 0 ? 'wc_' . $product_id : (string) ( $entry['product_id'] ?? '' );
+
+                        if ( '' === $key ) {
+                                $key = 'generic_' . md5( wp_json_encode( $entry ) );
+                        }
+
+                        if ( isset( $aggregated[ $key ] ) ) {
+                                continue;
+                        }
+
+                        $aggregated[ $key ] = [
+                                'product_name' => isset( $entry['product_name'] ) ? (string) $entry['product_name'] : '',
+                                'sku'          => isset( $entry['sku'] ) ? (string) $entry['sku'] : '',
+                                'message'      => isset( $entry['error_message'] ) ? (string) $entry['error_message'] : __( 'Error no especificado en Contífico.', 'woo-contifico' ),
+                        ];
+                }
+
+                return array_values( $aggregated );
         }
 
 /**
@@ -4010,6 +4091,110 @@ $filters = [
         }
 
         /**
+         * Determine if a warehouse entry matches the configured billing warehouse code.
+         *
+         * @param array  $warehouse
+         * @param string $billing_code
+         *
+         * @return bool
+         * @since 4.1.33
+         */
+        private function warehouse_matches_billing( array $warehouse, string $billing_code ) : bool {
+
+                if ( '' === $billing_code ) {
+                        return false;
+                }
+
+                $candidates = array_filter( [
+                        isset( $warehouse['code'] ) ? (string) $warehouse['code'] : '',
+                        isset( $warehouse['id'] ) ? (string) $warehouse['id'] : '',
+                        isset( $warehouse['location_id'] ) ? (string) $warehouse['location_id'] : '',
+                        isset( $warehouse['label'] ) ? (string) $warehouse['label'] : '',
+                ] );
+
+                foreach ( $candidates as $candidate ) {
+                        if ( '' !== $candidate && strcasecmp( $candidate, $billing_code ) === 0 ) {
+                                return true;
+                        }
+                }
+
+                return false;
+        }
+
+
+        /**
+         * Get products that still have balance assigned to the billing/web warehouse.
+         *
+         * @return array<int,array<string,mixed>>
+         * @since 4.1.33
+         */
+        private function get_web_warehouse_pending_products() : array {
+
+                $warehouse_code = isset( $this->woo_contifico->settings['bodega_facturacion'] ) ? trim( (string) $this->woo_contifico->settings['bodega_facturacion'] ) : '';
+
+                if ( '' === $warehouse_code ) {
+                        return [];
+                }
+
+                $entries  = $this->get_inventory_movements_storage();
+                $balances = [];
+
+                foreach ( $entries as $entry ) {
+                        $event_type = isset( $entry['event_type'] ) ? (string) $entry['event_type'] : '';
+                        $quantity   = (float) ( $entry['quantity'] ?? 0 );
+
+                        if ( $quantity <= 0.0 || '' === $event_type ) {
+                                continue;
+                        }
+
+                        $from_matches = $this->warehouse_matches_billing( $entry['warehouses']['from'] ?? [], $warehouse_code );
+                        $to_matches   = $this->warehouse_matches_billing( $entry['warehouses']['to'] ?? [], $warehouse_code );
+
+                        if ( ! $from_matches && ! $to_matches ) {
+                                continue;
+                        }
+
+                        $product_id = (int) ( $entry['wc_product_id'] ?? 0 );
+                        $key        = $product_id > 0 ? $product_id : md5( wp_json_encode( [ $entry['product_id'] ?? '', $entry['sku'] ?? '' ] ) );
+
+                        if ( ! isset( $balances[ $key ] ) ) {
+                                $balances[ $key ] = [
+                                        'product_name'  => isset( $entry['product_name'] ) ? (string) $entry['product_name'] : __( 'Producto sin nombre', 'woo-contifico' ),
+                                        'sku'           => isset( $entry['sku'] ) ? (string) $entry['sku'] : '',
+                                        'pending'       => 0.0,
+                                        'last_movement' => isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0,
+                                ];
+                        }
+
+                        if ( $to_matches && 'egreso' === $event_type ) {
+                                $balances[ $key ]['pending'] += $quantity;
+                        } elseif ( $from_matches && 'ingreso' === $event_type ) {
+                                $balances[ $key ]['pending'] -= $quantity;
+                        }
+
+                        if ( isset( $entry['timestamp'] ) && (int) $entry['timestamp'] > $balances[ $key ]['last_movement'] ) {
+                                $balances[ $key ]['last_movement'] = (int) $entry['timestamp'];
+                        }
+                }
+
+                $balances = array_filter(
+                        $balances,
+                        static function ( $entry ) {
+                                return isset( $entry['pending'] ) && (float) $entry['pending'] > 0.0;
+                        }
+                );
+
+                uasort(
+                        $balances,
+                        static function ( $a, $b ) {
+                                return (float) $b['pending'] <=> (float) $a['pending'];
+                        }
+                );
+
+                return array_values( $balances );
+        }
+
+        /**
          * Reset the environment before running a manual synchronization.
          *
          * @since 4.3.0
@@ -6149,6 +6334,16 @@ $filters = [
                         $grouped_items     = $this->group_order_items_by_location_context( $order, $items, $destination_code, $default_destination_id );
                         $processed_groups  = 0;
                         $successful_groups = 0;
+                        $origin_stock      = [];
+
+                        try {
+                                $origin_stock = $this->contifico->get_stock( $id_origin_warehouse );
+                        } catch ( Exception $exception ) {
+                                $order->add_order_note( sprintf(
+                                        __( '<b>Contífico:</b><br>No se pudo consultar el stock disponible en la bodega de facturación: %s', $this->plugin_name ),
+                                        $exception->getMessage()
+                                ) );
+                        }
 
                         foreach ( $grouped_items as $group ) {
                                 $group_context = $group['context'];
@@ -6184,8 +6379,20 @@ $filters = [
                                         $item_context  = isset( $group['item_contexts'][ $item->get_id() ] ) ? $group['item_contexts'][ $item->get_id() ] : $group_context;
                                         $sku           = (string) $wc_product->get_sku();
                                         $price         = $wc_product->get_price();
-                                        $product_id    = $this->contifico->get_product_id( $sku );
                                         $item_quantity = 0.0;
+                                        $product_id    = '';
+
+                                        try {
+                                                $product_id = $this->contifico->get_product_id( $sku );
+                                        } catch ( Exception $exception ) {
+                                                $order->add_order_note( sprintf(
+                                                        __( '<b>Contífico:</b><br>No se pudo obtener el identificador de Contífico para el SKU %1$s: %2$s', $this->plugin_name ),
+                                                        $sku,
+                                                        $exception->getMessage()
+                                                ) );
+
+                                                continue;
+                                        }
 
                                         if ( empty( $refund ) ) {
                                                 $item_stock_reduced = $item->get_meta( '_reduced_stock', true );
@@ -6200,10 +6407,54 @@ $filters = [
                                                 continue;
                                         }
 
+                                        if ( '' === (string) $product_id ) {
+                                                $order->add_order_note( sprintf(
+                                                        __( '<b>Contífico:</b><br>Se omitió la restitución de stock para el SKU %s porque no tiene identificador en Contífico.', $this->plugin_name ),
+                                                        $sku
+                                                ) );
+
+                                                continue;
+                                        }
+
+                                        $available_stock = isset( $origin_stock[ $product_id ] ) ? (float) $origin_stock[ $product_id ] : null;
+
+                                        if ( null === $available_stock ) {
+                                                $order->add_order_note( sprintf(
+                                                        __( '<b>Contífico:</b><br>No se pudo verificar el stock del SKU %1$s en la bodega de facturación (%2$s); se omite la restitución.', $this->plugin_name ),
+                                                        $sku,
+                                                        $origin_code
+                                                ) );
+
+                                                continue;
+                                        }
+
+                                        if ( $available_stock <= 0.0 ) {
+                                                $order->add_order_note( sprintf(
+                                                        __( '<b>Contífico:</b><br>No hay stock disponible en la bodega de facturación (%2$s) para devolver el SKU %1$s.', $this->plugin_name ),
+                                                        $sku,
+                                                        $origin_code
+                                                ) );
+
+                                                continue;
+                                        }
+
+                                        $transfer_quantity = $item_quantity;
+
+                                        if ( $available_stock < $item_quantity ) {
+                                                $transfer_quantity = $available_stock;
+
+                                                $order->add_order_note( sprintf(
+                                                        __( '<b>Contífico:</b><br>Solo se devolverán %1$s unidades del SKU %2$s desde la bodega de facturación (%3$s) por stock insuficiente.', $this->plugin_name ),
+                                                        wc_format_decimal( $transfer_quantity ),
+                                                        $sku,
+                                                        $origin_code
+                                                ) );
+                                        }
+
                                         $restore_stock['detalles'][] = [
                                                 'producto_id' => $product_id,
                                                 'precio'      => $price,
-                                                'cantidad'    => $item_quantity,
+                                                'cantidad'    => $transfer_quantity,
                                         ];
 
                                                 $group_entries[] = $this->build_inventory_movement_entry( [
@@ -6213,7 +6464,7 @@ $filters = [
                                                         'wc_product_id' => $wc_product->get_id(),
                                                         'sku'           => $sku,
                                                         'product_name'  => $wc_product->get_name(),
-                                                        'quantity'      => $item_quantity,
+                                                        'quantity'      => $transfer_quantity,
                                                         'warehouses'    => [
                                                                 'from' => [
                                                                         'id'    => (string) $id_origin_warehouse,
