@@ -2019,18 +2019,27 @@ return $value;
                        'quantity'         => isset( $entry['quantity'] ) ? (float) $entry['quantity'] : 0.0,
                        'warehouses'       => [
                                'from' => [
-                                       'id'    => isset( $entry['warehouses']['from']['id'] ) ? (string) $entry['warehouses']['from']['id'] : '',
-                                       'label' => isset( $entry['warehouses']['from']['label'] ) ? (string) $entry['warehouses']['from']['label'] : '',
+                                       'id'             => isset( $entry['warehouses']['from']['id'] ) ? (string) $entry['warehouses']['from']['id'] : '',
+                                       'code'           => isset( $entry['warehouses']['from']['code'] ) ? (string) $entry['warehouses']['from']['code'] : '',
+                                       'label'          => isset( $entry['warehouses']['from']['label'] ) ? (string) $entry['warehouses']['from']['label'] : '',
+                                       'location_id'    => isset( $entry['warehouses']['from']['location_id'] ) ? (string) $entry['warehouses']['from']['location_id'] : '',
+                                       'location_label' => isset( $entry['warehouses']['from']['location_label'] ) ? (string) $entry['warehouses']['from']['location_label'] : '',
+                                       'mapped'         => isset( $entry['warehouses']['from']['mapped'] ) ? (bool) $entry['warehouses']['from']['mapped'] : false,
                                ],
                                'to'   => [
-                                       'id'    => isset( $entry['warehouses']['to']['id'] ) ? (string) $entry['warehouses']['to']['id'] : '',
-                                       'label' => isset( $entry['warehouses']['to']['label'] ) ? (string) $entry['warehouses']['to']['label'] : '',
+                                       'id'             => isset( $entry['warehouses']['to']['id'] ) ? (string) $entry['warehouses']['to']['id'] : '',
+                                       'code'           => isset( $entry['warehouses']['to']['code'] ) ? (string) $entry['warehouses']['to']['code'] : '',
+                                       'label'          => isset( $entry['warehouses']['to']['label'] ) ? (string) $entry['warehouses']['to']['label'] : '',
+                                       'location_id'    => isset( $entry['warehouses']['to']['location_id'] ) ? (string) $entry['warehouses']['to']['location_id'] : '',
+                                       'location_label' => isset( $entry['warehouses']['to']['location_label'] ) ? (string) $entry['warehouses']['to']['location_label'] : '',
+                                       'mapped'         => isset( $entry['warehouses']['to']['mapped'] ) ? (bool) $entry['warehouses']['to']['mapped'] : false,
                                ],
                        ],
                        'order_status'     => isset( $entry['order_status'] ) ? (string) $entry['order_status'] : '',
                        'order_trigger'    => isset( $entry['order_trigger'] ) ? (string) $entry['order_trigger'] : '',
                        'context'          => isset( $entry['context'] ) ? (string) $entry['context'] : '',
                        'order_source'     => isset( $entry['order_source'] ) ? (string) $entry['order_source'] : '',
+                       'reason'           => isset( $entry['reason'] ) ? (string) $entry['reason'] : '',
                        'order_item_id'    => isset( $entry['order_item_id'] ) ? (int) $entry['order_item_id'] : 0,
                        'reference'        => isset( $entry['reference'] ) ? (string) $entry['reference'] : '',
                        'error_message'    => isset( $entry['error_message'] ) ? (string) $entry['error_message'] : '',
@@ -2043,6 +2052,94 @@ return $value;
                ];
 
                return $defaults;
+       }
+
+       /**
+        * Enrich inventory movement data with friendly location labels for PDF output.
+        *
+        * @since 4.1.15
+        */
+       private function hydrate_inventory_movement_for_report( array $movement ) : array {
+               $location_id    = isset( $movement['location']['id'] ) ? (string) $movement['location']['id'] : '';
+               $location_label = isset( $movement['location']['label'] ) ? (string) $movement['location']['label'] : '';
+
+               foreach ( [ 'from', 'to' ] as $side ) {
+                       if ( ! isset( $movement['warehouses'][ $side ] ) || ! is_array( $movement['warehouses'][ $side ] ) ) {
+                               $movement['warehouses'][ $side ] = [];
+                       }
+
+                       $warehouse_location_id = isset( $movement['warehouses'][ $side ]['location_id'] )
+                               ? (string) $movement['warehouses'][ $side ]['location_id']
+                               : '';
+                       $warehouse_location_label = isset( $movement['warehouses'][ $side ]['location_label'] )
+                               ? (string) $movement['warehouses'][ $side ]['location_label']
+                               : '';
+                       $warehouse_label = isset( $movement['warehouses'][ $side ]['label'] )
+                               ? (string) $movement['warehouses'][ $side ]['label']
+                               : '';
+                       $warehouse_code = isset( $movement['warehouses'][ $side ]['code'] )
+                               ? (string) $movement['warehouses'][ $side ]['code']
+                               : '';
+                       $warehouse_id = isset( $movement['warehouses'][ $side ]['id'] )
+                               ? (string) $movement['warehouses'][ $side ]['id']
+                               : '';
+
+                       if ( '' === $warehouse_code && '' !== $warehouse_id ) {
+                               $warehouse_code = $warehouse_id;
+                               $movement['warehouses'][ $side ]['code'] = $warehouse_code;
+                       }
+
+                       $resolved_label = $this->resolve_warehouse_location_label(
+                               $warehouse_code,
+                               $warehouse_location_id
+                       );
+
+                       if ( '' !== $resolved_label ) {
+                               if (
+                                       '' === $warehouse_label
+                                       || $warehouse_label === $warehouse_code
+                                       || $warehouse_label === $warehouse_id
+                               ) {
+                                       $warehouse_label = $resolved_label;
+                               }
+
+                               if ( '' === $warehouse_location_label ) {
+                                       $warehouse_location_label = $resolved_label;
+                               }
+
+                               $movement['warehouses'][ $side ]['mapped'] = true;
+                       }
+
+                       if ( '' === $warehouse_label && isset( $movement['warehouses'][ $side ]['label'] ) ) {
+                               $warehouse_label = (string) $movement['warehouses'][ $side ]['label'];
+                       }
+
+                       if ( '' === $warehouse_label && isset( $movement['warehouses'][ $side ]['code'] ) ) {
+                               $warehouse_label = (string) $movement['warehouses'][ $side ]['code'];
+                       }
+
+                       $movement['warehouses'][ $side ]['label'] = $warehouse_label;
+
+                       if ( ! isset( $movement['warehouses'][ $side ]['location_id'] ) || '' === $movement['warehouses'][ $side ]['location_id'] ) {
+                               $movement['warehouses'][ $side ]['location_id'] = $warehouse_location_id;
+                       }
+
+                       if ( '' !== $warehouse_location_label ) {
+                               $movement['warehouses'][ $side ]['location_label'] = $warehouse_location_label;
+                       }
+               }
+
+               $location_context = [
+                       'label'          => isset( $movement['warehouses']['from']['label'] ) ? (string) $movement['warehouses']['from']['label'] : '',
+                       'code'           => isset( $movement['warehouses']['from']['code'] ) ? (string) $movement['warehouses']['from']['code'] : '',
+                       'location_id'    => $location_id,
+                       'location_label' => $location_label,
+               ];
+
+               $movement['location']['label'] = $this->describe_inventory_location_for_note( $location_context );
+               $movement['location']['id']    = $location_id;
+
+               return $movement;
        }
 
        /**
@@ -2089,21 +2186,26 @@ return $value;
                 $quantity   = abs( $delta );
                 $warehouses = $this->resolve_manual_sync_movement_warehouses( $event_type, $sync_scope );
 
-                return $this->build_inventory_movement_entry( [
-                        'event_type'   => $event_type,
-                        'product_id'   => isset( $product_entry['id'] ) ? (string) $product_entry['id'] : '',
-                        'wc_product_id'=> $wc_product->get_id(),
-                        'sku'          => (string) $wc_product->get_sku(),
-                        'product_name' => $wc_product->get_name(),
-                        'quantity'     => $quantity,
-                        'warehouses'   => $warehouses,
-                        'context'      => 'manual_sync',
-                        'order_source' => 'manual_sync_' . $sync_scope,
-                        'order_trigger'=> 'manual_sync',
-                        'status'       => 'success',
-                        'sync_type'    => in_array( $sync_scope, [ 'global', 'product' ], true ) ? $sync_scope : 'global',
-                ] );
-        }
+               $scope_reason = 'product' === $sync_scope
+                       ? __( 'sincronización manual por producto', $this->plugin_name )
+                       : __( 'sincronización manual global', $this->plugin_name );
+
+               return $this->build_inventory_movement_entry( [
+                       'event_type'    => $event_type,
+                       'product_id'    => isset( $product_entry['id'] ) ? (string) $product_entry['id'] : '',
+                       'wc_product_id' => $wc_product->get_id(),
+                       'sku'           => (string) $wc_product->get_sku(),
+                       'product_name'  => $wc_product->get_name(),
+                       'quantity'      => $quantity,
+                       'warehouses'    => $warehouses,
+                       'context'       => 'manual_sync',
+                       'order_source'  => 'manual_sync_' . $sync_scope,
+                       'order_trigger' => 'manual_sync',
+                       'status'        => 'success',
+                       'sync_type'     => in_array( $sync_scope, [ 'global', 'product' ], true ) ? $sync_scope : 'global',
+                       'reason'        => $scope_reason,
+               ] );
+       }
 
         /**
          * Build inventory movement entries from stored manual sync history updates.
@@ -2159,6 +2261,7 @@ return $value;
                                 'order_trigger' => 'manual_sync_summary',
                                 'status'        => $entry_status,
                                 'sync_type'     => 'global',
+                                'reason'        => __( 'resumen de sincronización global', $this->plugin_name ),
                         ] );
                 }
 
@@ -2861,7 +2964,7 @@ return $value;
          *
         * @since 4.4.0
          */
-        private function describe_inventory_location_for_note( array $context ) : string {
+       private function describe_inventory_location_for_note( array $context ) : string {
                 $location_label = isset( $context['location_label'] ) ? (string) $context['location_label'] : '';
                 $location_id    = isset( $context['location_id'] ) ? (string) $context['location_id'] : '';
 
@@ -2898,35 +3001,162 @@ return $value;
                 return __( 'Ubicación predeterminada', 'woo-contifico' );
         }
 
-        private function format_warehouse_label_with_code( array $warehouse ) : string {
-                $label = isset( $warehouse['label'] ) ? (string) $warehouse['label'] : '';
-                $code  = isset( $warehouse['code'] ) ? (string) $warehouse['code'] : '';
-                $id    = isset( $warehouse['id'] ) ? (string) $warehouse['id'] : '';
+       private function format_warehouse_label_with_code( array $warehouse ) : string {
+               $label          = isset( $warehouse['label'] ) ? (string) $warehouse['label'] : '';
+               $code           = isset( $warehouse['code'] ) ? (string) $warehouse['code'] : '';
+               $id             = isset( $warehouse['id'] ) ? (string) $warehouse['id'] : '';
+               $location_id    = isset( $warehouse['location_id'] ) ? (string) $warehouse['location_id'] : '';
+               $location_label = isset( $warehouse['location_label'] ) ? (string) $warehouse['location_label'] : '';
+               $is_mapped      = isset( $warehouse['mapped'] ) ? (bool) $warehouse['mapped'] : false;
 
-                if ( '' !== $code ) {
-                        $mapped_label = $this->resolve_warehouse_location_label( $code, $id );
+               $contifico_label = $this->resolve_contifico_warehouse_label( $code, $id );
 
-                        if ( '' !== $mapped_label ) {
-                                $label = $mapped_label;
-                        }
-                }
+               if ( '' !== $contifico_label ) {
+                       $label = $contifico_label;
+               } elseif ( '' !== $location_label ) {
+                       if ( '' === $label ) {
+                               $label = $location_label;
+                       } elseif ( $is_mapped && ( $label === $code || $label === $id ) ) {
+                               $label = $location_label;
+                       }
+               }
 
-                if ( '' === $code && isset( $warehouse['id'] ) ) {
-                        $code = (string) $warehouse['id'];
-                }
+               if ( '' !== $code ) {
+                       $mapped_label = $this->resolve_warehouse_location_label( $code, $location_id );
 
-                $label = '' !== $label ? $label : $code;
+                       if (
+                               '' !== $mapped_label
+                               && ( '' === $label || $label === $code || $label === $id )
+                       ) {
+                               $label = $mapped_label;
+                       }
+               }
 
-                if ( '' === $label ) {
-                        return '';
-                }
+               if ( '' === $label ) {
+                       $label = '' !== $code ? $code : $id;
+               }
 
-                if ( '' !== $code && false === stripos( $label, '(' . $code . ')' ) ) {
-                        return sprintf( '%s (%s)', $label, $code );
-                }
+               if ( '' === $label ) {
+                       return '';
+               }
 
-                return $label;
-        }
+               if ( '' !== $code && false === stripos( $label, '(' . $code . ')' ) ) {
+                       return sprintf( '%s (%s)', $label, $code );
+               }
+
+               return $label;
+       }
+
+       private function resolve_contifico_warehouse_label( string $code, string $id ) : string {
+               $code = trim( $code );
+               $id   = trim( $id );
+
+               if ( '' !== $code && method_exists( $this->contifico, 'get_warehouse_label_by_code' ) ) {
+                       $label = (string) $this->contifico->get_warehouse_label_by_code( $code );
+
+                       if ( '' !== $label ) {
+                               return $label;
+                       }
+               }
+
+               if ( '' !== $id && method_exists( $this->contifico, 'get_warehouse_label_by_id' ) ) {
+                       $label = (string) $this->contifico->get_warehouse_label_by_id( $id );
+
+                       if ( '' !== $label ) {
+                               return $label;
+                       }
+               }
+
+               return '';
+       }
+
+       /**
+        * Format warehouse labels ensuring origin and destination stay distinct.
+        *
+        * @since 4.1.20
+        */
+       private function format_distinct_warehouse_labels( array $from, array $to ) : array {
+               $from_label = $this->format_warehouse_label_with_code( $from );
+               $to_label   = $this->format_warehouse_label_with_code( $to );
+
+               if ( '' === $from_label && '' === $to_label ) {
+                       return [ 'from' => '', 'to' => '' ];
+               }
+
+               if ( $from_label !== $to_label ) {
+                       return [ 'from' => $from_label, 'to' => $to_label ];
+               }
+
+               $from_code = isset( $from['code'] ) ? (string) $from['code'] : '';
+               $to_code   = isset( $to['code'] ) ? (string) $to['code'] : '';
+               $from_id   = isset( $from['id'] ) ? (string) $from['id'] : '';
+               $to_id     = isset( $to['id'] ) ? (string) $to['id'] : '';
+
+               $from_suffix = '' !== $from_code ? $from_code : $from_id;
+               $to_suffix   = '' !== $to_code ? $to_code : $to_id;
+
+               if ( '' !== $from_suffix ) {
+                       $from_label = sprintf( '%s (%s)', $from_label, $from_suffix );
+               }
+
+               if ( '' !== $to_suffix && $to_suffix !== $from_suffix ) {
+                       $to_label = sprintf( '%s (%s)', $to_label, $to_suffix );
+               } elseif ( '' !== $to_suffix ) {
+                       $to_label = sprintf( '%s (%s)', $to_label, $to_suffix ?: $to_label );
+               }
+
+               return [ 'from' => $from_label, 'to' => $to_label ];
+       }
+
+       /**
+        * Describe why a specific inventory movement occurred.
+        *
+        * @since 4.1.27
+        */
+       private function describe_inventory_movement_reason_for_report( array $movement ) : string {
+               $reason = isset( $movement['reason'] ) ? trim( (string) $movement['reason'] ) : '';
+
+               if ( '' !== $reason ) {
+                       return $reason;
+               }
+
+               $context      = isset( $movement['context'] ) ? (string) $movement['context'] : '';
+               $order_source = isset( $movement['order_source'] ) ? (string) $movement['order_source'] : '';
+               $order_trigger = isset( $movement['order_trigger'] ) ? (string) $movement['order_trigger'] : '';
+               $order_id     = isset( $movement['order_id'] ) ? (int) $movement['order_id'] : 0;
+
+               if ( 'manual_sync' === $context || 0 === strpos( $order_source, 'manual_sync' ) ) {
+                       $scope = str_replace( 'manual_sync_', '', $order_source );
+
+                       if ( 'product' === $scope ) {
+                               return __( 'sincronización manual por producto', $this->plugin_name );
+                       }
+
+                       return __( 'sincronización manual de inventario', $this->plugin_name );
+               }
+
+               if (
+                       'woocommerce_restore_order_stock' === $order_trigger
+                       || 'woocommerce_order_refunded' === $order_trigger
+                       || 'restore' === $context
+               ) {
+                       return $order_id
+                               ? sprintf( __( 'reintegro de stock de la orden #%d', $this->plugin_name ), $order_id )
+                               : __( 'reintegro de stock de la orden', $this->plugin_name );
+               }
+
+               if (
+                       'transfer' === $context
+                       || 'woocommerce_reduce_order_stock' === $order_trigger
+                       || 'order' === $order_source
+               ) {
+                       return $order_id
+                               ? sprintf( __( 'despacho de la orden #%d', $this->plugin_name ), $order_id )
+                               : __( 'despacho de pedido en línea', $this->plugin_name );
+               }
+
+               return '';
+       }
 
         /**
          * Group order items by their resolved location context.
@@ -3078,9 +3308,12 @@ private function resolve_location_warehouse_code( string $location_id ) : string
          */
         private function resolve_warehouse_location_label( string $warehouse_code, string $location_id = '' ) : string {
                 $warehouse_code = trim( $warehouse_code );
+                $location_id    = trim( $location_id );
 
-                if ( '' === $warehouse_code ) {
-                        return '';
+                $invoice_label = $this->resolve_invoice_warehouse_label( $warehouse_code, $location_id );
+
+                if ( '' !== $invoice_label ) {
+                        return $invoice_label;
                 }
 
                 if ( ! ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) ) {
@@ -3093,29 +3326,63 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                 $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
 
-                if ( ! is_array( $configured_locations ) || empty( $configured_locations ) ) {
+                if ( is_array( $configured_locations ) && ! empty( $configured_locations ) ) {
+                        foreach ( $configured_locations as $configured_location_id => $configured_code ) {
+                                $mapped_code            = (string) $configured_code;
+                                $configured_location_id = (string) $configured_location_id;
+
+                                if ( '' !== $warehouse_code && $warehouse_code !== $mapped_code ) {
+                                        continue;
+                                }
+
+                                if ( '' !== $location_id && $configured_location_id !== $location_id ) {
+                                        continue;
+                                }
+
+                                if ( method_exists( $this->woo_contifico->multilocation, 'get_location_label' ) ) {
+                                        $label = (string) $this->woo_contifico->multilocation->get_location_label( $configured_location_id );
+
+                                        if ( '' !== $label ) {
+                                                return $label;
+                                        }
+                                }
+                        }
+                }
+
+                if (
+                        '' === $warehouse_code
+                        && '' !== $location_id
+                        && method_exists( $this->woo_contifico->multilocation, 'get_location_label' )
+                ) {
+                        $label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
+
+                        if ( '' !== $label ) {
+                                return $label;
+                        }
+                }
+
+                return '';
+        }
+
+        /**
+         * Resolve a friendly label for the Contífico invoice warehouse when it is not mapped in MultiLoca.
+         *
+         * @since 4.1.17
+         */
+        private function resolve_invoice_warehouse_label( string $warehouse_code, string $location_id ) : string {
+                $invoice_code  = isset( $this->woo_contifico->settings['bodega_facturacion'] ) ? trim( (string) $this->woo_contifico->settings['bodega_facturacion'] ) : '';
+                $invoice_label = isset( $this->woo_contifico->settings['bodega_facturacion_label'] ) ? trim( (string) $this->woo_contifico->settings['bodega_facturacion_label'] ) : '';
+
+                if ( '' === $invoice_code || '' === $invoice_label ) {
                         return '';
                 }
 
-                foreach ( $configured_locations as $configured_location_id => $configured_code ) {
-                        $mapped_code = (string) $configured_code;
-                        $configured_location_id = (string) $configured_location_id;
+                if ( '' !== $warehouse_code && strcasecmp( $warehouse_code, $invoice_code ) === 0 ) {
+                        return $invoice_label;
+                }
 
-                        if ( '' === $mapped_code || $warehouse_code !== $mapped_code ) {
-                                continue;
-                        }
-
-                        if ( '' !== $location_id && $configured_location_id !== $location_id ) {
-                                continue;
-                        }
-
-                        if ( method_exists( $this->woo_contifico->multilocation, 'get_location_label' ) ) {
-                                $label = (string) $this->woo_contifico->multilocation->get_location_label( $configured_location_id );
-
-                                if ( '' !== $label ) {
-                                        return $label;
-                                }
-                        }
+                if ( '' !== $location_id && strcasecmp( $location_id, $invoice_code ) === 0 ) {
+                        return $invoice_label;
                 }
 
                 return '';
@@ -5729,27 +5996,43 @@ $filters = [
                                         $product_id   = $this->contifico->get_product_id( $sku );
                                         $quantity     = (float) $item->get_quantity();
 
-                                        $transfer_stock['detalles'][] = [
-                                                'producto_id' => $product_id,
-                                                'cantidad'    => $quantity,
-                                        ];
+                                       $transfer_stock['detalles'][] = [
+                                               'producto_id' => $product_id,
+                                               'cantidad'    => $quantity,
+                                       ];
 
-                                        $group_entries[] = $this->build_inventory_movement_entry( [
-                                                'order_id'      => $order_id,
-                                                'event_type'    => 'egreso',
-                                                'product_id'    => $product_id,
-                                                'wc_product_id' => $wc_product->get_id(),
-                                                'sku'           => $sku,
-                                                'product_name'  => $wc_product->get_name(),
-                                                'quantity'      => $quantity,
-                                                'warehouses'    => [
-                                                        'from' => [ 'id' => (string) $group_context['id'], 'label' => $group_context['label'] ],
-                                                        'to'   => [ 'id' => (string) $id_destination_warehouse, 'label' => $destination_code ],
-                                                ],
-                                                'order_status'  => $order->get_status(),
-                                                'order_trigger' => 'woocommerce_reduce_order_stock',
-                                                'context'       => 'transfer',
-                                                'order_source'  => 'order',
+                                       $movement_reason = $order_id
+                                               ? sprintf( __( 'despacho de la orden #%d', $this->plugin_name ), $order_id )
+                                               : __( 'despacho de pedido en línea', $this->plugin_name );
+
+                                                $group_entries[] = $this->build_inventory_movement_entry( [
+                                                        'order_id'      => $order_id,
+                                                        'event_type'    => 'egreso',
+                                                        'product_id'    => $product_id,
+                                                        'wc_product_id' => $wc_product->get_id(),
+                                                        'sku'           => $sku,
+                                                        'product_name'  => $wc_product->get_name(),
+                                                        'quantity'      => $quantity,
+                                                        'warehouses'    => [
+                                                                'from' => [
+                                                                        'id'             => (string) $group_context['id'],
+                                                                        'code'           => (string) $group_context['code'],
+                                                                        'label'          => $group_context['label'],
+                                                                        'location_id'    => (string) $group_context['location_id'],
+                                                                        'location_label' => (string) $group_context['location_label'],
+                                                                        'mapped'         => (bool) $group_context['mapped'],
+                                                                ],
+                                                                'to'   => [
+                                                                        'id'    => (string) $id_destination_warehouse,
+                                                                        'code'  => (string) $destination_code,
+                                                                        'label' => $destination_code,
+                                                                ],
+                                                        ],
+                                                        'order_status'  => $order->get_status(),
+                                                        'order_trigger' => 'woocommerce_reduce_order_stock',
+                                                        'context'       => 'transfer',
+                                                        'order_source'  => 'order',
+                                                        'reason'        => $movement_reason,
                                                 'order_item_id' => $item->get_id(),
                                                 'sync_type'     => 'global',
                                                 'location'      => [
@@ -5923,28 +6206,40 @@ $filters = [
                                                 'cantidad'    => $item_quantity,
                                         ];
 
-                                        $group_entries[] = $this->build_inventory_movement_entry( [
-                                                'order_id'      => $order_id,
-                                                'event_type'    => 'ingreso',
-                                                'product_id'    => $product_id,
-                                                'wc_product_id' => $wc_product->get_id(),
-                                                'sku'           => $sku,
-                                                'product_name'  => $wc_product->get_name(),
-                                                'quantity'      => $item_quantity,
-                                                'warehouses'    => [
-                                                        'from' => [ 'id' => (string) $id_origin_warehouse, 'label' => $origin_code ],
-                                                        'to'   => [ 'id' => (string) $group_context['id'], 'label' => $group_context['label'] ],
-                                                ],
-                                                'order_status'  => $order->get_status(),
-                                                'order_trigger' => $trigger,
-                                                'context'       => 'restore',
-                                                'order_source'  => $order_source,
+                                                $group_entries[] = $this->build_inventory_movement_entry( [
+                                                        'order_id'      => $order_id,
+                                                        'event_type'    => 'ingreso',
+                                                        'product_id'    => $product_id,
+                                                        'wc_product_id' => $wc_product->get_id(),
+                                                        'sku'           => $sku,
+                                                        'product_name'  => $wc_product->get_name(),
+                                                        'quantity'      => $item_quantity,
+                                                        'warehouses'    => [
+                                                                'from' => [
+                                                                        'id'    => (string) $id_origin_warehouse,
+                                                                        'code'  => (string) $origin_code,
+                                                                        'label' => $origin_code,
+                                                                ],
+                                                                'to'   => [
+                                                                        'id'             => (string) $group_context['id'],
+                                                                        'code'           => (string) $group_context['code'],
+                                                                        'label'          => $group_context['label'],
+                                                                        'location_id'    => (string) $group_context['location_id'],
+                                                                        'location_label' => (string) $group_context['location_label'],
+                                                                        'mapped'         => (bool) $group_context['mapped'],
+                                                                ],
+                                                        ],
+                                                        'order_status'  => $order->get_status(),
+                                                        'order_trigger' => $trigger,
+                                                        'context'       => 'restore',
+                                                        'order_source'  => $order_source,
                                                 'order_item_id' => $item->get_id(),
                                                 'sync_type'     => 'global',
                                                 'location'      => [
                                                         'id'    => isset( $item_context['location_id'] ) ? $item_context['location_id'] : $group_context['location_id'],
                                                         'label' => isset( $item_context['location_label'] ) ? $item_context['location_label'] : $group_context['location_label'],
                                                 ],
+                                                'reason'        => $reason_label,
                                         ] );
                                 }
 
@@ -6577,51 +6872,74 @@ $filters = [
 
 		$json_data = json_encode( $data );
 
-		try {
-			$documento_electronico = $this->contifico->call( 'documento/', $json_data, 'POST' );
-			if ( isset( $documento_electronico['code'] ) ) {
-				$json_error = $documento_electronico['response']['mensaje'];
-				if ( 'FAC' === $this->woo_contifico->settings['tipo_documento'] ) {
-					$this->secuencial_rollback();
-				}
-				$order_note = sprintf(
-					__( 'Contífico retornó errores en la petición. La respuesta del servidor es: %s', $this->plugin_name ),
-					$json_error
-				);
+                try {
+                        $documento_electronico = $this->contifico->call( 'documento/', $json_data, 'POST' );
 
-				if ( '' !== $invoice_location_annotation ) {
-					$order_note .= $invoice_location_annotation;
-				}
+                        if ( isset( $documento_electronico['code'] ) ) {
+                                $json_error = $documento_electronico['response']['mensaje'];
 
-				$order->add_order_note( $order_note );
-			}
-			else {
-                                $order->update_meta_data( '_id_factura', $documento_electronico['id'] );
-                                $order->update_meta_data( '_numero_factura', $documento_electronico['documento'] );
+                                if ( 'FAC' === $this->woo_contifico->settings['tipo_documento'] ) {
+                                        $this->secuencial_rollback();
+                                }
+
+                                $order_note = sprintf(
+                                        __( 'Contífico retornó errores en la petición. La respuesta del servidor es: %s', $this->plugin_name ),
+                                        $json_error
+                                );
+
+                                if ( '' !== $invoice_location_annotation ) {
+                                        $order_note .= $invoice_location_annotation;
+                                }
+
+                                $order->add_order_note( $order_note );
+                        } else {
+                                $invoice_id_value        = isset( $documento_electronico['id'] ) ? (string) $documento_electronico['id'] : '';
+                                $invoice_number_value    = isset( $documento_electronico['documento'] ) ? (string) $documento_electronico['documento'] : '';
+                                $invoice_ride_url_value  = isset( $documento_electronico['url_ride'] ) ? (string) $documento_electronico['url_ride'] : '';
+
+                                if ( '' !== $invoice_id_value ) {
+                                        $order->update_meta_data( '_id_factura', $invoice_id_value );
+                                }
+
+                                if ( '' !== $invoice_number_value ) {
+                                        $order->update_meta_data( '_numero_factura', $invoice_number_value );
+                                }
+
+                                if ( '' !== $invoice_ride_url_value ) {
+                                        $order->update_meta_data( '_contifico_invoice_ride_url', esc_url_raw( $invoice_ride_url_value ) );
+                                }
+
                                 $order->save();
-$order_note = __( 'El documento fue generado correctamente.<br><br>', $this->plugin_name );
-switch( $this->woo_contifico->settings['tipo_documento'] ) {
-case 'FAC':
-$order_note .= sprintf(
-							__( 'El número de la factura es: %s', $this->plugin_name ),
-							$documento_electronico['documento']
-						);
-						break;
-					case 'PRE':
-$order_note .= sprintf(
-__( 'El número de la pre factura es: %s', $this->plugin_name ),
-$documento_electronico['documento']
-);
-}
 
-if ( '' !== $invoice_location_annotation ) {
-$order_note .= $invoice_location_annotation;
-}
+                                $order_note = __( 'El documento fue generado correctamente.<br><br>', $this->plugin_name );
 
-$order->add_order_note( $order_note, 1 );
-			}
-		}
-		catch (Exception $exception) {
+                                switch ( $this->woo_contifico->settings['tipo_documento'] ) {
+                                        case 'FAC':
+                                                $order_note .= sprintf(
+                                                        __( 'El número de la factura es: %s', $this->plugin_name ),
+                                                        $invoice_number_value
+                                                );
+                                                break;
+                                        case 'PRE':
+                                                $order_note .= sprintf(
+                                                        __( 'El número de la pre factura es: %s', $this->plugin_name ),
+                                                        $invoice_number_value
+                                                );
+                                                break;
+                                }
+
+                                if ( '' !== $invoice_ride_url_value ) {
+                                        $order_note .= '<br>' . sprintf( __( 'RIDE: %s', $this->plugin_name ), esc_url( $invoice_ride_url_value ) );
+                                }
+
+                                if ( '' !== $invoice_location_annotation ) {
+                                        $order_note .= $invoice_location_annotation;
+                                }
+
+                                $order->add_order_note( $order_note, 1 );
+                        }
+                }
+                catch (Exception $exception) {
 			if ( 'FAC' === $this->woo_contifico->settings['tipo_documento'] ) {
 				$this->secuencial_rollback();
 			}
@@ -6767,17 +7085,74 @@ $order_note = sprintf(
         }
 
         /**
+         * Retrieve invoice identifiers and the RIDE URL for PDF rendering.
+         *
+         * @since 4.1.29
+         *
+         * @return array{number:string,id:string,ride_url:string}
+         */
+        private function resolve_order_invoice_details_for_report( WC_Order $order ) : array {
+                $invoice_number = trim( (string) $order->get_meta( '_numero_factura' ) );
+                $invoice_id     = trim( (string) $order->get_meta( '_id_factura' ) );
+                $ride_url       = trim( (string) $order->get_meta( '_contifico_invoice_ride_url' ) );
+
+                if ( '' === $ride_url && '' !== $invoice_id ) {
+                        try {
+                                $document = $this->contifico->get_invoice_document_by_id( $invoice_id );
+                        } catch ( Exception $exception ) {
+                                $document = [];
+                        }
+
+                        if ( is_array( $document ) && ! empty( $document ) ) {
+                                $fetched_number = isset( $document['documento'] ) ? trim( (string) $document['documento'] ) : '';
+                                $fetched_ride   = isset( $document['url_ride'] ) ? trim( (string) $document['url_ride'] ) : '';
+                                $fetched_id     = isset( $document['id'] ) ? trim( (string) $document['id'] ) : '';
+
+                                $invoice_number = $invoice_number ?: $fetched_number;
+                                $ride_url       = $fetched_ride ?: $ride_url;
+                                $invoice_id     = $invoice_id ?: $fetched_id;
+
+                                if ( '' !== $invoice_number ) {
+                                        $order->update_meta_data( '_numero_factura', $invoice_number );
+                                }
+
+                                if ( '' !== $ride_url ) {
+                                        $order->update_meta_data( '_contifico_invoice_ride_url', esc_url_raw( $ride_url ) );
+                                }
+
+                                if ( '' !== $invoice_id ) {
+                                        $order->update_meta_data( '_id_factura', $invoice_id );
+                                }
+
+                                $order->save();
+                        }
+                }
+
+                return [
+                        'number'   => $invoice_number,
+                        'id'       => $invoice_id,
+                        'ride_url' => $ride_url,
+                ];
+        }
+
+        /**
          * Build the PDF payload summarizing the order and its inventory movements.
          *
          * @since 4.4.0
          */
         private function generate_order_inventory_report_pdf( WC_Order $order ) : string {
                 $pdf = new Woo_Contifico_Order_Report_Pdf();
-                $order_number = $order->get_order_number();
-                $date_format  = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
-                $order_date   = $order->get_date_created();
-                $date_label   = $order_date ? wc_format_datetime( $order_date, $date_format ) : __( 'Sin fecha registrada', $this->plugin_name );
-                $status_label = wc_get_order_status_name( $order->get_status() );
+                $order_number      = $order->get_order_number();
+                $date_format       = get_option( 'date_format' ) . ' ' . get_option( 'time_format' );
+                $order_date        = $order->get_date_created();
+                $date_label        = $order_date ? wc_format_datetime( $order_date, $date_format ) : __( 'Sin fecha registrada', $this->plugin_name );
+                $status            = $order->get_status();
+                $status_label      = wc_get_order_status_name( $status );
+                $invoice_details   = $this->resolve_order_invoice_details_for_report( $order );
+                $invoice_number    = $invoice_details['number'];
+                $invoice_id        = $invoice_details['id'];
+                $invoice_reference = $invoice_number ?: $invoice_id;
+                $invoice_ride_url  = $invoice_details['ride_url'];
                 $shipping_methods = $order->get_shipping_methods();
                 $shipping_label   = empty( $shipping_methods )
                         ? __( 'Sin método de envío', $this->plugin_name )
@@ -6834,11 +7209,46 @@ $order_note = sprintf(
                         [ 'label' => __( 'Modalidad de entrega', $this->plugin_name ), 'value' => $fulfillment_label ],
                 ];
 
+                if ( 'completed' === $status && '' !== $invoice_reference ) {
+                        $invoice_label = '' !== $invoice_reference
+                                ? sprintf( __( 'Pedido completado y factura generada (%s).', $this->plugin_name ), $invoice_reference )
+                                : __( 'Pedido completado y factura generada.', $this->plugin_name );
+
+                        if ( '' !== $invoice_ride_url ) {
+                                $invoice_label .= ' ' . sprintf( __( 'RIDE: %s', $this->plugin_name ), esc_url( $invoice_ride_url ) );
+                        }
+
+                        $order_summary[] = [
+                                'label' => __( 'Facturación', $this->plugin_name ),
+                                'value' => $invoice_label,
+                        ];
+                }
+
                 $pdf->set_order_summary( $order_summary );
 
                 $origin_code       = isset( $this->woo_contifico->settings['bodega'] ) ? (string) $this->woo_contifico->settings['bodega'] : '';
                 $default_origin_id = (string) ( $this->contifico->get_id_bodega( $origin_code ) ?? '' );
-                $items_added       = false;
+                $movements         = array_map( [ $this, 'hydrate_inventory_movement_for_report' ], $this->get_order_inventory_movements_for_order( $order->get_id() ) );
+                $movement_labels   = [];
+
+                foreach ( $movements as $movement_entry ) {
+                        $item_id = isset( $movement_entry['order_item_id'] ) ? (int) $movement_entry['order_item_id'] : 0;
+
+                        if ( $item_id <= 0 ) {
+                                continue;
+                        }
+
+                        $labels = $this->format_distinct_warehouse_labels(
+                                isset( $movement_entry['warehouses']['from'] ) ? $movement_entry['warehouses']['from'] : [],
+                                isset( $movement_entry['warehouses']['to'] ) ? $movement_entry['warehouses']['to'] : []
+                        );
+
+                        if ( ! isset( $movement_labels[ $item_id ] ) ) {
+                                $movement_labels[ $item_id ] = $labels;
+                        }
+                }
+
+                $items_added = false;
 
                 foreach ( $order->get_items() as $item ) {
                         if ( ! is_a( $item, 'WC_Order_Item_Product' ) ) {
@@ -6878,6 +7288,19 @@ $order_note = sprintf(
                                 $details[] = sprintf( __( 'Ubicación: %s', $this->plugin_name ), $location_label );
                         }
 
+                        if ( isset( $movement_labels[ $item->get_id() ] ) ) {
+                                $from_label = $movement_labels[ $item->get_id() ]['from'];
+                                $to_label   = $movement_labels[ $item->get_id() ]['to'];
+
+                                if ( '' !== $from_label ) {
+                                        $details[] = sprintf( __( 'Bodega origen: %s', $this->plugin_name ), $from_label );
+                                }
+
+                                if ( '' !== $to_label ) {
+                                        $details[] = sprintf( __( 'Bodega destino: %s', $this->plugin_name ), $to_label );
+                                }
+                        }
+
                 $pdf->add_product_row( $product_name, $quantity_label, $details );
                 $items_added = true;
         }
@@ -6886,8 +7309,6 @@ $order_note = sprintf(
                         $pdf->add_product_row( __( 'No hay productos asociados al pedido.', $this->plugin_name ), '—' );
                 }
 
-                $movements = $this->get_order_inventory_movements_for_order( $order->get_id() );
-
                 if ( empty( $movements ) ) {
                         $pdf->add_inventory_movement_line( __( 'Aún no hay movimientos registrados para este pedido.', $this->plugin_name ) );
                 } else {
@@ -6895,8 +7316,12 @@ $order_note = sprintf(
                                 $timestamp     = isset( $movement['timestamp'] ) ? (int) $movement['timestamp'] : 0;
                                 $movement_date = $timestamp ? date_i18n( $date_format, $timestamp ) : __( 'Sin fecha', $this->plugin_name );
                                 $event_label   = 'ingreso' === $movement['event_type'] ? __( 'Ingreso', $this->plugin_name ) : __( 'Egreso', $this->plugin_name );
-                                $from_label    = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['from'] ) ? $movement['warehouses']['from'] : [] );
-                                $to_label      = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : [] );
+                               $labels        = $this->format_distinct_warehouse_labels(
+                                       isset( $movement['warehouses']['from'] ) ? $movement['warehouses']['from'] : [],
+                                       isset( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : []
+                               );
+                               $from_label    = $labels['from'];
+                               $to_label      = $labels['to'];
                                 $reference     = $movement['reference'] ?: __( 'Sin referencia', $this->plugin_name );
                                 $location      = isset( $movement['location']['label'] ) && '' !== $movement['location']['label']
                                         ? $movement['location']['label']
@@ -6904,14 +7329,18 @@ $order_note = sprintf(
                                 $product_name  = wp_strip_all_tags( (string) $movement['product_name'] );
                                 $sku_label     = $movement['sku'] ?: __( 'Sin SKU', $this->plugin_name );
                                 $quantity      = wc_format_decimal( $movement['quantity'], 2 );
+                                $reason        = $this->describe_inventory_movement_reason_for_report( $movement );
 
                                 $location_fragment = '' !== $location
                                         ? sprintf( __( ' en la ubicación %s', $this->plugin_name ), $location )
                                         : '';
+                                $reason_fragment = '' !== $reason
+                                        ? ' ' . sprintf( __( 'Motivo: %s', $this->plugin_name ), $reason )
+                                        : '';
 
                                 $pdf->add_inventory_movement_line(
                                         sprintf(
-                                                __( 'El %1$s se registró un %2$s de %3$s unidades de %4$s (SKU %5$s) desde %6$s hacia %7$s%8$s. Ref: %9$s', $this->plugin_name ),
+                                                __( 'El %1$s se registró un %2$s de %3$s unidades de %4$s (SKU %5$s) desde %6$s hacia %7$s%8$s%9$s. Ref: %10$s', $this->plugin_name ),
                                                 $movement_date,
                                                 strtolower( $event_label ),
                                                 $quantity,
@@ -6920,6 +7349,7 @@ $order_note = sprintf(
                                                 $from_label ?: __( 'bodega no especificada', $this->plugin_name ),
                                                 $to_label ?: __( 'bodega no especificada', $this->plugin_name ),
                                                 $location_fragment,
+                                                $reason_fragment,
                                                 $reference
                                         )
                                 );
@@ -6932,8 +7362,12 @@ $order_note = sprintf(
                         $pdf->add_transfer_summary_line( __( 'Aún no se registran transferencias en Contífico para este pedido.', $this->plugin_name ) );
                 } else {
                         foreach ( $transfer_summaries as $summary ) {
-                                $from_label = $this->format_warehouse_label_with_code( [ 'label' => $summary['from'] ] );
-                                $to_label   = $this->format_warehouse_label_with_code( [ 'label' => $summary['to'] ] );
+                               $pair      = $this->format_distinct_warehouse_labels(
+                                       [ 'label' => $summary['from'] ],
+                                       [ 'label' => $summary['to'] ]
+                               );
+                               $from_label = $pair['from'];
+                               $to_label   = $pair['to'];
 
                                 $pdf->add_transfer_summary_line(
                                         sprintf(
@@ -7122,8 +7556,12 @@ $order_note = sprintf(
 
                 foreach ( $movements as $movement ) {
                         $reference  = $movement['reference'] ?: __( 'Sin código', $this->plugin_name );
-                        $from_label = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['from'] ) ? $movement['warehouses']['from'] : [] );
-                        $to_label   = $this->format_warehouse_label_with_code( isset( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : [] );
+                       $labels     = $this->format_distinct_warehouse_labels(
+                               isset( $movement['warehouses']['from'] ) ? $movement['warehouses']['from'] : [],
+                               isset( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : []
+                       );
+                       $from_label = $labels['from'];
+                       $to_label   = $labels['to'];
                         $key        = md5( implode( '|', [ $reference, $from_label, $to_label, $movement['event_type'] ] ) );
 
                         if ( ! isset( $summaries[ $key ] ) ) {
