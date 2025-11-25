@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.24 =
+* Conserva los nombres de cada bodega al formatear etiquetas para movimientos y transferencias, usando los alias mapeados solo cuando faltan los nombres propios.
+
 = 4.1.23 =
 * Ajusta la construcción de etiquetas de bodega para usar solo nombres amigables mapeados cuando existan y evitar que se reemplacen por ubicaciones repetidas en los PDFs.
 

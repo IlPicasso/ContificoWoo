@@ -2094,8 +2094,18 @@ return $value;
                        );
 
                        if ( '' !== $resolved_label ) {
-                               $warehouse_location_label = $resolved_label;
-                               $warehouse_label          = $resolved_label;
+                               if (
+                                       '' === $warehouse_label
+                                       || $warehouse_label === $warehouse_code
+                                       || $warehouse_label === $warehouse_id
+                               ) {
+                                       $warehouse_label = $resolved_label;
+                               }
+
+                               if ( '' === $warehouse_location_label ) {
+                                       $warehouse_location_label = $resolved_label;
+                               }
+
                                $movement['warehouses'][ $side ]['mapped'] = true;
                        }
 
@@ -3003,7 +3013,10 @@ return $value;
                if ( '' !== $code ) {
                        $mapped_label = $this->resolve_warehouse_location_label( $code, $location_id );
 
-                       if ( '' !== $mapped_label ) {
+                       if (
+                               '' !== $mapped_label
+                               && ( '' === $label || $label === $code || $label === $id )
+                       ) {
                                $label = $mapped_label;
                        }
                }
