@@ -3144,10 +3144,7 @@ private function resolve_location_warehouse_code( string $location_id ) : string
          */
         private function resolve_warehouse_location_label( string $warehouse_code, string $location_id = '' ) : string {
                 $warehouse_code = trim( $warehouse_code );
-
-                if ( '' === $warehouse_code ) {
-                        return '';
-                }
+                $location_id    = trim( $location_id );
 
                 if ( ! ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) ) {
                         return '';
@@ -3159,28 +3156,38 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                 $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
 
-                if ( ! is_array( $configured_locations ) || empty( $configured_locations ) ) {
-                        return '';
+                if ( is_array( $configured_locations ) && ! empty( $configured_locations ) ) {
+                        foreach ( $configured_locations as $configured_location_id => $configured_code ) {
+                                $mapped_code            = (string) $configured_code;
+                                $configured_location_id = (string) $configured_location_id;
+
+                                if ( '' !== $warehouse_code && $warehouse_code !== $mapped_code ) {
+                                        continue;
+                                }
+
+                                if ( '' !== $location_id && $configured_location_id !== $location_id ) {
+                                        continue;
+                                }
+
+                                if ( method_exists( $this->woo_contifico->multilocation, 'get_location_label' ) ) {
+                                        $label = (string) $this->woo_contifico->multilocation->get_location_label( $configured_location_id );
+
+                                        if ( '' !== $label ) {
+                                                return $label;
+                                        }
+                                }
+                        }
                 }
 
-                foreach ( $configured_locations as $configured_location_id => $configured_code ) {
-                        $mapped_code = (string) $configured_code;
-                        $configured_location_id = (string) $configured_location_id;
+                if (
+                        '' === $warehouse_code
+                        && '' !== $location_id
+                        && method_exists( $this->woo_contifico->multilocation, 'get_location_label' )
+                ) {
+                        $label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
 
-                        if ( '' === $mapped_code || $warehouse_code !== $mapped_code ) {
-                                continue;
-                        }
-
-                        if ( '' !== $location_id && $configured_location_id !== $location_id ) {
-                                continue;
-                        }
-
-                        if ( method_exists( $this->woo_contifico->multilocation, 'get_location_label' ) ) {
-                                $label = (string) $this->woo_contifico->multilocation->get_location_label( $configured_location_id );
-
-                                if ( '' !== $label ) {
-                                        return $label;
-                                }
+                        if ( '' !== $label ) {
+                                return $label;
                         }
                 }
 
