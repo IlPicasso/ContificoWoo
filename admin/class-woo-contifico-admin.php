@@ -1121,6 +1121,79 @@ class Woo_Contifico_Admin {
         }
 
         /**
+         * Initialize the scheduled synchronization accumulator.
+         *
+         * @since 4.1.34
+         *
+         * @return void
+         */
+        private function initialize_scheduled_sync_result() : void {
+
+                $initial_result = $this->normalize_sync_result_defaults( [] );
+
+                $initial_result['run_id']     = $this->generate_sync_run_id();
+                $initial_result['started_at'] = current_time( 'mysql' );
+
+                set_transient( self::SYNC_RESULT_TRANSIENT_KEY, $initial_result, HOUR_IN_SECONDS );
+        }
+
+        /**
+         * Normalize sync result payload to ensure expected keys are present.
+         *
+         * @since 4.1.34
+         *
+         * @param array $result
+         *
+         * @return array
+         */
+        private function normalize_sync_result_defaults( array $result ) : array {
+
+                $defaults = [
+                        'run_id'      => '',
+                        'status'      => 'running',
+                        'started_at'  => '',
+                        'finished_at' => '',
+                        'fetched'     => 0,
+                        'found'       => 0,
+                        'updated'     => 0,
+                        'outofstock'  => 0,
+                        'updates'     => [],
+                        'debug_log'   => '',
+                ];
+
+                $normalized = array_merge( $defaults, $result );
+
+                $normalized['run_id']      = (string) $normalized['run_id'];
+                $normalized['status']      = (string) $normalized['status'];
+                $normalized['started_at']  = (string) $normalized['started_at'];
+                $normalized['finished_at'] = (string) $normalized['finished_at'];
+                $normalized['fetched']     = (int) $normalized['fetched'];
+                $normalized['found']       = (int) $normalized['found'];
+                $normalized['updated']     = (int) $normalized['updated'];
+                $normalized['outofstock']  = (int) $normalized['outofstock'];
+                $normalized['updates']     = isset( $normalized['updates'] ) && is_array( $normalized['updates'] ) ? $normalized['updates'] : [];
+                $normalized['debug_log']   = (string) $normalized['debug_log'];
+
+                return $normalized;
+        }
+
+        /**
+         * Generate a unique identifier for sync runs.
+         *
+         * @since 4.1.34
+         *
+         * @return string
+         */
+        private function generate_sync_run_id() : string {
+
+                if ( function_exists( 'wp_generate_uuid4' ) ) {
+                        return (string) wp_generate_uuid4();
+                }
+
+                return uniqid( 'woo-contifico-sync-', true );
+        }
+
+        /**
          * Get the current manual synchronization state.
          *
          * @since 4.3.0
@@ -4348,15 +4421,21 @@ $filters = [
                         delete_transient( 'woo_contifico_full_inventory' );
                         delete_transient( self::SYNC_RESULT_TRANSIENT_KEY );
                         $this->reset_sync_debug_log();
+
+                        $this->initialize_scheduled_sync_result();
                 }
 
-		$result = $this->sync_stock($step, $this->woo_contifico->settings['batch_size']);
+                $result = $this->sync_stock($step, $this->woo_contifico->settings['batch_size']);
 
-		# Rerun the batch if the batch is not finished yet
-		if($result['step'] !== 'done') {
-			as_enqueue_async_action( 'woo_contifico_sync_stock', [$result['step']], $this->plugin_name );
-		}
-	}
+                if ( isset( $result['step'] ) && 'done' === $result['step'] ) {
+                        $this->record_scheduled_sync_history( $result );
+                }
+
+                # Rerun the batch if the batch is not finished yet
+                if($result['step'] !== 'done') {
+                        as_enqueue_async_action( 'woo_contifico_sync_stock', [$result['step']], $this->plugin_name );
+                }
+        }
 
 	/**
 	 * Batch function to synchronize stock
@@ -4371,7 +4450,12 @@ $filters = [
         public function sync_stock(int $step, int $batch_size) : array
         {
 
-                $result = [];
+                $result = $this->normalize_sync_result_defaults( (array) get_transient( self::SYNC_RESULT_TRANSIENT_KEY ) );
+                $updates_map = isset( $result['updates'] ) && is_array( $result['updates'] ) ? $result['updates'] : [];
+
+                if ( '' === $result['started_at'] ) {
+                        $result['started_at'] = current_time( 'mysql' );
+                }
 
 		# Check is plugin is active
 		if ( $this->is_active() === true ) {
@@ -4448,37 +4532,21 @@ $filters = [
                                 $this->write_sync_debug_log( $debug_log_entries );
                                 delete_transient( self::SYNC_DEBUG_TRANSIENT_KEY );
 
-                                $batch_result = (array) get_transient( self::SYNC_RESULT_TRANSIENT_KEY );
-                                $updates_map  = isset( $batch_result['updates'] ) && is_array( $batch_result['updates'] ) ? $batch_result['updates'] : [];
-
-                                $result = [
-                                        'step'       => 'done',
-                                        'debug_log'  => $this->sync_debug_log_url,
-                                        'fetched'    => $batch_result['fetched'] ?? 0,
-                                        'found'      => $batch_result['found'] ?? 0,
-                                        'updated'    => $batch_result['updated'] ?? 0,
-                                        'outofstock' => $batch_result['outofstock'] ?? 0,
-                                        'updates'    => array_values( $updates_map ),
-                                ];
+                                $result['step']       = 'done';
+                                $result['debug_log']  = $this->sync_debug_log_url;
+                                $result['updates']    = array_values( $updates_map );
+                                $result['finished_at'] = current_time( 'mysql' );
 
                                 delete_transient( self::SYNC_RESULT_TRANSIENT_KEY );
                         }
                         else {
 
-                                # Get result transient
-                                $batch_result = (array) get_transient( self::SYNC_RESULT_TRANSIENT_KEY );
-                                $updates_map  = isset( $batch_result['updates'] ) && is_array( $batch_result['updates'] ) ? $batch_result['updates'] : [];
-
                                 # Results of the synchronization
-                                $result = [
-                                        'fetched'    => $this->contifico->count_fetched_products(),
-                                        'found'      => $batch_result['found'] ?? 0,
-                                        'updated'    => $batch_result['updated'] ?? 0,
-                                        'outofstock' => $batch_result['outofstock'] ?? 0,
-                                        'step'       => $step + 1,
-                                ];
+                                $result['fetched']    = $this->contifico->count_fetched_products();
+                                $result['step']       = $step + 1;
+                                $result['finished_at'] = '';
 
-				# Get WooCommerce products from this batch
+                                # Get WooCommerce products from this batch
                                 $products                 = [];
                                 $matched_contifico_ids    = [];
 
@@ -4729,6 +4797,70 @@ $filters = [
 
                 return $result;
 
+        }
+
+        /**
+         * Store a summary of the scheduled synchronization in history.
+         *
+         * @since 4.1.34
+         *
+         * @param array $result
+         *
+         * @return void
+         */
+        private function record_scheduled_sync_history( array $result ) : void {
+
+                $entry = $this->build_scheduled_sync_history_entry( $result );
+
+                if ( empty( $entry['id'] ) ) {
+                        return;
+                }
+
+                $this->append_manual_sync_history_entry( $entry );
+        }
+
+        /**
+         * Build a history entry for scheduled stock synchronizations.
+         *
+         * @since 4.1.34
+         *
+         * @param array $result
+         *
+         * @return array
+         */
+        private function build_scheduled_sync_history_entry( array $result ) : array {
+
+                $result         = $this->normalize_manual_sync_data( $result );
+                $run_id         = isset( $result['run_id'] ) ? (string) $result['run_id'] : '';
+                $started_at     = isset( $result['started_at'] ) ? (string) $result['started_at'] : '';
+                $finished_at    = isset( $result['finished_at'] ) ? (string) $result['finished_at'] : '';
+                $history_updates = isset( $result['updates'] ) && is_array( $result['updates'] ) ? array_values( $result['updates'] ) : [];
+
+                if ( '' === $run_id ) {
+                        $run_id = $this->generate_sync_run_id();
+                }
+
+                if ( '' === $started_at ) {
+                        $started_at = current_time( 'mysql' );
+                }
+
+                if ( '' === $finished_at ) {
+                        $finished_at = current_time( 'mysql' );
+                }
+
+                return [
+                        'id'          => $run_id,
+                        'status'      => 'completed',
+                        'message'     => __( 'Sincronización programada completada correctamente.', 'woo-contifico' ),
+                        'started_at'  => $started_at,
+                        'finished_at' => $finished_at,
+                        'fetched'     => isset( $result['fetched'] ) ? (int) $result['fetched'] : 0,
+                        'found'       => isset( $result['found'] ) ? (int) $result['found'] : 0,
+                        'updated'     => isset( $result['updated'] ) ? (int) $result['updated'] : 0,
+                        'outofstock'  => isset( $result['outofstock'] ) ? (int) $result['outofstock'] : 0,
+                        'updates'     => $history_updates,
+                        'debug_log'   => isset( $result['debug_log'] ) ? (string) $result['debug_log'] : '',
+                ];
         }
 
         /**
