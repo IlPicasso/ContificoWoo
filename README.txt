@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.35 =
+* Amplía el diagnóstico de ítems para incluir cualquier tipo de producto de WooCommerce (salvo variaciones), de modo que se reporten los productos sin coincidencias en Contífico aunque usen tipos personalizados.
+
 = 4.1.34 =
 * Registra las sincronizaciones programadas en el historial con sus tiempos y resultados para que queden visibles en la pestaña de sincronizaciones.
 
