@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.34 =
+* Registra las sincronizaciones programadas en el historial con sus tiempos y resultados para que queden visibles en la pestaña de sincronizaciones.
+
 = 4.1.33 =
 * Muestra alertas urgentes en el escritorio de WordPress cuando fallan procesos de inventario en Contífico.
 * Añade una pestaña de "Bodega web" para consultar productos con stock pendiente en la bodega de facturación.
