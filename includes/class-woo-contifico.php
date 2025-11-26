@@ -832,6 +832,7 @@ class Woo_Contifico
         $this->loader->add_action('admin_init', $plugin_admin, 'admin_init');
         $this->loader->add_action('admin_menu', $plugin_admin, 'register_menu');
         $this->loader->add_action('admin_notices', $plugin_admin, 'admin_init_notice');
+        $this->loader->add_action('admin_notices', $plugin_admin, 'admin_contifico_process_alerts');
 
         # Display Contífico identifiers in WooCommerce product editors
         $this->loader->add_action(

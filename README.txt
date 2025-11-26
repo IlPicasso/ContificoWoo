@@ -83,6 +83,13 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.33 =
+* Muestra alertas urgentes en el escritorio de WordPress cuando fallan procesos de inventario en Contífico.
+* Añade una pestaña de "Bodega web" para consultar productos con stock pendiente en la bodega de facturación.
+
+= 4.1.32 =
+* Verifica el stock disponible en la bodega de facturación antes de restituir inventario y omite o limita las transferencias cuando faltan existencias o identificadores de producto.
+
 = 4.1.31 =
 * Corrige un fatal error de redeclaración al resolver los detalles de factura para los reportes e informes PDF.
 
