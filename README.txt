@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.41 =
+* Asegura que las ubicaciones sin mapeo devuelvan la etiqueta "Otras Bodegas" en compatibilidad MultiLoca aunque falte el identificador de ubicación.
+
 = 4.1.40 =
 * Muestra "Otras Bodegas" cuando la ubicación de MultiLoca no está mapeada con una bodega de Contífico, para dejar claro que el stock proviene de bodegas no asociadas.
 
