@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.36 =
+* Añade un botón para regenerar manualmente el diagnóstico y forzar la detección de productos recién creados o con SKUs cambiados.
+
 = 4.1.35 =
 * Amplía el diagnóstico de ítems para incluir cualquier tipo de producto de WooCommerce (salvo variaciones), de modo que se reporten los productos sin coincidencias en Contífico aunque usen tipos personalizados.
 
