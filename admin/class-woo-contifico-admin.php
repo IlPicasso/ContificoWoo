@@ -1877,7 +1877,7 @@ return $value;
         private function get_recent_contifico_process_alerts() : array {
 
                 $entries    = $this->get_inventory_movements_storage();
-                $threshold  = current_time( 'timestamp' ) - DAY_IN_SECONDS;
+                $threshold  = current_time( 'timestamp', true ) - DAY_IN_SECONDS;
                 $aggregated = [];
 
                 foreach ( $entries as $entry ) {
@@ -1980,7 +1980,7 @@ return $value;
                                 $new_entries = array_merge( $movements_for_run, $new_entries );
                         }
 
-                        $updated_runs[ $run_id ] = current_time( 'timestamp' );
+                        $updated_runs[ $run_id ] = current_time( 'timestamp', true );
                 }
 
                 if ( empty( $new_entries ) ) {
@@ -2157,7 +2157,11 @@ return $value;
                        return [];
                }
 
-               $timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : current_time( 'timestamp' );
+               if ( isset( $entry['timestamp'] ) ) {
+                       $timestamp = $this->normalize_inventory_movement_timestamp( (int) $entry['timestamp'] );
+               } else {
+                       $timestamp = current_time( 'timestamp', true );
+               }
                $event     = isset( $entry['event_type'] ) && in_array( $entry['event_type'], [ 'ingreso', 'egreso' ], true ) ? $entry['event_type'] : 'egreso';
                $status    = isset( $entry['status'] ) && in_array( $entry['status'], [ 'pending', 'success', 'error' ], true ) ? $entry['status'] : 'pending';
                $sync_type = isset( $entry['sync_type'] ) && in_array( $entry['sync_type'], [ 'global', 'product' ], true ) ? $entry['sync_type'] : 'global';
@@ -2302,7 +2306,7 @@ return $value;
         * @since 4.3.1
         */
        private function build_inventory_movement_entry( array $data ) : array {
-               $data['timestamp'] = isset( $data['timestamp'] ) ? (int) $data['timestamp'] : current_time( 'timestamp' );
+               $data['timestamp'] = isset( $data['timestamp'] ) ? (int) $data['timestamp'] : current_time( 'timestamp', true );
 
                return $this->normalize_inventory_movement_entry( $data );
        }
@@ -2430,16 +2434,18 @@ return $value;
         private function resolve_manual_sync_history_timestamp( array $history_entry ) : int {
 
                 foreach ( [ 'finished_at', 'started_at' ] as $field ) {
-                        if ( ! empty( $history_entry[ $field ] ) ) {
-                                $timestamp = strtotime( (string) $history_entry[ $field ] );
+                        if ( empty( $history_entry[ $field ] ) ) {
+                                continue;
+                        }
 
-                                if ( $timestamp ) {
-                                        return $timestamp;
-                                }
+                        $datetime = date_create( (string) $history_entry[ $field ], wp_timezone() );
+
+                        if ( $datetime instanceof DateTimeInterface ) {
+                                return $datetime->getTimestamp();
                         }
                 }
 
-                return current_time( 'timestamp' );
+                return current_time( 'timestamp', true );
         }
 
         /**
@@ -3597,8 +3603,12 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 $filters['scope']      = in_array( $filters['scope'], [ 'all', 'global', 'product' ], true ) ? $filters['scope'] : 'all';
                 $filters['location']   = sanitize_text_field( (string) $filters['location'] );
 
-                $filters['start_timestamp'] = '' !== $filters['start_date'] ? strtotime( $filters['start_date'] . ' 00:00:00' ) : null;
-                $filters['end_timestamp']   = '' !== $filters['end_date'] ? strtotime( $filters['end_date'] . ' 23:59:59' ) : null;
+                $filters['start_timestamp'] = '' !== $filters['start_date']
+                        ? $this->get_utc_timestamp_from_local_date( $filters['start_date'] . ' 00:00:00' )
+                        : null;
+                $filters['end_timestamp']   = '' !== $filters['end_date']
+                        ? $this->get_utc_timestamp_from_local_date( $filters['end_date'] . ' 23:59:59' )
+                        : null;
 
                 return $filters;
         }
@@ -3682,21 +3692,59 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 	 *
 	 * @since 4.3.1
 	 */
-	private function sanitize_inventory_report_date( $value ) : string {
-	$value = trim( (string) $value );
+        private function sanitize_inventory_report_date( $value ) : string {
+        $value = trim( (string) $value );
 
-	if ( '' === $value ) {
-	return '';
-	}
+        if ( '' === $value ) {
+        return '';
+        }
 
-	$timestamp = strtotime( $value );
+        $timestamp = strtotime( $value );
 
-	if ( ! $timestamp ) {
-	return '';
-	}
+        if ( ! $timestamp ) {
+        return '';
+        }
 
-	return gmdate( 'Y-m-d', $timestamp );
-	}
+        return gmdate( 'Y-m-d', $timestamp );
+        }
+
+        /**
+         * Convert a local date string into a UTC timestamp.
+         *
+         * @since 4.1.39
+         */
+        private function get_utc_timestamp_from_local_date( string $date_string ) : ?int {
+                $timezone = wp_timezone();
+                $datetime = date_create( $date_string, $timezone );
+
+                if ( ! $datetime instanceof DateTimeInterface ) {
+                        return null;
+                }
+
+                return $datetime->getTimestamp();
+        }
+
+        /**
+         * Normalize timestamps to UTC to avoid applying the site offset twice when rendering dates.
+         *
+         * @since 4.1.39
+         */
+        private function normalize_inventory_movement_timestamp( int $timestamp ) : int {
+                $offset = (int) ( get_option( 'gmt_offset', 0 ) * HOUR_IN_SECONDS );
+
+                if ( $timestamp <= 0 || 0 === $offset ) {
+                        return $timestamp;
+                }
+
+                $utc_now          = current_time( 'timestamp', true );
+                $offset_timestamp = $timestamp - $offset;
+
+                if ( abs( $offset_timestamp - $utc_now ) < abs( $timestamp - $utc_now ) ) {
+                        return $offset_timestamp;
+                }
+
+                return $timestamp;
+        }
 
 	/**
 	 * Generate a summarized inventory movement report including totals and raw entries.
