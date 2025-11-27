@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.39 =
+* Corrige la hora mostrada en los movimientos de inventario para respetar la zona horaria configurada en WordPress.
+
 = 4.1.38 =
 * Marca como "sin coincidencia en Contífico" los productos variables sin variaciones creadas para que aparezcan en los filtros de diagnósticos.
 
