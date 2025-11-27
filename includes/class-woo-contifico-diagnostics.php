@@ -61,10 +61,23 @@ class Woo_Contifico_Diagnostics {
             'entries_without_match'    => 0,
             'contifico_items'          => $contifico_inventory['count'],
         ];
+        $product_types = function_exists( 'wc_get_product_types' )
+            ? array_keys( wc_get_product_types() )
+            : [ 'simple', 'variable' ];
+
+        $product_types = array_values(
+            array_filter(
+                $product_types,
+                static function ( string $type ) : bool {
+                    return 'variation' !== $type;
+                }
+            )
+        );
+
         $woocommerce_products = wc_get_products(
             [
                 'limit'   => -1,
-                'type'    => [ 'simple', 'variable' ],
+                'type'    => $product_types,
                 'orderby' => 'ID',
                 'order'   => 'ASC',
                 'status'  => array_keys( get_post_stati() ),

@@ -283,13 +283,27 @@
 <?php if ( $this->config_status['status'] && $is_active && $active_tab === 'diagnostico' ) : ?>
             <div class="woo-contifico-diagnostics">
                 <?php
+                $should_refresh = isset( $_GET['woo_contifico_refresh_diagnostics'] )
+                    && check_admin_referer( 'woo_contifico_refresh_diagnostics' );
+
+                if ( $should_refresh ) {
+                    delete_transient( 'woo_contifico_diagnostics' );
+
+                    add_settings_error(
+                        'woo_contifico_diagnostics',
+                        'woo_contifico_diagnostics_refreshed',
+                        __( 'Diagnóstico regenerado correctamente.', 'woo-contifico' ),
+                        'updated'
+                    );
+                }
+
                 settings_errors( 'woo_contifico_diagnostics' );
 
                 $diagnostics_data = get_transient( 'woo_contifico_diagnostics' );
 
                 if ( false === $diagnostics_data ) {
                     $diagnostics_helper = new Woo_Contifico_Diagnostics( $this->contifico );
-                    $diagnostics_data   = $diagnostics_helper->build_diagnostics();
+                    $diagnostics_data   = $diagnostics_helper->build_diagnostics( $should_refresh );
                 } elseif ( is_array( $diagnostics_data ) && ! isset( $diagnostics_data['entries'] ) ) {
                     $diagnostics_helper = new Woo_Contifico_Diagnostics( $this->contifico );
                     $diagnostics_data   = $diagnostics_helper->build_diagnostics( true );
@@ -371,6 +385,15 @@
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>
+                <div class="woo-contifico-diagnostics__actions">
+                    <form method="get" class="woo-contifico-diagnostics__refresh-form">
+                        <input type="hidden" name="page" value="woo-contifico" />
+                        <input type="hidden" name="tab" value="diagnostico" />
+                        <input type="hidden" name="woo_contifico_refresh_diagnostics" value="1" />
+                        <?php wp_nonce_field( 'woo_contifico_refresh_diagnostics' ); ?>
+                        <?php submit_button( __( 'Actualizar diagnóstico', 'woo-contifico' ), 'secondary', '', false ); ?>
+                    </form>
+                </div>
                 <form method="get">
                     <input type="hidden" name="page" value="woo-contifico" />
                     <input type="hidden" name="tab" value="diagnostico" />
