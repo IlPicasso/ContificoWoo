@@ -609,6 +609,10 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
 
         if ( $is_variable && $entry['variation_count'] <= 0 ) {
             $types[] = 'missing_variations';
+
+            if ( '' === $entry['codigo_contifico'] ) {
+                $types[] = 'no_contifico_match';
+            }
         }
 
         $types = array_filter( array_map( 'sanitize_key', $types ) );

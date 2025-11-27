@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.38 =
+* Marca como "sin coincidencia en Contífico" los productos variables sin variaciones creadas para que aparezcan en los filtros de diagnósticos.
+
 = 4.1.37 =
 * Detecta productos variables sin variaciones creadas y los marca en el diagnóstico para evitar SKUs sin stock sincronizable.
 
