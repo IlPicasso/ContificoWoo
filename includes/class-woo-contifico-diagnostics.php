@@ -280,6 +280,10 @@ class Woo_Contifico_Diagnostics {
             $error_detectado[] = 'attribute_without_values';
         }
 
+        if ( $product->is_type( 'variable' ) && $variation_count <= 0 ) {
+            $error_detectado[] = 'missing_variations';
+        }
+
         return [
             'post_id'                => $product->get_id(),
             'nombre'                 => $product->get_name(),

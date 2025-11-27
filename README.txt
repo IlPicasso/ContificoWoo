@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.37 =
+* Detecta productos variables sin variaciones creadas y los marca en el diagnóstico para evitar SKUs sin stock sincronizable.
+
 = 4.1.36 =
 * Añade un botón para regenerar manualmente el diagnóstico y forzar la detección de productos recién creados o con SKUs cambiados.
 
