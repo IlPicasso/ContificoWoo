@@ -6515,14 +6515,80 @@ $filters = [
                         $processed_groups  = 0;
                         $successful_groups = 0;
                         $origin_stock      = [];
+                        $product_id_cache  = [];
 
-                        try {
-                                $origin_stock = $this->contifico->get_stock( $id_origin_warehouse );
-                        } catch ( Exception $exception ) {
-                                $order->add_order_note( sprintf(
-                                        __( '<b>Contífico:</b><br>No se pudo consultar el stock disponible en la bodega de facturación: %s', $this->plugin_name ),
-                                        $exception->getMessage()
-                                ) );
+                        $resolve_product_id = function ( WC_Order_Item_Product $item, WC_Product $wc_product ) use ( &$product_id_cache, $order ) : string {
+                                $sku = (string) $wc_product->get_sku();
+
+                                if ( isset( $product_id_cache[ $sku ] ) ) {
+                                        return $product_id_cache[ $sku ];
+                                }
+
+                                try {
+                                        $product_id_cache[ $sku ] = (string) $this->contifico->get_product_id( $sku );
+                                } catch ( Exception $exception ) {
+                                        $order->add_order_note( sprintf(
+                                                __( '<b>Contífico:</b><br>No se pudo obtener el identificador de Contífico para el SKU %1$s: %2$s', $this->plugin_name ),
+                                                $sku,
+                                                $exception->getMessage()
+                                        ) );
+
+                                        $product_id_cache[ $sku ] = '';
+                                }
+
+                                return $product_id_cache[ $sku ];
+                        };
+
+                        $product_ids_for_stock = [];
+
+                        foreach ( $grouped_items as $group ) {
+                                foreach ( $group['items'] as $item ) {
+                                        if ( ! is_a( $item, 'WC_Order_Item_Product' ) ) {
+                                                continue;
+                                        }
+
+                                        $wc_product = $item->get_product();
+
+                                        if ( ! $wc_product ) {
+                                                continue;
+                                        }
+
+                                        $product_id = $resolve_product_id( $item, $wc_product );
+
+                                        if ( '' !== $product_id ) {
+                                                $product_ids_for_stock[] = $product_id;
+                                        }
+                                }
+                        }
+
+                        $product_ids_for_stock = array_values( array_unique( $product_ids_for_stock ) );
+                        $stock_lookup_failed   = false;
+
+                        if ( ! empty( $product_ids_for_stock ) && '' !== $origin_code ) {
+                                try {
+                                        $warehouse_stock = $this->contifico->get_warehouses_stock( [ $origin_code ], $product_ids_for_stock );
+
+                                        if ( isset( $warehouse_stock[ $origin_code ] ) && is_array( $warehouse_stock[ $origin_code ] ) ) {
+                                                $origin_stock = $warehouse_stock[ $origin_code ];
+                                        }
+                                } catch ( Exception $exception ) {
+                                        $stock_lookup_failed = true;
+                                        $order->add_order_note( sprintf(
+                                                __( '<b>Contífico:</b><br>No se pudo consultar el stock disponible en la bodega de facturación: %s', $this->plugin_name ),
+                                                $exception->getMessage()
+                                        ) );
+                                }
+                        }
+
+                        if ( empty( $origin_stock ) && ! $stock_lookup_failed ) {
+                                try {
+                                        $origin_stock = $this->contifico->get_stock( $id_origin_warehouse );
+                                } catch ( Exception $exception ) {
+                                        $order->add_order_note( sprintf(
+                                                __( '<b>Contífico:</b><br>No se pudo consultar el stock disponible en la bodega de facturación: %s', $this->plugin_name ),
+                                                $exception->getMessage()
+                                        ) );
+                                }
                         }
 
                         foreach ( $grouped_items as $group ) {
@@ -6560,19 +6626,7 @@ $filters = [
                                         $sku           = (string) $wc_product->get_sku();
                                         $price         = $wc_product->get_price();
                                         $item_quantity = 0.0;
-                                        $product_id    = '';
-
-                                        try {
-                                                $product_id = $this->contifico->get_product_id( $sku );
-                                        } catch ( Exception $exception ) {
-                                                $order->add_order_note( sprintf(
-                                                        __( '<b>Contífico:</b><br>No se pudo obtener el identificador de Contífico para el SKU %1$s: %2$s', $this->plugin_name ),
-                                                        $sku,
-                                                        $exception->getMessage()
-                                                ) );
-
-                                                continue;
-                                        }
+                                        $product_id    = $resolve_product_id( $item, $wc_product );
 
                                         if ( empty( $refund ) ) {
                                                 $item_stock_reduced = $item->get_meta( '_reduced_stock', true );
