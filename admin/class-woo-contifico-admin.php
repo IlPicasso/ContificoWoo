@@ -2818,6 +2818,18 @@ return $value;
                 $context = $this->build_default_inventory_context( $default_code, $default_id );
 
                 if ( '' === $location_id ) {
+                        if (
+                                $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
+                                && $this->woo_contifico->multilocation->is_active()
+                        ) {
+                                $fallback_label = $this->resolve_warehouse_location_label( $context['code'], $location_id );
+
+                                if ( '' !== $fallback_label ) {
+                                        $context['label']          = $fallback_label;
+                                        $context['location_label'] = $fallback_label;
+                                }
+                        }
+
                         return $context;
                 }
 
