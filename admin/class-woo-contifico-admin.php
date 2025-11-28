@@ -3486,10 +3486,10 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
 		$configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
 
-                if ( is_array( $configured_locations ) && ! empty( $configured_locations ) ) {
-                        foreach ( $configured_locations as $configured_location_id => $configured_code ) {
-                                $mapped_code            = (string) $configured_code;
-                                $configured_location_id = (string) $configured_location_id;
+		if ( is_array( $configured_locations ) && ! empty( $configured_locations ) ) {
+			foreach ( $configured_locations as $configured_location_id => $configured_code ) {
+				$mapped_code            = (string) $configured_code;
+				$configured_location_id = (string) $configured_location_id;
 
 				if ( '' !== $warehouse_code && $warehouse_code !== $mapped_code ) {
 					continue;
@@ -3502,22 +3502,18 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 				if ( method_exists( $this->woo_contifico->multilocation, 'get_location_label' ) ) {
 					$label = (string) $this->woo_contifico->multilocation->get_location_label( $configured_location_id );
 
-                                        if ( '' !== $label ) {
-                                                return $label;
-                                        }
-                                }
-                        }
-                }
+					if ( '' !== $label ) {
+						return $label;
+					}
+				}
+			}
+		}
 
-                if ( '' !== $warehouse_code || '' !== $location_id ) {
-                        return __( 'Otras Bodegas', $this->plugin_name );
-                }
-
-                if (
-                        '' === $warehouse_code
-                        && '' !== $location_id
-                        && method_exists( $this->woo_contifico->multilocation, 'get_location_label' )
-                ) {
+		if (
+			'' === $warehouse_code
+			&& '' !== $location_id
+			&& method_exists( $this->woo_contifico->multilocation, 'get_location_label' )
+		) {
 			$label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
 
 			if ( '' !== $label ) {
