@@ -83,9 +83,6 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
-= 4.1.40 =
-* Muestra "Otras Bodegas" cuando la ubicación de MultiLoca no está mapeada con una bodega de Contífico, para dejar claro que el stock proviene de bodegas no asociadas.
-
 = 4.1.39 =
 * Corrige la hora mostrada en los movimientos de inventario para respetar la zona horaria configurada en WordPress.
 

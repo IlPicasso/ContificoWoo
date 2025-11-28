@@ -3466,67 +3466,116 @@ private function resolve_location_warehouse_code( string $location_id ) : string
          *
          * @since 4.4.0
          */
-	private function resolve_warehouse_location_label( string $warehouse_code, string $location_id = '' ) : string {
-		$warehouse_code = trim( $warehouse_code );
-		$location_id    = trim( $location_id );
+        private function resolve_warehouse_location_label( string $warehouse_code, string $location_id = '' ) : string {
+                $warehouse_code = trim( $warehouse_code );
+                $location_id    = trim( $location_id );
 
-		$invoice_label = $this->resolve_invoice_warehouse_label( $warehouse_code, $location_id );
+                $invoice_label = $this->resolve_invoice_warehouse_label( $warehouse_code, $location_id );
 
-		if ( '' !== $invoice_label ) {
-			return $invoice_label;
-		}
+                if ( '' !== $invoice_label ) {
+                        return $invoice_label;
+                }
 
-		if ( ! ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) ) {
-			return '';
-		}
+                if ( ! ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) ) {
+                        return '';
+                }
 
-		if ( ! $this->woo_contifico->multilocation->is_active() ) {
-			return '';
-		}
+                if ( ! $this->woo_contifico->multilocation->is_active() ) {
+                        return '';
+                }
 
-		$configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
+                $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
 
-		if ( is_array( $configured_locations ) && ! empty( $configured_locations ) ) {
-			foreach ( $configured_locations as $configured_location_id => $configured_code ) {
-				$mapped_code            = (string) $configured_code;
-				$configured_location_id = (string) $configured_location_id;
+                if ( is_array( $configured_locations ) && ! empty( $configured_locations ) ) {
+                        foreach ( $configured_locations as $configured_location_id => $configured_code ) {
+                                $mapped_code            = (string) $configured_code;
+                                $configured_location_id = (string) $configured_location_id;
 
-				if ( '' !== $warehouse_code && $warehouse_code !== $mapped_code ) {
-					continue;
-				}
+                                if ( '' !== $warehouse_code && $warehouse_code !== $mapped_code ) {
+                                        continue;
+                                }
 
-				if ( '' !== $location_id && $configured_location_id !== $location_id ) {
-					continue;
-				}
+                                if ( '' !== $location_id && $configured_location_id !== $location_id ) {
+                                        continue;
+                                }
 
-				if ( method_exists( $this->woo_contifico->multilocation, 'get_location_label' ) ) {
-					$label = (string) $this->woo_contifico->multilocation->get_location_label( $configured_location_id );
+                                if ( method_exists( $this->woo_contifico->multilocation, 'get_location_label' ) ) {
+                                        $label = (string) $this->woo_contifico->multilocation->get_location_label( $configured_location_id );
 
-					if ( '' !== $label ) {
-						return $label;
-					}
-				}
-			}
-		}
+                                        if ( '' !== $label ) {
+                                                return $label;
+                                        }
+                                }
+                        }
+                }
 
-		if (
-			'' === $warehouse_code
-			&& '' !== $location_id
-			&& method_exists( $this->woo_contifico->multilocation, 'get_location_label' )
-		) {
-			$label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
+                if (
+                        '' === $warehouse_code
+                        && '' !== $location_id
+                        && method_exists( $this->woo_contifico->multilocation, 'get_location_label' )
+                ) {
+                        $label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
 
-			if ( '' !== $label ) {
-				return $label;
-			}
-		}
+                        if ( '' !== $label ) {
+                                return $label;
+                        }
+                }
 
-		if ( '' !== $location_id ) {
-			return __( 'Otras Bodegas', $this->plugin_name );
-		}
+                return '';
+        }
 
-		return '';
-	}
+        /**
+         * Resolve a friendly label for the Contífico invoice warehouse when it is not mapped in MultiLoca.
+         *
+         * @since 4.1.17
+         */
+        private function resolve_invoice_warehouse_label( string $warehouse_code, string $location_id ) : string {
+                $invoice_code  = isset( $this->woo_contifico->settings['bodega_facturacion'] ) ? trim( (string) $this->woo_contifico->settings['bodega_facturacion'] ) : '';
+                $invoice_label = isset( $this->woo_contifico->settings['bodega_facturacion_label'] ) ? trim( (string) $this->woo_contifico->settings['bodega_facturacion_label'] ) : '';
+
+                if ( '' === $invoice_code || '' === $invoice_label ) {
+                        return '';
+                }
+
+                if ( '' !== $warehouse_code && strcasecmp( $warehouse_code, $invoice_code ) === 0 ) {
+                        return $invoice_label;
+                }
+
+                if ( '' !== $location_id && strcasecmp( $location_id, $invoice_code ) === 0 ) {
+                        return $invoice_label;
+                }
+
+                return '';
+        }
+
+/**
+ * Update a list of entries with the final status returned by the API.
+        *
+        * @since 4.3.1
+        */
+       private function finalize_inventory_movement_entries( array $entries, string $status, string $reference = '', string $message = '' ) : array {
+               if ( ! in_array( $status, [ 'pending', 'success', 'error' ], true ) ) {
+                       $status = 'pending';
+               }
+
+               foreach ( $entries as &$entry ) {
+                       if ( ! is_array( $entry ) ) {
+                               continue;
+                       }
+
+                       $entry['status']    = $status;
+                       $entry['reference'] = $reference;
+
+                       if ( 'error' === $status ) {
+                               $entry['error_message'] = $message;
+                       } elseif ( 'success' === $status ) {
+                               $entry['error_message'] = '';
+                       }
+               }
+               unset( $entry );
+
+               return array_map( [ $this, 'normalize_inventory_movement_entry' ], $entries );
+       }
 
 	/**
 	 * Prepare sanitized filters for the inventory movement report.
