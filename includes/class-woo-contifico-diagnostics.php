@@ -85,6 +85,10 @@ class Woo_Contifico_Diagnostics {
         );
 
         foreach ( $woocommerce_products as $product ) {
+            if ( is_numeric( $product ) ) {
+                $product = wc_get_product( (int) $product );
+            }
+
             if ( ! $product instanceof WC_Product ) {
                 continue;
             }
