@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.42 =
+* Optimiza la consulta de stock al cancelar o reembolsar órdenes para solo solicitar los productos involucrados desde la bodega de facturación, reduciendo tiempos de espera y evitando bloqueos al devolver inventario a varias bodegas.
+
 = 4.1.41 =
 * Marca los productos variables con variaciones pero sin atributos configurados para que se muestren en el diagnóstico y puedan corregirse.
 
