@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.43 =
+* Corrige el filtro por categoría en el reporte de movimientos para incluir las variaciones usando la categoría de su producto padre y evitar resultados vacíos en subcategorías.
+
 = 4.1.42 =
 * Optimiza la consulta de stock al cancelar o reembolsar órdenes para solo solicitar los productos involucrados desde la bodega de facturación, reduciendo tiempos de espera y evitando bloqueos al devolver inventario a varias bodegas.
 
