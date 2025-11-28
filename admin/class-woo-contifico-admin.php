@@ -3631,6 +3631,14 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                 $terms = get_the_terms( $product_id, 'product_cat' );
 
+                if ( ( is_wp_error( $terms ) || empty( $terms ) ) && function_exists( 'wc_get_product' ) ) {
+                        $product = wc_get_product( $product_id );
+
+                        if ( $product && $product->is_type( 'variation' ) ) {
+                                $terms = get_the_terms( $product->get_parent_id(), 'product_cat' );
+                        }
+                }
+
                 if ( is_wp_error( $terms ) || empty( $terms ) ) {
                         $cache[ $product_id ] = [];
 
@@ -3664,6 +3672,14 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 }
 
                 $terms = get_the_terms( $product_id, 'product_cat' );
+
+                if ( ( is_wp_error( $terms ) || empty( $terms ) ) && function_exists( 'wc_get_product' ) ) {
+                        $product = wc_get_product( $product_id );
+
+                        if ( $product && $product->is_type( 'variation' ) ) {
+                                $terms = get_the_terms( $product->get_parent_id(), 'product_cat' );
+                        }
+                }
 
                 if ( is_wp_error( $terms ) || empty( $terms ) ) {
                         $cache[ $product_id ] = [];
