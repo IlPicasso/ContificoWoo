@@ -270,10 +270,13 @@ class Woo_Contifico_Diagnostics {
      * @return array<string,mixed>
      */
     private function build_product_entry( WC_Product $product ) : array {
-        $managing_stock = method_exists( $product, 'managing_stock' )
+        $managing_stock    = method_exists( $product, 'managing_stock' )
             ? (bool) $product->managing_stock()
             : (bool) $product->get_manage_stock();
-        $variation_count = $product->is_type( 'variable' )
+        $product_attributes = method_exists( $product, 'get_attributes' )
+            ? (array) $product->get_attributes()
+            : [];
+        $variation_count   = $product->is_type( 'variable' )
             ? count( (array) $product->get_children() )
             : 0;
 
@@ -284,8 +287,12 @@ class Woo_Contifico_Diagnostics {
             $error_detectado[] = 'attribute_without_values';
         }
 
-        if ( $product->is_type( 'variable' ) && $variation_count <= 0 ) {
-            $error_detectado[] = 'missing_variations';
+        if ( $product->is_type( 'variable' ) ) {
+            if ( $variation_count <= 0 ) {
+                $error_detectado[] = 'missing_variations';
+            } elseif ( empty( $product_attributes ) ) {
+                $error_detectado[] = 'missing_attributes';
+            }
         }
 
         return [

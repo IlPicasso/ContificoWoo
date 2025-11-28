@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.41 =
+* Marca los productos variables con variaciones pero sin atributos configurados para que se muestren en el diagnóstico y puedan corregirse.
+
 = 4.1.40 =
 * Asegura que el diagnóstico cargue los productos aunque algún filtro de WooCommerce retorne IDs en lugar de objetos, evitando que se omitan ítems variables.
 

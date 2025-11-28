@@ -502,6 +502,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'product_stock_disabled'    => __( 'Producto sin manejo de inventario', 'woo-contifico' ),
             'missing_variations'        => __( 'Producto variable sin variaciones', 'woo-contifico' ),
             'attribute_without_values'  => __( 'Atributos sin valores', 'woo-contifico' ),
+            'missing_attributes'        => __( 'Variaciones sin atributos definidos', 'woo-contifico' ),
         ];
     }
 
@@ -634,7 +635,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
 
         if (
             array_intersect(
-                [ 'no_contifico_match', 'child_no_contifico_match', 'variation_stock_disabled', 'product_stock_disabled', 'attribute_without_values', 'missing_variations' ],
+                [ 'no_contifico_match', 'child_no_contifico_match', 'variation_stock_disabled', 'product_stock_disabled', 'attribute_without_values', 'missing_variations', 'missing_attributes' ],
                 $types
             )
         ) {
@@ -758,6 +759,9 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                 case 'missing_variations':
                     $messages[] = __( 'El producto es variable pero no tiene variaciones creadas, por lo que nunca gestionará inventario.', 'woo-contifico' );
                     break;
+                case 'missing_attributes':
+                    $messages[] = __( 'El producto tiene variaciones pero no tiene atributos configurados, por lo que no podrán mostrarse en la tienda.', 'woo-contifico' );
+                    break;
             }
         }
 
@@ -804,6 +808,9 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                     break;
                 case 'missing_variations':
                     $messages[] = __( 'Crea al menos una variación o cambia el tipo de producto a simple para que pueda sincronizar stock.', 'woo-contifico' );
+                    break;
+                case 'missing_attributes':
+                    $messages[] = __( 'Añade atributos y márcalos para las variaciones para que puedan mostrarse y gestionarse correctamente.', 'woo-contifico' );
                     break;
             }
         }
