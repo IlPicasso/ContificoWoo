@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.51 =
+* Limita la alerta de color único en el diagnóstico solo a productos variables para evitar falsos positivos en productos simples.
+
 = 4.1.50 =
 * Marca en el diagnóstico los productos con un único color marcado como variación para evitar experiencias de compra confusas.
 

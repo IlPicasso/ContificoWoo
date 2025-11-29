@@ -281,7 +281,9 @@ class Woo_Contifico_Diagnostics {
             : 0;
 
         $empty_attributes = $this->find_attributes_without_values( $product );
-        $single_color_attributes = $this->find_single_variation_color_attributes( $product );
+        $single_color_attributes = $product->is_type( 'variable' )
+            ? $this->find_single_variation_color_attributes( $product )
+            : [];
         $error_detectado  = [];
 
         if ( ! empty( $empty_attributes ) ) {
@@ -442,6 +444,10 @@ class Woo_Contifico_Diagnostics {
      * @return array<int,string>
      */
     private function find_single_variation_color_attributes( WC_Product $product ) : array {
+        if ( ! $product->is_type( 'variable' ) ) {
+            return [];
+        }
+
         if ( ! method_exists( $product, 'get_attributes' ) ) {
             return [];
         }
