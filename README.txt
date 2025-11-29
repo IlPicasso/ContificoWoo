@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.49 =
+* Registra la fecha del historial de sincronización al momento de guardarlo para que el reporte de movimientos respete los rangos de fechas incluso cuando los registros antiguos no tengan marcas de tiempo completas.
+
 = 4.1.48 =
 * Evita que el reporte de movimientos se quede solo con el último histórico procesado al rehidratar los datos cacheados con nueva información y limpiar la caché al guardar el historial.
 

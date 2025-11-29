@@ -1727,14 +1727,20 @@ class Woo_Contifico_Admin {
          * @return array
          */
         private function build_manual_sync_history_entry( string $run_id, array $state, string $status, string $message ) : array {
-                $progress = isset( $state['progress'] ) && is_array( $state['progress'] ) ? $this->normalize_manual_sync_progress( $state['progress'] ) : $this->get_default_manual_sync_state()['progress'];
+                $progress    = isset( $state['progress'] ) && is_array( $state['progress'] ) ? $this->normalize_manual_sync_progress( $state['progress'] ) : $this->get_default_manual_sync_state()['progress'];
+                $recorded_at = current_time( 'mysql' );
+
+                $started_at  = isset( $state['started_at'] ) && '' !== (string) $state['started_at'] ? (string) $state['started_at'] : $recorded_at;
+                $finished_at = isset( $state['finished_at'] ) && '' !== (string) $state['finished_at'] ? (string) $state['finished_at'] : $started_at;
+                $saved_at    = '' !== $finished_at ? $finished_at : $recorded_at;
 
                 return [
                         'id'          => $run_id,
                         'status'      => $status,
                         'message'     => $message,
-                        'started_at'  => isset( $state['started_at'] ) ? (string) $state['started_at'] : '',
-                        'finished_at' => isset( $state['finished_at'] ) ? (string) $state['finished_at'] : '',
+                        'started_at'  => $started_at,
+                        'finished_at' => $finished_at,
+                        'saved_at'    => $saved_at,
                         'fetched'     => $progress['fetched'] ?? 0,
                         'found'       => $progress['found'] ?? 0,
                         'updated'     => $progress['updated'] ?? 0,
@@ -1788,6 +1794,16 @@ class Woo_Contifico_Admin {
                         $entry = $this->normalize_manual_sync_data( $entry );
 
                         if ( is_array( $entry ) ) {
+                                if ( ! isset( $entry['saved_at'] ) || '' === (string) $entry['saved_at'] ) {
+                                        $entry['saved_at'] = isset( $entry['finished_at'] ) && '' !== (string) $entry['finished_at']
+                                                ? (string) $entry['finished_at']
+                                                : ( isset( $entry['started_at'] ) ? (string) $entry['started_at'] : '' );
+
+                                        if ( '' === $entry['saved_at'] ) {
+                                                $entry['saved_at'] = current_time( 'mysql' );
+                                        }
+                                }
+
                                 $normalized_history[] = $entry;
                         }
                 }
@@ -2440,7 +2456,7 @@ class Woo_Contifico_Admin {
          */
         private function resolve_manual_sync_history_timestamp( array $history_entry ) : int {
 
-                foreach ( [ 'finished_at', 'started_at' ] as $field ) {
+                foreach ( [ 'finished_at', 'started_at', 'saved_at' ] as $field ) {
                         if ( empty( $history_entry[ $field ] ) ) {
                                 continue;
                         }
