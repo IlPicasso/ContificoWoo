@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.47 =
+* Permite ingresar fechas del reporte en formatos regionales (como dd/mm/aaaa) y las normaliza a la zona horaria del sitio para que los filtros no devuelvan resultados globales.
+
 = 4.1.46 =
 * Corrige el filtrado por fecha del reporte de movimientos usando fechas localizadas antes de comparar con los rangos seleccionados.
 

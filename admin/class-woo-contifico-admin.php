@@ -3715,21 +3715,52 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                         return '';
                 }
 
+                $parsed = $this->parse_inventory_report_date_value( $value );
+
+                if ( ! $parsed instanceof DateTimeInterface ) {
+                        return '';
+                }
+
+                return $parsed->format( 'Y-m-d' );
+        }
+
+        /**
+         * Parse incoming inventory report dates supporting multiple common formats.
+         *
+         * @since 4.1.47
+         */
+        private function parse_inventory_report_date_value( string $value ) : ?DateTimeInterface {
+                $value    = trim( $value );
                 $timezone = wp_timezone();
 
-                $date = date_create_from_format( 'Y-m-d', $value, $timezone );
+                if ( '' === $value ) {
+                        return null;
+                }
 
-                if ( $date instanceof DateTimeInterface ) {
-                        return $date->format( 'Y-m-d' );
+                $formats = array_unique(
+                        [
+                                'Y-m-d',
+                                'd/m/Y',
+                                'd-m-Y',
+                                (string) get_option( 'date_format', 'Y-m-d' ),
+                        ]
+                );
+
+                foreach ( $formats as $format ) {
+                        $date = date_create_from_format( $format, $value, $timezone );
+
+                        if ( $date instanceof DateTimeInterface ) {
+                                return $date;
+                        }
                 }
 
                 $fallback = date_create( $value, $timezone );
 
-                if ( ! $fallback instanceof DateTimeInterface ) {
-                        return '';
+                if ( $fallback instanceof DateTimeInterface ) {
+                        return $fallback;
                 }
 
-                return $fallback->format( 'Y-m-d' );
+                return null;
         }
 
         /**
