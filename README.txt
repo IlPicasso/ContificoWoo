@@ -83,6 +83,27 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.49 =
+* Registra la fecha del historial de sincronización al momento de guardarlo para que el reporte de movimientos respete los rangos de fechas incluso cuando los registros antiguos no tengan marcas de tiempo completas.
+
+= 4.1.48 =
+* Evita que el reporte de movimientos se quede solo con el último histórico procesado al rehidratar los datos cacheados con nueva información y limpiar la caché al guardar el historial.
+
+= 4.1.47 =
+* Permite ingresar fechas del reporte en formatos regionales (como dd/mm/aaaa) y las normaliza a la zona horaria del sitio para que los filtros no devuelvan resultados globales.
+
+= 4.1.46 =
+* Corrige el filtrado por fecha del reporte de movimientos usando fechas localizadas antes de comparar con los rangos seleccionados.
+
+= 4.1.45 =
+* Ajusta el filtrado por fecha del reporte de movimientos para respetar los rangos seleccionados usando las marcas de tiempo y la zona horaria del sitio.
+
+= 4.1.44 =
+* Corrige los filtros por fecha del reporte de movimientos para que respeten los rangos seleccionados en la zona horaria del sitio.
+
+= 4.1.43 =
+* Corrige el filtro por categoría en el reporte de movimientos para incluir las variaciones usando la categoría de su producto padre y evitar resultados vacíos en subcategorías.
+
 = 4.1.42 =
 * Optimiza la consulta de stock al cancelar o reembolsar órdenes para solo solicitar los productos involucrados desde la bodega de facturación, reduciendo tiempos de espera y evitando bloqueos al devolver inventario a varias bodegas.
 
