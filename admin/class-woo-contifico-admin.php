@@ -1795,78 +1795,85 @@ class Woo_Contifico_Admin {
                 return $normalized_history;
         }
 
-        /**
-         * Persist the manual synchronization history list.
-         *
-         * @since 4.3.0
-         *
-         * @param array $history
-         *
-         * @return void
-         */
-        private function save_manual_sync_history( array $history ) : void {
-                update_option( self::MANUAL_SYNC_HISTORY_OPTION, array_values( $history ), false );
-        }
+	/**
+	 * Persist the manual synchronization history list.
+	 *
+	 * @since 4.3.0
+	 *
+	 * @param array $history
+	 *
+	 * @return void
+	 */
+	private function save_manual_sync_history( array $history ) : void {
+		update_option( self::MANUAL_SYNC_HISTORY_OPTION, array_values( $history ), false );
+		delete_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
+	}
 
-        /**
-         * Normalize manual synchronization data casting objects to arrays recursively.
-         *
-         * @since 4.3.1
-         *
-         * @param mixed $value
-         *
-         * @return mixed
-         */
-private function normalize_manual_sync_data( $value ) {
+	/**
+	 * Normalize manual synchronization data casting objects to arrays recursively.
+	 *
+	 * @since 4.3.1
+	 *
+	 * @param mixed $value
+	 *
+	 * @return mixed
+	 */
+	private function normalize_manual_sync_data( $value ) {
 
-if ( is_object( $value ) ) {
-$value = get_object_vars( $value );
-}
+		if ( is_object( $value ) ) {
+			$value = get_object_vars( $value );
+		}
 
-if ( is_array( $value ) ) {
-foreach ( $value as $key => $item ) {
-$value[ $key ] = $this->normalize_manual_sync_data( $item );
-}
-}
+		if ( is_array( $value ) ) {
+			foreach ( $value as $key => $item ) {
+				$value[ $key ] = $this->normalize_manual_sync_data( $item );
+			}
+		}
 
-return $value;
-}
+		return $value;
+	}
 
-/**
- * Retrieve the cached inventory movements list.
- *
- * @since 4.3.1
- */
-        private function get_inventory_movements_storage() : array {
+	/**
+	 * Retrieve the cached inventory movements list.
+	 *
+	 * @since 4.3.1
+	 */
+	private function get_inventory_movements_storage() : array {
 
-                $cached = get_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
+		$cached = get_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
 
-                if ( false !== $cached && is_array( $cached ) ) {
-                        return $cached;
-                }
+		if ( false !== $cached && is_array( $cached ) ) {
+			$hydrated = $this->maybe_backfill_inventory_movements_from_history( $cached );
 
-                $entries   = get_option( self::INVENTORY_MOVEMENTS_STORAGE, [] );
-                $entries   = $this->normalize_manual_sync_data( $entries );
-                $processed = [];
+			if ( $hydrated !== $cached ) {
+				set_transient( self::INVENTORY_MOVEMENTS_TRANSIENT, $hydrated, MINUTE_IN_SECONDS );
+			}
 
-                if ( ! is_array( $entries ) ) {
-                        $entries = [];
-                }
+			return $hydrated;
+		}
 
-                foreach ( $entries as $entry ) {
-                        $entry = $this->normalize_inventory_movement_entry( $entry );
+		$entries   = get_option( self::INVENTORY_MOVEMENTS_STORAGE, [] );
+		$entries   = $this->normalize_manual_sync_data( $entries );
+		$processed = [];
 
-                        if ( ! empty( $entry ) ) {
-                                $processed[] = $entry;
-                        }
-                }
+		if ( ! is_array( $entries ) ) {
+			$entries = [];
+		}
 
-                $processed = $this->maybe_backfill_inventory_movements_from_history( $processed );
+		foreach ( $entries as $entry ) {
+			$entry = $this->normalize_inventory_movement_entry( $entry );
 
-                set_transient( self::INVENTORY_MOVEMENTS_TRANSIENT, $processed, MINUTE_IN_SECONDS );
+			if ( ! empty( $entry ) ) {
+				$processed[] = $entry;
+			}
+		}
 
-                return $processed;
-        }
+		$processed = $this->maybe_backfill_inventory_movements_from_history( $processed );
+
+		set_transient( self::INVENTORY_MOVEMENTS_TRANSIENT, $processed, MINUTE_IN_SECONDS );
+
+		return $processed;
+	}
 
         /**
          * Collect recent Contífico process errors to surface on the dashboard.
@@ -3631,6 +3638,14 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                 $terms = get_the_terms( $product_id, 'product_cat' );
 
+                if ( ( is_wp_error( $terms ) || empty( $terms ) ) && function_exists( 'wc_get_product' ) ) {
+                        $product = wc_get_product( $product_id );
+
+                        if ( $product && $product->is_type( 'variation' ) ) {
+                                $terms = get_the_terms( $product->get_parent_id(), 'product_cat' );
+                        }
+                }
+
                 if ( is_wp_error( $terms ) || empty( $terms ) ) {
                         $cache[ $product_id ] = [];
 
@@ -3665,6 +3680,14 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                 $terms = get_the_terms( $product_id, 'product_cat' );
 
+                if ( ( is_wp_error( $terms ) || empty( $terms ) ) && function_exists( 'wc_get_product' ) ) {
+                        $product = wc_get_product( $product_id );
+
+                        if ( $product && $product->is_type( 'variation' ) ) {
+                                $terms = get_the_terms( $product->get_parent_id(), 'product_cat' );
+                        }
+                }
+
                 if ( is_wp_error( $terms ) || empty( $terms ) ) {
                         $cache[ $product_id ] = [];
 
@@ -3693,19 +3716,58 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 	 * @since 4.3.1
 	 */
         private function sanitize_inventory_report_date( $value ) : string {
-        $value = trim( (string) $value );
+                $value = trim( (string) $value );
 
-        if ( '' === $value ) {
-        return '';
+                if ( '' === $value ) {
+                        return '';
+                }
+
+                $parsed = $this->parse_inventory_report_date_value( $value );
+
+                if ( ! $parsed instanceof DateTimeInterface ) {
+                        return '';
+                }
+
+                return $parsed->format( 'Y-m-d' );
         }
 
-        $timestamp = strtotime( $value );
+        /**
+         * Parse incoming inventory report dates supporting multiple common formats.
+         *
+         * @since 4.1.47
+         */
+        private function parse_inventory_report_date_value( string $value ) : ?DateTimeInterface {
+                $value    = trim( $value );
+                $timezone = wp_timezone();
 
-        if ( ! $timestamp ) {
-        return '';
-        }
+                if ( '' === $value ) {
+                        return null;
+                }
 
-        return gmdate( 'Y-m-d', $timestamp );
+                $formats = array_unique(
+                        [
+                                'Y-m-d',
+                                'd/m/Y',
+                                'd-m-Y',
+                                (string) get_option( 'date_format', 'Y-m-d' ),
+                        ]
+                );
+
+                foreach ( $formats as $format ) {
+                        $date = date_create_from_format( $format, $value, $timezone );
+
+                        if ( $date instanceof DateTimeInterface ) {
+                                return $date;
+                        }
+                }
+
+                $fallback = date_create( $value, $timezone );
+
+                if ( $fallback instanceof DateTimeInterface ) {
+                        return $fallback;
+                }
+
+                return null;
         }
 
         /**
@@ -3722,6 +3784,27 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 }
 
                 return $datetime->getTimestamp();
+        }
+
+        /**
+         * Retrieve a localized DateTime instance for a UTC timestamp.
+         *
+         * @since 4.1.46
+         */
+        private function get_localized_datetime_from_timestamp( int $timestamp ) : ?DateTimeInterface {
+                if ( $timestamp <= 0 ) {
+                        return null;
+                }
+
+                $datetime = date_create( '@' . $timestamp );
+
+                if ( ! $datetime instanceof DateTimeInterface ) {
+                        return null;
+                }
+
+                $datetime->setTimezone( wp_timezone() );
+
+                return $datetime;
         }
 
         /**
@@ -3761,13 +3844,26 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 $category_totals  = [];
 
                 foreach ( $entries as $entry ) {
-                        $timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
+                        $timestamp           = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
+                        $localized_datetime  = $this->get_localized_datetime_from_timestamp( $timestamp );
+                        $localized_timestamp = $localized_datetime instanceof DateTimeInterface ? $localized_datetime->getTimestamp() : $timestamp;
+                        $entry_date          = $localized_datetime instanceof DateTimeInterface
+                                ? $localized_datetime->format( 'Y-m-d' )
+                                : wp_date( 'Y-m-d', $timestamp, wp_timezone() );
 
-                        if ( $filters['start_timestamp'] && $timestamp < $filters['start_timestamp'] ) {
+                        if ( isset( $filters['start_timestamp'] ) && null !== $filters['start_timestamp'] && $localized_timestamp < $filters['start_timestamp'] ) {
                                 continue;
                         }
 
-                        if ( $filters['end_timestamp'] && $timestamp > $filters['end_timestamp'] ) {
+                        if ( isset( $filters['end_timestamp'] ) && null !== $filters['end_timestamp'] && $localized_timestamp > $filters['end_timestamp'] ) {
+                                continue;
+                        }
+
+                        if ( '' !== $filters['start_date'] && $entry_date < $filters['start_date'] ) {
+                                continue;
+                        }
+
+                        if ( '' !== $filters['end_date'] && $entry_date > $filters['end_date'] ) {
                                 continue;
                         }
 
