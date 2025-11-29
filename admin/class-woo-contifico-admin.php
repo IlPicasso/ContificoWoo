@@ -3631,6 +3631,14 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                 $terms = get_the_terms( $product_id, 'product_cat' );
 
+                if ( ( is_wp_error( $terms ) || empty( $terms ) ) && function_exists( 'wc_get_product' ) ) {
+                        $product = wc_get_product( $product_id );
+
+                        if ( $product && $product->is_type( 'variation' ) ) {
+                                $terms = get_the_terms( $product->get_parent_id(), 'product_cat' );
+                        }
+                }
+
                 if ( is_wp_error( $terms ) || empty( $terms ) ) {
                         $cache[ $product_id ] = [];
 
@@ -3665,6 +3673,14 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                 $terms = get_the_terms( $product_id, 'product_cat' );
 
+                if ( ( is_wp_error( $terms ) || empty( $terms ) ) && function_exists( 'wc_get_product' ) ) {
+                        $product = wc_get_product( $product_id );
+
+                        if ( $product && $product->is_type( 'variation' ) ) {
+                                $terms = get_the_terms( $product->get_parent_id(), 'product_cat' );
+                        }
+                }
+
                 if ( is_wp_error( $terms ) || empty( $terms ) ) {
                         $cache[ $product_id ] = [];
 
@@ -3693,19 +3709,58 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 	 * @since 4.3.1
 	 */
         private function sanitize_inventory_report_date( $value ) : string {
-        $value = trim( (string) $value );
+                $value = trim( (string) $value );
 
-        if ( '' === $value ) {
-        return '';
+                if ( '' === $value ) {
+                        return '';
+                }
+
+                $parsed = $this->parse_inventory_report_date_value( $value );
+
+                if ( ! $parsed instanceof DateTimeInterface ) {
+                        return '';
+                }
+
+                return $parsed->format( 'Y-m-d' );
         }
 
-        $timestamp = strtotime( $value );
+        /**
+         * Parse incoming inventory report dates supporting multiple common formats.
+         *
+         * @since 4.1.47
+         */
+        private function parse_inventory_report_date_value( string $value ) : ?DateTimeInterface {
+                $value    = trim( $value );
+                $timezone = wp_timezone();
 
-        if ( ! $timestamp ) {
-        return '';
-        }
+                if ( '' === $value ) {
+                        return null;
+                }
 
-        return gmdate( 'Y-m-d', $timestamp );
+                $formats = array_unique(
+                        [
+                                'Y-m-d',
+                                'd/m/Y',
+                                'd-m-Y',
+                                (string) get_option( 'date_format', 'Y-m-d' ),
+                        ]
+                );
+
+                foreach ( $formats as $format ) {
+                        $date = date_create_from_format( $format, $value, $timezone );
+
+                        if ( $date instanceof DateTimeInterface ) {
+                                return $date;
+                        }
+                }
+
+                $fallback = date_create( $value, $timezone );
+
+                if ( $fallback instanceof DateTimeInterface ) {
+                        return $fallback;
+                }
+
+                return null;
         }
 
         /**
@@ -3722,6 +3777,27 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 }
 
                 return $datetime->getTimestamp();
+        }
+
+        /**
+         * Retrieve a localized DateTime instance for a UTC timestamp.
+         *
+         * @since 4.1.46
+         */
+        private function get_localized_datetime_from_timestamp( int $timestamp ) : ?DateTimeInterface {
+                if ( $timestamp <= 0 ) {
+                        return null;
+                }
+
+                $datetime = date_create( '@' . $timestamp );
+
+                if ( ! $datetime instanceof DateTimeInterface ) {
+                        return null;
+                }
+
+                $datetime->setTimezone( wp_timezone() );
+
+                return $datetime;
         }
 
         /**
@@ -3761,13 +3837,26 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 $category_totals  = [];
 
                 foreach ( $entries as $entry ) {
-                        $timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
+                        $timestamp           = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
+                        $localized_datetime  = $this->get_localized_datetime_from_timestamp( $timestamp );
+                        $localized_timestamp = $localized_datetime instanceof DateTimeInterface ? $localized_datetime->getTimestamp() : $timestamp;
+                        $entry_date          = $localized_datetime instanceof DateTimeInterface
+                                ? $localized_datetime->format( 'Y-m-d' )
+                                : wp_date( 'Y-m-d', $timestamp, wp_timezone() );
 
-                        if ( $filters['start_timestamp'] && $timestamp < $filters['start_timestamp'] ) {
+                        if ( isset( $filters['start_timestamp'] ) && null !== $filters['start_timestamp'] && $localized_timestamp < $filters['start_timestamp'] ) {
                                 continue;
                         }
 
-                        if ( $filters['end_timestamp'] && $timestamp > $filters['end_timestamp'] ) {
+                        if ( isset( $filters['end_timestamp'] ) && null !== $filters['end_timestamp'] && $localized_timestamp > $filters['end_timestamp'] ) {
+                                continue;
+                        }
+
+                        if ( '' !== $filters['start_date'] && $entry_date < $filters['start_date'] ) {
+                                continue;
+                        }
+
+                        if ( '' !== $filters['end_date'] && $entry_date > $filters['end_date'] ) {
                                 continue;
                         }
 
