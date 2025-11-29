@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.48 =
+* Evita que el reporte de movimientos se quede solo con el último histórico procesado al rehidratar los datos cacheados con nueva información y limpiar la caché al guardar el historial.
+
 = 4.1.47 =
 * Permite ingresar fechas del reporte en formatos regionales (como dd/mm/aaaa) y las normaliza a la zona horaria del sitio para que los filtros no devuelvan resultados globales.
 

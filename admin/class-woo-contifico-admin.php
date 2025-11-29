@@ -1795,78 +1795,85 @@ class Woo_Contifico_Admin {
                 return $normalized_history;
         }
 
-        /**
-         * Persist the manual synchronization history list.
-         *
-         * @since 4.3.0
-         *
-         * @param array $history
-         *
-         * @return void
-         */
-        private function save_manual_sync_history( array $history ) : void {
-                update_option( self::MANUAL_SYNC_HISTORY_OPTION, array_values( $history ), false );
-        }
+	/**
+	 * Persist the manual synchronization history list.
+	 *
+	 * @since 4.3.0
+	 *
+	 * @param array $history
+	 *
+	 * @return void
+	 */
+	private function save_manual_sync_history( array $history ) : void {
+		update_option( self::MANUAL_SYNC_HISTORY_OPTION, array_values( $history ), false );
+		delete_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
+	}
 
-        /**
-         * Normalize manual synchronization data casting objects to arrays recursively.
-         *
-         * @since 4.3.1
-         *
-         * @param mixed $value
-         *
-         * @return mixed
-         */
-private function normalize_manual_sync_data( $value ) {
+	/**
+	 * Normalize manual synchronization data casting objects to arrays recursively.
+	 *
+	 * @since 4.3.1
+	 *
+	 * @param mixed $value
+	 *
+	 * @return mixed
+	 */
+	private function normalize_manual_sync_data( $value ) {
 
-if ( is_object( $value ) ) {
-$value = get_object_vars( $value );
-}
+		if ( is_object( $value ) ) {
+			$value = get_object_vars( $value );
+		}
 
-if ( is_array( $value ) ) {
-foreach ( $value as $key => $item ) {
-$value[ $key ] = $this->normalize_manual_sync_data( $item );
-}
-}
+		if ( is_array( $value ) ) {
+			foreach ( $value as $key => $item ) {
+				$value[ $key ] = $this->normalize_manual_sync_data( $item );
+			}
+		}
 
-return $value;
-}
+		return $value;
+	}
 
-/**
- * Retrieve the cached inventory movements list.
- *
- * @since 4.3.1
- */
-        private function get_inventory_movements_storage() : array {
+	/**
+	 * Retrieve the cached inventory movements list.
+	 *
+	 * @since 4.3.1
+	 */
+	private function get_inventory_movements_storage() : array {
 
-                $cached = get_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
+		$cached = get_transient( self::INVENTORY_MOVEMENTS_TRANSIENT );
 
-                if ( false !== $cached && is_array( $cached ) ) {
-                        return $cached;
-                }
+		if ( false !== $cached && is_array( $cached ) ) {
+			$hydrated = $this->maybe_backfill_inventory_movements_from_history( $cached );
 
-                $entries   = get_option( self::INVENTORY_MOVEMENTS_STORAGE, [] );
-                $entries   = $this->normalize_manual_sync_data( $entries );
-                $processed = [];
+			if ( $hydrated !== $cached ) {
+				set_transient( self::INVENTORY_MOVEMENTS_TRANSIENT, $hydrated, MINUTE_IN_SECONDS );
+			}
 
-                if ( ! is_array( $entries ) ) {
-                        $entries = [];
-                }
+			return $hydrated;
+		}
 
-                foreach ( $entries as $entry ) {
-                        $entry = $this->normalize_inventory_movement_entry( $entry );
+		$entries   = get_option( self::INVENTORY_MOVEMENTS_STORAGE, [] );
+		$entries   = $this->normalize_manual_sync_data( $entries );
+		$processed = [];
 
-                        if ( ! empty( $entry ) ) {
-                                $processed[] = $entry;
-                        }
-                }
+		if ( ! is_array( $entries ) ) {
+			$entries = [];
+		}
 
-                $processed = $this->maybe_backfill_inventory_movements_from_history( $processed );
+		foreach ( $entries as $entry ) {
+			$entry = $this->normalize_inventory_movement_entry( $entry );
 
-                set_transient( self::INVENTORY_MOVEMENTS_TRANSIENT, $processed, MINUTE_IN_SECONDS );
+			if ( ! empty( $entry ) ) {
+				$processed[] = $entry;
+			}
+		}
 
-                return $processed;
-        }
+		$processed = $this->maybe_backfill_inventory_movements_from_history( $processed );
+
+		set_transient( self::INVENTORY_MOVEMENTS_TRANSIENT, $processed, MINUTE_IN_SECONDS );
+
+		return $processed;
+	}
 
         /**
          * Collect recent Contífico process errors to surface on the dashboard.
