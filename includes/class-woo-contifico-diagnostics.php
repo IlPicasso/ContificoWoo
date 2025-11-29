@@ -281,10 +281,17 @@ class Woo_Contifico_Diagnostics {
             : 0;
 
         $empty_attributes = $this->find_attributes_without_values( $product );
+        $single_color_attributes = $product->is_type( 'variable' )
+            ? $this->find_single_variation_color_attributes( $product )
+            : [];
         $error_detectado  = [];
 
         if ( ! empty( $empty_attributes ) ) {
             $error_detectado[] = 'attribute_without_values';
+        }
+
+        if ( ! empty( $single_color_attributes ) ) {
+            $error_detectado[] = 'single_color_variation';
         }
 
         if ( $product->is_type( 'variable' ) ) {
@@ -308,6 +315,7 @@ class Woo_Contifico_Diagnostics {
             'variation_count'        => $variation_count,
             'is_parent_placeholder'  => false,
             'empty_attributes'       => $empty_attributes,
+            'single_variation_color_attributes' => $single_color_attributes,
         ];
     }
 
@@ -426,6 +434,90 @@ class Woo_Contifico_Diagnostics {
         }
 
         return array_values( array_unique( $empty ) );
+    }
+
+    /**
+     * Detect color attributes with a single option marked for variations.
+     *
+     * @param WC_Product $product Product instance.
+     *
+     * @return array<int,string>
+     */
+    private function find_single_variation_color_attributes( WC_Product $product ) : array {
+        if ( ! $product->is_type( 'variable' ) ) {
+            return [];
+        }
+
+        if ( ! method_exists( $product, 'get_attributes' ) ) {
+            return [];
+        }
+
+        $attributes = $product->get_attributes();
+
+        if ( empty( $attributes ) ) {
+            return [];
+        }
+
+        $matches = [];
+
+        foreach ( $attributes as $attribute ) {
+            if ( ! $attribute instanceof WC_Product_Attribute ) {
+                continue;
+            }
+
+            if ( ! $attribute->get_variation() ) {
+                continue;
+            }
+
+            $options = (array) $attribute->get_options();
+            $options = array_map(
+                static function ( $value ) {
+                    if ( is_string( $value ) ) {
+                        $value = trim( $value );
+                    }
+
+                    return $value;
+                },
+                $options
+            );
+            $options = array_filter(
+                $options,
+                static function ( $value ) {
+                    if ( is_string( $value ) ) {
+                        return '' !== $value;
+                    }
+
+                    return ! empty( $value );
+                }
+            );
+
+            if ( 1 !== count( $options ) ) {
+                continue;
+            }
+
+            $name  = (string) $attribute->get_name();
+            $label = wc_attribute_label( $name, $product );
+
+            if ( '' === $label ) {
+                $label = $name;
+            }
+
+            $name_normalized = function_exists( 'wc_sanitize_taxonomy_name' )
+                ? wc_sanitize_taxonomy_name( $name )
+                : sanitize_title( $name );
+
+            $label_normalized = strtolower( (string) $label );
+            $is_color         = false !== strpos( strtolower( (string) $name_normalized ), 'color' )
+                || false !== strpos( $label_normalized, 'color' );
+
+            if ( ! $is_color ) {
+                continue;
+            }
+
+            $matches[] = $label;
+        }
+
+        return array_values( array_unique( $matches ) );
     }
 
     /**
