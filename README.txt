@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.44 =
+* Corrige los filtros por fecha del reporte de movimientos para que respeten los rangos seleccionados en la zona horaria del sitio.
+
 = 4.1.43 =
 * Corrige el filtro por categoría en el reporte de movimientos para incluir las variaciones usando la categoría de su producto padre y evitar resultados vacíos en subcategorías.
 

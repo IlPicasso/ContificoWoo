@@ -3779,13 +3779,15 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 foreach ( $entries as $entry ) {
                         $timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
 
-                        if ( $filters['start_timestamp'] && $timestamp < $filters['start_timestamp'] ) {
-                                continue;
-                        }
+                       $entry_date = wp_date( 'Y-m-d', $timestamp, wp_timezone() );
 
-                        if ( $filters['end_timestamp'] && $timestamp > $filters['end_timestamp'] ) {
-                                continue;
-                        }
+                       if ( '' !== $filters['start_date'] && $entry_date < $filters['start_date'] ) {
+                               continue;
+                       }
+
+                       if ( '' !== $filters['end_date'] && $entry_date > $filters['end_date'] ) {
+                               continue;
+                       }
 
                         if ( $filters['product_id'] && $filters['product_id'] !== (int) $entry['wc_product_id'] ) {
                                 continue;
