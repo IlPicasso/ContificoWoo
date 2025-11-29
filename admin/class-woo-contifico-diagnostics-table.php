@@ -503,6 +503,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'missing_variations'        => __( 'Producto variable sin variaciones', 'woo-contifico' ),
             'attribute_without_values'  => __( 'Atributos sin valores', 'woo-contifico' ),
             'missing_attributes'        => __( 'Variaciones sin atributos definidos', 'woo-contifico' ),
+            'single_color_variation'    => __( 'Un único color marcado como variación', 'woo-contifico' ),
         ];
     }
 
@@ -547,6 +548,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'is_parent_placeholder'  => false,
             'sync_status'            => '',
             'empty_attributes'       => [],
+            'single_variation_color_attributes' => [],
         ];
 
         $entry = wp_parse_args( $entry, $defaults );
@@ -564,6 +566,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
         $entry['variation_count']        = (int) $entry['variation_count'];
         $entry['is_parent_placeholder']  = (bool) $entry['is_parent_placeholder'];
         $entry['empty_attributes']       = array_values( array_filter( array_map( 'sanitize_text_field', (array) $entry['empty_attributes'] ) ) );
+        $entry['single_variation_color_attributes'] = array_values( array_filter( array_map( 'sanitize_text_field', (array) $entry['single_variation_color_attributes'] ) ) );
 
         $entry['problem_types']       = $this->detect_problem_types( $entry );
         $entry['sync_status']         = $this->determine_sync_status( $entry );
@@ -635,7 +638,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
 
         if (
             array_intersect(
-                [ 'no_contifico_match', 'child_no_contifico_match', 'variation_stock_disabled', 'product_stock_disabled', 'attribute_without_values', 'missing_variations', 'missing_attributes' ],
+                [ 'no_contifico_match', 'child_no_contifico_match', 'variation_stock_disabled', 'product_stock_disabled', 'attribute_without_values', 'missing_variations', 'missing_attributes', 'single_color_variation' ],
                 $types
             )
         ) {
@@ -762,6 +765,21 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                 case 'missing_attributes':
                     $messages[] = __( 'El producto tiene variaciones pero no tiene atributos configurados, por lo que no podrán mostrarse en la tienda.', 'woo-contifico' );
                     break;
+                case 'single_color_variation':
+                    $labels = isset( $entry['single_variation_color_attributes'] ) ? (array) $entry['single_variation_color_attributes'] : [];
+                    $labels = array_filter( array_map( 'esc_html', $labels ) );
+
+                    if ( empty( $labels ) ) {
+                        $messages[] = __( 'El producto solo tiene una opción de color marcada para variaciones, lo que obliga a elegir una única alternativa.', 'woo-contifico' );
+                        break;
+                    }
+
+                    $messages[] = sprintf(
+                        /* translators: %s: comma-separated list of attributes. */
+                        __( 'Los siguientes atributos de color solo tienen una opción disponible para variaciones: %s.', 'woo-contifico' ),
+                        implode( ', ', $labels )
+                    );
+                    break;
             }
         }
 
@@ -811,6 +829,9 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                     break;
                 case 'missing_attributes':
                     $messages[] = __( 'Añade atributos y márcalos para las variaciones para que puedan mostrarse y gestionarse correctamente.', 'woo-contifico' );
+                    break;
+                case 'single_color_variation':
+                    $messages[] = __( 'Desactiva el uso para variaciones de ese color único o agrega más opciones/variaciones para que la selección sea clara.', 'woo-contifico' );
                     break;
             }
         }
