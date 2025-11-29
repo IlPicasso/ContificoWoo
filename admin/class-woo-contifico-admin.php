@@ -3631,6 +3631,14 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                 $terms = get_the_terms( $product_id, 'product_cat' );
 
+                if ( ( is_wp_error( $terms ) || empty( $terms ) ) && function_exists( 'wc_get_product' ) ) {
+                        $product = wc_get_product( $product_id );
+
+                        if ( $product && $product->is_type( 'variation' ) ) {
+                                $terms = get_the_terms( $product->get_parent_id(), 'product_cat' );
+                        }
+                }
+
                 if ( is_wp_error( $terms ) || empty( $terms ) ) {
                         $cache[ $product_id ] = [];
 
@@ -3664,6 +3672,14 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 }
 
                 $terms = get_the_terms( $product_id, 'product_cat' );
+
+                if ( ( is_wp_error( $terms ) || empty( $terms ) ) && function_exists( 'wc_get_product' ) ) {
+                        $product = wc_get_product( $product_id );
+
+                        if ( $product && $product->is_type( 'variation' ) ) {
+                                $terms = get_the_terms( $product->get_parent_id(), 'product_cat' );
+                        }
+                }
 
                 if ( is_wp_error( $terms ) || empty( $terms ) ) {
                         $cache[ $product_id ] = [];
@@ -3761,13 +3777,22 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                 $category_totals  = [];
 
                 foreach ( $entries as $entry ) {
-                        $timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
+                        $timestamp  = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
+                        $entry_date = wp_date( 'Y-m-d', $timestamp, wp_timezone() );
 
-                        if ( $filters['start_timestamp'] && $timestamp < $filters['start_timestamp'] ) {
+                        if ( isset( $filters['start_timestamp'] ) && null !== $filters['start_timestamp'] && $timestamp < $filters['start_timestamp'] ) {
                                 continue;
                         }
 
-                        if ( $filters['end_timestamp'] && $timestamp > $filters['end_timestamp'] ) {
+                        if ( isset( $filters['end_timestamp'] ) && null !== $filters['end_timestamp'] && $timestamp > $filters['end_timestamp'] ) {
+                                continue;
+                        }
+
+                        if ( '' !== $filters['start_date'] && $entry_date < $filters['start_date'] ) {
+                                continue;
+                        }
+
+                        if ( '' !== $filters['end_date'] && $entry_date > $filters['end_date'] ) {
                                 continue;
                         }
 
