@@ -828,6 +828,11 @@ class Woo_Contifico
         $plugin_basename = $this->plugin_name . '/' . $this->get_plugin_name();
         $this->loader->add_filter("plugin_action_links_{$plugin_basename}.php", $plugin_admin, 'add_settings_link');
 
+        # Product list bulk actions
+        $this->loader->add_filter('bulk_actions-edit-product', $plugin_admin, 'register_product_bulk_actions');
+        $this->loader->add_filter('handle_bulk_actions-edit-product', $plugin_admin, 'handle_product_bulk_actions', 10, 3);
+        $this->loader->add_action('admin_notices', $plugin_admin, 'render_product_bulk_action_notice');
+
         # Register admin actions
         $this->loader->add_action('admin_init', $plugin_admin, 'admin_init');
         $this->loader->add_action('admin_menu', $plugin_admin, 'register_menu');

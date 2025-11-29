@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.52 =
+* Añade la opción "Corregir y continuar" y una acción masiva para limpiar el identificador guardado cuando el SKU de Contífico no coincide con WooCommerce, de modo que la siguiente sincronización vuelva a enlazar usando el SKU vigente.
+
 = 4.1.51 =
 * Limita la alerta de color único en el diagnóstico solo a productos variables para evitar falsos positivos en productos simples.
 
