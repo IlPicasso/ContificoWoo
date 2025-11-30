@@ -51,6 +51,11 @@ msgstr "Ajustes"
 msgid "Facturación Electrónica Contifico"
 msgstr "Facturación Electrónica Contifico"
 
+#: admin/partials/woo-contifico-admin-display.php:3
+#, php-format
+msgid "Versión del plugin: %s"
+msgstr "Versión del plugin: %s"
+
 #: admin/class-woo-contifico-admin.php:237
 #, php-format
 msgid ""

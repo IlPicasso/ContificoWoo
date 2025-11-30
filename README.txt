@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.54 =
+* Muestra la versión instalada de Contífico WooCommerce en la cabecera de la página de ajustes para consultarla rápidamente desde el administrador.
+
 = 4.1.53 =
 * Distribuye las transferencias de stock entre bodegas preferidas cuando una sola no cubre la cantidad solicitada, evitando que se intente mover más inventario del disponible por bodega.
 
