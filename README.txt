@@ -83,6 +83,10 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.55 =
+* Sincroniza los movimientos de la bodega web cuando se ejecuta una sincronización global para evitar saldos desfasados.
+* Permite eliminar manualmente los movimientos que conforman el saldo pendiente en la pestaña de bodega web.
+
 = 4.1.54 =
 * Muestra la versión instalada de Contífico WooCommerce en la cabecera de la página de ajustes para consultarla rápidamente desde el administrador.
 * Ignora movimientos de inventario con estado pendiente o de error al calcular los pendientes del almacén web para que solo los éxitos ajusten el balance.
