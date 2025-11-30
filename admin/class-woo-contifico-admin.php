@@ -4618,10 +4618,11 @@ $filters = [
                 $balances = [];
 
                 foreach ( $entries as $entry ) {
+                        $status     = isset( $entry['status'] ) ? (string) $entry['status'] : '';
                         $event_type = isset( $entry['event_type'] ) ? (string) $entry['event_type'] : '';
                         $quantity   = (float) ( $entry['quantity'] ?? 0 );
 
-                        if ( $quantity <= 0.0 || '' === $event_type ) {
+                        if ( 'success' !== $status || $quantity <= 0.0 || '' === $event_type ) {
                                 continue;
                         }
 
