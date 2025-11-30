@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.53 =
+* Distribuye las transferencias de stock entre bodegas preferidas cuando una sola no cubre la cantidad solicitada, evitando que se intente mover más inventario del disponible por bodega.
+
 = 4.1.52 =
 * Añade la opción "Corregir y continuar" y una acción masiva para limpiar el identificador guardado cuando el SKU de Contífico no coincide con WooCommerce, de modo que la siguiente sincronización vuelva a enlazar usando el SKU vigente.
 

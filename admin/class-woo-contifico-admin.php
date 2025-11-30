@@ -158,6 +158,13 @@ class Woo_Contifico_Admin {
         private $preferred_warehouse_allocations = [];
 
         /**
+         * Tracks the preferred warehouse allocations per order item when multiple warehouses are needed.
+         *
+         * @var array
+         */
+        private $preferred_item_allocations = [];
+
+        /**
          * Cache that indicates whether an order is using store pickup.
          *
          * @var array
@@ -2803,6 +2810,106 @@ class Woo_Contifico_Admin {
                 }
         }
 
+        private function store_item_preferred_allocations( WC_Order $order, WC_Order_Item $item, array $allocations ) : void {
+                if ( empty( $allocations ) ) {
+                        return;
+                }
+
+                $filtered = [];
+
+                foreach ( $allocations as $allocation ) {
+                        if ( empty( $allocation['code'] ) ) {
+                                continue;
+                        }
+
+                        $quantity = isset( $allocation['quantity'] ) ? (float) $allocation['quantity'] : 0.0;
+
+                        if ( $quantity <= 0.0 ) {
+                                continue;
+                        }
+
+                        $filtered[] = [
+                                'code'         => (string) $allocation['code'],
+                                'warehouse_id' => isset( $allocation['warehouse_id'] ) ? (string) $allocation['warehouse_id'] : '',
+                                'quantity'     => $quantity,
+                        ];
+                }
+
+                if ( empty( $filtered ) ) {
+                        return;
+                }
+
+                $order_id = $order->get_id();
+                $item_id  = $item->get_id();
+
+                if ( ! isset( $this->preferred_item_allocations[ $order_id ] ) ) {
+                        $this->preferred_item_allocations[ $order_id ] = [];
+                }
+
+                $this->preferred_item_allocations[ $order_id ][ $item_id ] = $filtered;
+        }
+
+        private function get_item_preferred_allocations( WC_Order $order, WC_Order_Item $item ) : array {
+                $order_id = $order->get_id();
+                $item_id  = $item->get_id();
+
+                if ( ! isset( $this->preferred_item_allocations[ $order_id ][ $item_id ] ) ) {
+                        return [];
+                }
+
+                return $this->preferred_item_allocations[ $order_id ][ $item_id ];
+        }
+
+        private function build_preferred_warehouse_allocations( int $order_id, float $quantity, array $preferred_codes, array $stock_by_warehouse ) : array {
+                $allocations = [];
+                $needed      = $quantity;
+
+                foreach ( $preferred_codes as $code ) {
+                        $warehouse_id = (string) ( $this->contifico->get_id_bodega( $code ) ?? '' );
+
+                        if ( '' === $warehouse_id ) {
+                                continue;
+                        }
+
+                        if ( ! isset( $stock_by_warehouse[ $warehouse_id ] ) ) {
+                                continue;
+                        }
+
+                        $available = (float) $stock_by_warehouse[ $warehouse_id ];
+                        $allocated = isset( $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] )
+                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ]
+                                : 0.0;
+
+                        $remaining = $available - $allocated;
+
+                        if ( $remaining <= 0.0 ) {
+                                continue;
+                        }
+
+                        $take = min( $remaining, $needed );
+
+                        if ( $take <= 0.0 ) {
+                                continue;
+                        }
+
+                        $allocations[] = [
+                                'code'         => $code,
+                                'warehouse_id' => $warehouse_id,
+                                'quantity'     => $take,
+                        ];
+
+                        $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] = $allocated + $take;
+
+                        $needed -= $take;
+
+                        if ( $needed <= 0.0 ) {
+                                break;
+                        }
+                }
+
+                return $allocations;
+        }
+
         private function override_inventory_context_with_warehouse_code( array $context, string $warehouse_code ) : array {
                 $warehouse_code = strtoupper( trim( $warehouse_code ) );
 
@@ -2850,10 +2957,6 @@ class Woo_Contifico_Admin {
 
                 $stored_code = (string) $item->get_meta( self::ORDER_ITEM_WAREHOUSE_META_KEY, true );
 
-                if ( '' !== $stored_code ) {
-                        return $this->override_inventory_context_with_warehouse_code( $context, $stored_code );
-                }
-
                 $wc_product = $item->get_product();
 
                 if ( ! $wc_product ) {
@@ -2879,53 +2982,40 @@ class Woo_Contifico_Admin {
 
                 $stock_by_warehouse = $this->get_product_stock_for_preferred_allocation( $product_id );
                 $order_id           = $order->get_id();
-                $best_partial       = null;
-                $best_partial_room  = 0.0;
+                $allocations        = [];
 
-                foreach ( $preferred_codes as $code ) {
-                        $warehouse_id = (string) ( $this->contifico->get_id_bodega( $code ) ?? '' );
+                if ( '' !== $stored_code ) {
+                        $warehouse_id = (string) ( $this->contifico->get_id_bodega( $stored_code ) ?? '' );
 
-                        if ( '' === $warehouse_id ) {
-                                continue;
-                        }
+                        if ( '' !== $warehouse_id ) {
+                                $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] = (
+                                        isset( $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] )
+                                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ]
+                                                : 0.0
+                                ) + $quantity;
 
-                        if ( ! isset( $stock_by_warehouse[ $warehouse_id ] ) ) {
-                                continue;
-                        }
-
-                        $available = (float) $stock_by_warehouse[ $warehouse_id ];
-                        $allocated = isset( $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] )
-                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ]
-                                : 0.0;
-
-                        $remaining = $available - $allocated;
-
-                        if ( $remaining >= $quantity ) {
-                                $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] = $allocated + $quantity;
-                                $this->persist_order_item_origin_warehouse( $item, $code );
-
-                                return $this->override_inventory_context_with_warehouse_code( $context, $code );
-                        }
-
-                        if ( $remaining > 0 && $remaining > $best_partial_room ) {
-                                $best_partial_room = $remaining;
-                                $best_partial      = [ 'code' => $code, 'warehouse_id' => $warehouse_id ];
+                                $allocations = [
+                                        [
+                                                'code'         => $stored_code,
+                                                'warehouse_id' => $warehouse_id,
+                                                'quantity'     => $quantity,
+                                        ],
+                                ];
                         }
                 }
 
-                if ( $best_partial ) {
-                        $warehouse_id = $best_partial['warehouse_id'];
-                        $current      = isset( $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] )
-                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ]
-                                : 0.0;
-
-                        $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] = $current + min( $quantity, $best_partial_room );
-                        $this->persist_order_item_origin_warehouse( $item, $best_partial['code'] );
-
-                        return $this->override_inventory_context_with_warehouse_code( $context, $best_partial['code'] );
+                if ( empty( $allocations ) ) {
+                        $allocations = $this->build_preferred_warehouse_allocations( $order_id, $quantity, $preferred_codes, $stock_by_warehouse );
                 }
 
-                return $context;
+                if ( empty( $allocations ) ) {
+                        return $context;
+                }
+
+                $this->store_item_preferred_allocations( $order, $item, $allocations );
+                $this->persist_order_item_origin_warehouse( $item, $allocations[0]['code'] );
+
+                return $this->override_inventory_context_with_warehouse_code( $context, $allocations[0]['code'] );
         }
 
         /**
@@ -3472,8 +3562,49 @@ class Woo_Contifico_Admin {
                                 continue;
                         }
 
-                        $context   = $this->resolve_order_item_location_inventory_context( $order, $item, $default_code, $default_id );
-                        $group_key = $context['id'] ?: $context['code'];
+                        $allocations = $this->get_item_preferred_allocations( $order, $item );
+                        $context     = $this->resolve_order_item_location_inventory_context( $order, $item, $default_code, $default_id );
+                        $group_key   = $context['id'] ?: $context['code'];
+
+                        $item_quantity = (float) $item->get_quantity();
+
+                        if ( $item_quantity <= 0 ) {
+                                $item_quantity = 1.0;
+                        }
+
+                        if ( ! empty( $allocations ) ) {
+                                foreach ( $allocations as $allocation ) {
+                                        $allocation_context = $this->override_inventory_context_with_warehouse_code( $context, $allocation['code'] );
+                                        $allocation_quantity = isset( $allocation['quantity'] ) ? (float) $allocation['quantity'] : $item_quantity;
+
+                                        $group_key = $allocation_context['id'] ?: $allocation_context['code'];
+
+                                        if ( '' === $group_key ) {
+                                                $group_key = 'default';
+                                        }
+
+                                        if ( ! isset( $groups[ $group_key ] ) ) {
+                                                $groups[ $group_key ] = [
+                                                        'context'         => $allocation_context,
+                                                        'items'           => [],
+                                                        'item_contexts'   => [],
+                                                        'item_quantities' => [],
+                                                        'locations'       => [],
+                                                ];
+                                        }
+
+                                        $groups[ $group_key ]['items'][]           = $item;
+                                        $groups[ $group_key ]['item_contexts'][]   = $allocation_context;
+                                        $groups[ $group_key ]['item_quantities'][] = $allocation_quantity;
+
+                                        $location_id    = '' !== $allocation_context['location_id'] ? $allocation_context['location_id'] : sprintf( 'default-%s', $group_key );
+                                        $location_label = '' !== $allocation_context['location_label'] ? $allocation_context['location_label'] : $this->describe_inventory_location_for_note( $allocation_context );
+
+                                        $groups[ $group_key ]['locations'][ $location_id ] = $location_label;
+                                }
+
+                                continue;
+                        }
 
                         if ( '' === $group_key ) {
                                 $group_key = 'default';
@@ -3481,15 +3612,17 @@ class Woo_Contifico_Admin {
 
                         if ( ! isset( $groups[ $group_key ] ) ) {
                                 $groups[ $group_key ] = [
-                                        'context'       => $context,
-                                        'items'         => [],
-                                        'item_contexts' => [],
-                                        'locations'     => [],
+                                        'context'         => $context,
+                                        'items'           => [],
+                                        'item_contexts'   => [],
+                                        'item_quantities' => [],
+                                        'locations'       => [],
                                 ];
                         }
 
                         $groups[ $group_key ]['items'][]                    = $item;
-                        $groups[ $group_key ]['item_contexts'][ $item->get_id() ] = $context;
+                        $groups[ $group_key ]['item_contexts'][]            = $context;
+                        $groups[ $group_key ]['item_quantities'][]         = $item_quantity;
 
                         $location_id    = '' !== $context['location_id'] ? $context['location_id'] : sprintf( 'default-%s', $group_key );
                         $location_label = '' !== $context['location_label'] ? $context['location_label'] : $this->describe_inventory_location_for_note( $context );
@@ -6659,17 +6792,17 @@ $filters = [
 
                                 $group_entries = [];
 
-                                foreach ( $group['items'] as $item ) {
+                                foreach ( $group['items'] as $index => $item ) {
                                         $wc_product = $item->get_product();
 
                                         if ( ! $wc_product ) {
                                                 continue;
                                         }
 
-                                        $item_context = isset( $group['item_contexts'][ $item->get_id() ] ) ? $group['item_contexts'][ $item->get_id() ] : $group_context;
+                                        $item_context = isset( $group['item_contexts'][ $index ] ) ? $group['item_contexts'][ $index ] : $group_context;
                                         $sku          = (string) $wc_product->get_sku();
                                         $product_id   = $this->contifico->get_product_id( $sku );
-                                        $quantity     = (float) $item->get_quantity();
+                                        $quantity     = isset( $group['item_quantities'][ $index ] ) ? (float) $group['item_quantities'][ $index ] : (float) $item->get_quantity();
 
                                        $transfer_stock['detalles'][] = [
                                                'producto_id' => $product_id,
@@ -6766,6 +6899,7 @@ $filters = [
 
                         if ( $order_id ) {
                                 unset( $this->preferred_warehouse_allocations[ $order_id ] );
+                                unset( $this->preferred_item_allocations[ $order_id ] );
                         }
                 }
         }
@@ -6925,18 +7059,19 @@ $filters = [
                                         );
                                 }
 
-                                foreach ( $group['items'] as $item ) {
+                                foreach ( $group['items'] as $index => $item ) {
                                         $wc_product = $item->get_product();
 
                                         if ( ! $wc_product ) {
                                                 continue;
                                         }
 
-                                        $item_context  = isset( $group['item_contexts'][ $item->get_id() ] ) ? $group['item_contexts'][ $item->get_id() ] : $group_context;
+                                        $item_context  = isset( $group['item_contexts'][ $index ] ) ? $group['item_contexts'][ $index ] : $group_context;
                                         $sku           = (string) $wc_product->get_sku();
                                         $price         = $wc_product->get_price();
                                         $item_quantity = 0.0;
                                         $product_id    = $resolve_product_id( $item, $wc_product );
+                                        $allocated_qty = isset( $group['item_quantities'][ $index ] ) ? (float) $group['item_quantities'][ $index ] : null;
 
                                         if ( empty( $refund ) ) {
                                                 $item_stock_reduced = $item->get_meta( '_reduced_stock', true );
@@ -6946,6 +7081,10 @@ $filters = [
                                         }
 
                                         $item_quantity = (float) $item_quantity;
+
+                                        if ( null !== $allocated_qty ) {
+                                                $item_quantity = min( $item_quantity, $allocated_qty );
+                                        }
 
                                         if ( 0.0 === $item_quantity ) {
                                                 continue;
@@ -7091,6 +7230,7 @@ $filters = [
 
                         if ( $order_id ) {
                                 unset( $this->preferred_warehouse_allocations[ $order_id ] );
+                                unset( $this->preferred_item_allocations[ $order_id ] );
                         }
                 }
         }
