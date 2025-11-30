@@ -1,6 +1,7 @@
 <?php $is_active = method_exists( $this, 'is_active' ) ? $this->is_active() : true; ?>
 <div id="<?php echo $this->plugin_name ?>-settings-page" class="wrap <?php echo $is_active ? 'active' : 'inactive' ?>">
     <h2 class="wp-heading-inline"><?php _e('Facturación Electrónica Contífico',$this->plugin_name) ?></h2>
+    <p class="plugin-version-label"><?php printf( esc_html__( 'Versión del plugin: %s', $this->plugin_name ), esc_html( $this->version ) ); ?></p>
 
     <?php settings_errors('woo_contifico_settings'); ?>
 
