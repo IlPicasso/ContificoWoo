@@ -47,9 +47,10 @@ class Woo_Contifico_Admin {
 	private const MANUAL_SYNC_STATE_OPTION    = 'woo_contifico_manual_sync_state';
 	private const MANUAL_SYNC_HISTORY_OPTION  = 'woo_contifico_manual_sync_history';
 	private const INVENTORY_MOVEMENTS_STORAGE = 'woo_contifico_inventory_movements';
-	private const INVENTORY_MOVEMENTS_TRANSIENT = 'woo_contifico_inventory_movements';
-	private const INVENTORY_MOVEMENTS_MAX_ENTRIES = 250;
+        private const INVENTORY_MOVEMENTS_TRANSIENT = 'woo_contifico_inventory_movements';
+        private const INVENTORY_MOVEMENTS_MAX_ENTRIES = 250;
         private const INVENTORY_MOVEMENTS_HISTORY_RUNS = 'woo_contifico_inventory_movements_history_runs';
+        private const INVENTORY_ALERTS_REVIEWED_AT = 'woo_contifico_inventory_alerts_reviewed_at';
         private const MAX_INVOICE_SEQUENTIAL_RETRIES = 5;
         private const MANUAL_SYNC_CANCEL_TRANSIENT = 'woo_contifico_manual_sync_cancel';
         private const MANUAL_SYNC_KEEPALIVE_HOOK    = 'woo_contifico_manual_sync_keepalive';
@@ -741,11 +742,11 @@ class Woo_Contifico_Admin {
 			}
 
 			if ( ! empty( $message ) ) {
-				add_settings_error(
-					'woo_contifico_init',
-					'settings_registered',
-					__( "<b>Facturación Electrónica Contífico</b>{$message}", $this->plugin_name ),
-					'error'
+                                add_settings_error(
+                                        'woo_contifico_init',
+                                        'settings_registered',
+                                        __( "<b>Facturación Electrónica Contífico</b>{$message}", $this->plugin_name ),
+                                        'error'
 				);
 			}
 			# If the plugin is in test mode, notify the user about it
@@ -758,12 +759,14 @@ class Woo_Contifico_Admin {
 							__('<b>Facturación Electrónica Contífico:</b> Plugin en ambiente de pruebas. <a href="%s">Cambiar a producción</a>', $this->plugin_name),
 							admin_url( "admin.php?page={$this->plugin_name}&tab=contifico" )
 						),
-						'warning'
-					);
-				}
-		}
+                                                'warning'
+                                        );
+                                }
+                }
 
-	}
+                $this->maybe_mark_inventory_alerts_reviewed();
+
+        }
 
 	/**
 	 *  Show admin notices for init check
@@ -820,6 +823,39 @@ class Woo_Contifico_Admin {
                 echo '</ul>';
                 echo '<p><a class="button button-primary" href="' . $settings_url . '">' . esc_html__( 'Revisar movimientos de inventario', 'woo-contifico' ) . '</a></p>';
                 echo '</div>';
+        }
+
+        /**
+         * Mark the current inventory alerts as reviewed when landing on the movements tab.
+         *
+         * @return void
+         * @since 4.1.56
+         */
+        private function maybe_mark_inventory_alerts_reviewed() : void {
+
+                $is_plugin_page = isset( $_GET['page'] ) && $this->plugin_name === (string) $_GET['page'];
+                $active_tab     = isset( $_GET['tab'] ) ? (string) $_GET['tab'] : 'woocommerce';
+
+                if ( ! $is_plugin_page || 'movimientos' !== $active_tab ) {
+                        return;
+                }
+
+                $entries = $this->get_inventory_movements_storage();
+                $latest  = 0;
+
+                foreach ( $entries as $entry ) {
+                        $timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
+
+                        if ( $timestamp > $latest ) {
+                                $latest = $timestamp;
+                        }
+                }
+
+                if ( 0 === $latest ) {
+                        $latest = current_time( 'timestamp', true );
+                }
+
+                update_option( self::INVENTORY_ALERTS_REVIEWED_AT, $latest, false );
         }
 
 	/**
@@ -2018,9 +2054,10 @@ class Woo_Contifico_Admin {
          */
         private function get_recent_contifico_process_alerts() : array {
 
-                $entries    = $this->get_inventory_movements_storage();
-                $threshold  = current_time( 'timestamp', true ) - DAY_IN_SECONDS;
-                $aggregated = [];
+                $entries          = $this->get_inventory_movements_storage();
+                $last_reviewed_at = (int) get_option( self::INVENTORY_ALERTS_REVIEWED_AT, 0 );
+                $threshold        = max( current_time( 'timestamp', true ) - DAY_IN_SECONDS, $last_reviewed_at + 1 );
+                $aggregated       = [];
 
                 foreach ( $entries as $entry ) {
                         $status    = isset( $entry['status'] ) ? (string) $entry['status'] : '';
