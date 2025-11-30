@@ -2597,23 +2597,54 @@ class Woo_Contifico_Admin {
          */
         private function resolve_manual_sync_movement_warehouses( string $event_type, string $sync_scope ) : array {
 
-                $sync_scope = in_array( $sync_scope, [ 'global', 'product' ], true ) ? $sync_scope : 'global';
-                $scope_label = 'product' === $sync_scope
+                $sync_scope       = in_array( $sync_scope, [ 'global', 'product' ], true ) ? $sync_scope : 'global';
+                $scope_label      = 'product' === $sync_scope
                         ? __( 'Sincronización por producto', 'woo-contifico' )
                         : __( 'Sincronización global', 'woo-contifico' );
-                $contifico_label   = sprintf( __( 'Contífico (%s)', 'woo-contifico' ), $scope_label );
-                $woocommerce_label = __( 'WooCommerce', 'woo-contifico' );
+                $contifico_label  = sprintf( __( 'Contífico (%s)', 'woo-contifico' ), $scope_label );
+                $woocommerce_node = [ 'id' => 'woocommerce', 'label' => __( 'WooCommerce', 'woo-contifico' ) ];
+                $contifico_node   = [ 'id' => 'contifico-sync', 'label' => $contifico_label ];
+
+                $billing_code  = isset( $this->woo_contifico->settings['bodega_facturacion'] )
+                        ? (string) $this->woo_contifico->settings['bodega_facturacion']
+                        : '';
+                $billing_label = isset( $this->woo_contifico->settings['bodega_facturacion_label'] )
+                        ? (string) $this->woo_contifico->settings['bodega_facturacion_label']
+                        : '';
+                $billing_name  = '' !== $billing_label ? $billing_label : $billing_code;
+
+                if ( '' !== $billing_code ) {
+                        $billing_node = [
+                                'id'            => $billing_code,
+                                'code'          => $billing_code,
+                                'label'         => $billing_name,
+                                'location_id'   => $billing_code,
+                                'location_label'=> $billing_name,
+                        ];
+
+                        if ( 'ingreso' === $event_type ) {
+                                return [
+                                        'from' => $billing_node,
+                                        'to'   => $woocommerce_node,
+                                ];
+                        }
+
+                        return [
+                                'from' => $woocommerce_node,
+                                'to'   => $billing_node,
+                        ];
+                }
 
                 if ( 'ingreso' === $event_type ) {
                         return [
-                                'from' => [ 'id' => 'contifico-sync', 'label' => $contifico_label ],
-                                'to'   => [ 'id' => 'woocommerce', 'label' => $woocommerce_label ],
+                                'from' => $contifico_node,
+                                'to'   => $woocommerce_node,
                         ];
                 }
 
                 return [
-                        'from' => [ 'id' => 'woocommerce', 'label' => $woocommerce_label ],
-                        'to'   => [ 'id' => 'contifico-sync', 'label' => $contifico_label ],
+                        'from' => $woocommerce_node,
+                        'to'   => $contifico_node,
                 ];
         }
 
@@ -4599,6 +4630,27 @@ $filters = [
                 return false;
         }
 
+        /**
+         * Build a unique balance key for a web warehouse entry.
+         *
+         * @param array $entry
+         *
+         * @return string
+         */
+        private function get_web_warehouse_balance_key( array $entry ) : string {
+
+                $product_id = (int) ( $entry['wc_product_id'] ?? 0 );
+
+                if ( $product_id > 0 ) {
+                        return 'wc_' . $product_id;
+                }
+
+                $contifico_id = isset( $entry['product_id'] ) ? (string) $entry['product_id'] : '';
+                $sku          = isset( $entry['sku'] ) ? (string) $entry['sku'] : '';
+
+                return md5( wp_json_encode( [ $contifico_id, $sku ] ) );
+        }
+
 
         /**
          * Get products that still have balance assigned to the billing/web warehouse.
@@ -4633,8 +4685,7 @@ $filters = [
                                 continue;
                         }
 
-                        $product_id = (int) ( $entry['wc_product_id'] ?? 0 );
-                        $key        = $product_id > 0 ? $product_id : md5( wp_json_encode( [ $entry['product_id'] ?? '', $entry['sku'] ?? '' ] ) );
+                        $key = $this->get_web_warehouse_balance_key( $entry );
 
                         if ( ! isset( $balances[ $key ] ) ) {
                                 $balances[ $key ] = [
@@ -4642,6 +4693,7 @@ $filters = [
                                         'sku'           => isset( $entry['sku'] ) ? (string) $entry['sku'] : '',
                                         'pending'       => 0.0,
                                         'last_movement' => isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0,
+                                        'key'           => $key,
                                 ];
                         }
 
@@ -4671,6 +4723,109 @@ $filters = [
                 );
 
                 return array_values( $balances );
+        }
+
+        /**
+         * Remove cached inventory movements that contribute to a specific web warehouse balance key.
+         *
+         * @param string $balance_key
+         *
+         * @return int Number of removed entries.
+         */
+        private function delete_web_warehouse_balance_entries( string $balance_key ) : int {
+
+                $current_entries = $this->get_inventory_movements_storage();
+
+                if ( empty( $current_entries ) ) {
+                        return 0;
+                }
+
+                $filtered = [];
+                $removed  = 0;
+
+                foreach ( $current_entries as $entry ) {
+                        $entry_key = $this->get_web_warehouse_balance_key( $entry );
+
+                        if ( $entry_key === $balance_key ) {
+                                $removed++;
+
+                                continue;
+                        }
+
+                        $filtered[] = $entry;
+                }
+
+                if ( $removed > 0 ) {
+                        $this->save_inventory_movements( $filtered );
+                }
+
+                return $removed;
+        }
+
+        /**
+         * Process manual cleanup requests for pending web warehouse entries.
+         *
+         * @return void
+         */
+        private function maybe_handle_web_warehouse_cleanup_request() : void {
+
+                if ( ! isset( $_GET['woo_contifico_clear_web_warehouse'] ) ) {
+                        return;
+                }
+
+                if ( ! current_user_can( 'manage_woocommerce' ) ) {
+                        add_settings_error(
+                                'woo_contifico_web_warehouse',
+                                'woo_contifico_web_warehouse_permissions',
+                                __( 'No tienes permisos para administrar el almacén web.', 'woo-contifico' )
+                        );
+
+                        return;
+                }
+
+                if ( ! wp_verify_nonce( $_GET['_wpnonce'] ?? '', 'woo_contifico_clear_web_warehouse' ) ) {
+                        add_settings_error(
+                                'woo_contifico_web_warehouse',
+                                'woo_contifico_web_warehouse_nonce',
+                                __( 'No se pudo validar tu solicitud. Inténtalo nuevamente.', 'woo-contifico' ),
+                                'error'
+                        );
+
+                        return;
+                }
+
+                $balance_key = sanitize_text_field( wp_unslash( $_GET['woo_contifico_clear_web_warehouse'] ) );
+
+                if ( '' === $balance_key ) {
+                        return;
+                }
+
+                $removed = $this->delete_web_warehouse_balance_entries( $balance_key );
+
+                if ( $removed > 0 ) {
+                        add_settings_error(
+                                'woo_contifico_web_warehouse',
+                                'woo_contifico_web_warehouse_cleared',
+                                sprintf(
+                                        _n(
+                                                'Se eliminó %d movimiento asociado al producto de la bodega web.',
+                                                'Se eliminaron %d movimientos asociados al producto de la bodega web.',
+                                                $removed,
+                                                'woo-contifico'
+                                        ),
+                                        $removed
+                                ),
+                                'updated'
+                        );
+
+                        return;
+                }
+
+                add_settings_error(
+                        'woo_contifico_web_warehouse',
+                        'woo_contifico_web_warehouse_not_found',
+                        __( 'No se encontraron movimientos para limpiar en la bodega web.', 'woo-contifico' )
+                );
         }
 
         /**

@@ -238,6 +238,9 @@
 
 <?php if ( $this->config_status['status'] && $is_active && $active_tab === 'bodega_web' ) : ?>
     <?php
+    $this->maybe_handle_web_warehouse_cleanup_request();
+    settings_errors( 'woo_contifico_web_warehouse' );
+
     $pending_web_products = $this->get_web_warehouse_pending_products();
     $web_warehouse_code   = isset( $this->woo_contifico->settings['bodega_facturacion'] ) ? (string) $this->woo_contifico->settings['bodega_facturacion'] : '';
     $web_warehouse_label  = isset( $this->woo_contifico->settings['bodega_facturacion_label'] ) ? (string) $this->woo_contifico->settings['bodega_facturacion_label'] : '';
@@ -260,11 +263,26 @@
                     <th scope="col"><?php esc_html_e( 'SKU', 'woo-contifico' ); ?></th>
                     <th scope="col"><?php esc_html_e( 'Cantidad pendiente', 'woo-contifico' ); ?></th>
                     <th scope="col"><?php esc_html_e( 'Último movimiento', 'woo-contifico' ); ?></th>
+                    <th scope="col"><?php esc_html_e( 'Acciones', 'woo-contifico' ); ?></th>
                 </tr>
                 </thead>
                 <tbody>
                 <?php foreach ( $pending_web_products as $product ) :
                     $last_movement = isset( $product['last_movement'] ) ? (int) $product['last_movement'] : 0;
+                    $balance_key   = isset( $product['key'] ) ? (string) $product['key'] : '';
+                    $delete_url    = '' !== $balance_key
+                        ? wp_nonce_url(
+                            add_query_arg(
+                                [
+                                    'page'                              => 'woo-contifico',
+                                    'tab'                               => 'bodega_web',
+                                    'woo_contifico_clear_web_warehouse' => $balance_key,
+                                ],
+                                admin_url( 'admin.php' )
+                            ),
+                            'woo_contifico_clear_web_warehouse'
+                        )
+                        : '';
                     ?>
                     <tr>
                         <td><?php echo esc_html( $product['product_name'] ?? __( 'Sin nombre', 'woo-contifico' ) ); ?></td>
@@ -272,6 +290,13 @@
                         <td><?php echo esc_html( number_format_i18n( (float) ( $product['pending'] ?? 0 ) ) ); ?></td>
                         <td>
                             <?php echo $last_movement ? esc_html( wp_date( get_option( 'date_format', 'Y-m-d' ) . ' ' . get_option( 'time_format', 'H:i' ), $last_movement ) ) : '—'; ?>
+                        </td>
+                        <td>
+                            <?php if ( $delete_url ) : ?>
+                                <a class="button-link delete" href="<?php echo esc_url( $delete_url ); ?>"><?php esc_html_e( 'Eliminar', 'woo-contifico' ); ?></a>
+                            <?php else : ?>
+                                —
+                            <?php endif; ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>
