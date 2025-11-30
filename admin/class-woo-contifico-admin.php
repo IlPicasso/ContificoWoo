@@ -3630,9 +3630,9 @@ class Woo_Contifico_Admin {
                                 continue;
                         }
 
+                        $context   = $this->resolve_order_item_location_inventory_context( $order, $item, $default_code, $default_id );
                         $allocations = $this->get_item_preferred_allocations( $order, $item );
-                        $context     = $this->resolve_order_item_location_inventory_context( $order, $item, $default_code, $default_id );
-                        $group_key   = $context['id'] ?: $context['code'];
+                        $group_key = $context['id'] ?: $context['code'];
 
                         $item_quantity = (float) $item->get_quantity();
 

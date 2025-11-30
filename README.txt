@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.57 =
+* Corrige la distribución de transferencias hacia la bodega de facturación cuando un mismo producto se abastece desde múltiples bodegas preferidas, enviando solicitudes separadas por bodega disponible.
+
 = 4.1.56 =
 * Al visitar la pestaña de movimientos desde la alerta del dashboard se marcan los errores como revisados para que la notificación desaparezca después de consultarla.
 
