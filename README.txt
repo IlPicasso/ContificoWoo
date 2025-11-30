@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.56 =
+* Al visitar la pestaña de movimientos desde la alerta del dashboard se marcan los errores como revisados para que la notificación desaparezca después de consultarla.
+
 = 4.1.55 =
 * Sincroniza los movimientos de la bodega web cuando se ejecuta una sincronización global para evitar saldos desfasados.
 * Permite eliminar manualmente los movimientos que conforman el saldo pendiente en la pestaña de bodega web.
