@@ -85,6 +85,7 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 = 4.1.54 =
 * Muestra la versión instalada de Contífico WooCommerce en la cabecera de la página de ajustes para consultarla rápidamente desde el administrador.
+* Ignora movimientos de inventario con estado pendiente o de error al calcular los pendientes del almacén web para que solo los éxitos ajusten el balance.
 
 = 4.1.53 =
 * Distribuye las transferencias de stock entre bodegas preferidas cuando una sola no cubre la cantidad solicitada, evitando que se intente mover más inventario del disponible por bodega.
