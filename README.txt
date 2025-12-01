@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.61 =
+* Corrige un error de sintaxis al reconstruir las asignaciones de bodegas preferidas en reembolsos y copia el código de bodega de origen a los ítems reembolsados para repetir correctamente las transferencias.
+
 = 4.1.60 =
 * Restaura las asignaciones de bodegas preferidas en ítems de reembolso para que las cancelaciones y devoluciones reproduzcan los movimientos desde todas las bodegas originales sin marcar falta de stock en la bodega de facturación.
 
