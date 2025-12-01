@@ -7658,6 +7658,69 @@ $filters = [
                                                 'items'               => $group_items_plan,
                                         ];
                                 }
+
+                                if ( ! empty( $group_items_plan ) ) {
+                                        $restore_plan_groups[] = [
+                                                'destination_context' => $group_context,
+                                                'origin_context'      => $origin_context,
+                                                'items'               => $group_items_plan,
+                                        ];
+                                }
+
+                                $origin_context = isset( $group['origin_context'] ) && is_array( $group['origin_context'] ) ? $group['origin_context'] : [];
+                                $group_origin_code = isset( $origin_context['code'] ) ? (string) $origin_context['code'] : '';
+                                $group_origin_id   = isset( $origin_context['id'] ) ? (string) $origin_context['id'] : '';
+
+                                if ( '' === $group_origin_code ) {
+                                        $group_origin_code = $origin_code;
+                                }
+
+                                if ( '' === $group_origin_id ) {
+                                        $group_origin_id = $id_origin_warehouse;
+                                }
+
+                                if ( '' !== $group_origin_code ) {
+                                        $origin_codes_for_stock[]              = $group_origin_code;
+                                        $origin_code_id_map[ $group_origin_code ] = $group_origin_id;
+                                }
+
+                                $group_context    = isset( $group['context'] ) && is_array( $group['context'] ) ? $group['context'] : [];
+                                $origin_context   = isset( $group['origin_context'] ) && is_array( $group['origin_context'] ) ? $group['origin_context'] : [];
+                                $group_items_plan = [];
+
+                                foreach ( $group['items'] as $index => $group_item ) {
+                                        if ( ! is_a( $group_item, 'WC_Order_Item_Product' ) ) {
+                                                continue;
+                                        }
+
+                                        $wc_product = $group_item->get_product();
+                                        $quantity   = isset( $group['item_quantities'][ $index ] )
+                                                ? (float) $group['item_quantities'][ $index ]
+                                                : (float) $group_item->get_quantity();
+
+                                        if ( ! $wc_product ) {
+                                                continue;
+                                        }
+
+                                        $group_items_plan[] = [
+                                                'order_item_id' => $group_item->get_id(),
+                                                'product_id'    => $resolve_product_id( $group_item, $wc_product ),
+                                                'sku'           => (string) $wc_product->get_sku(),
+                                                'quantity'      => $quantity,
+                                                'price'         => (float) $wc_product->get_price(),
+                                                'origin_context'=> isset( $group['origin_contexts'][ $index ] ) && is_array( $group['origin_contexts'][ $index ] )
+                                                        ? $group['origin_contexts'][ $index ]
+                                                        : $origin_context,
+                                        ];
+                                }
+
+                                if ( ! empty( $group_items_plan ) ) {
+                                        $restore_plan_groups[] = [
+                                                'destination_context' => $group_context,
+                                                'origin_context'      => $origin_context,
+                                                'items'               => $group_items_plan,
+                                        ];
+                                }
                         }
 
                         if ( ! empty( $restore_plan_groups ) ) {
