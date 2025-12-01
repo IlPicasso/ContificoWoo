@@ -83,6 +83,12 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.69 =
+* Añade una nota en la orden y un registro dedicado que indica la ubicación del log de Contífico cuando se intenta devolver stock.
+
+= 4.1.68 =
+* Registra un log detallado del plan de restitución (bodega origen y destino, SKUs y cantidades) antes de ejecutar la devolución para saber qué intenta hacer el plugin.
+
 = 4.1.67 =
 * Registra las consultas de stock y las decisiones de devolución por SKU al cancelar o reembolsar para diagnosticar por qué se marca falta de stock en la bodega de facturación.
 

@@ -7483,13 +7483,41 @@ $filters = [
                                 : "reembolso total o parcial #{$refund_id}";
                         $grouped_items     = $this->group_restore_items_from_movements( $order, $items, $destination_code, $default_destination_id, $origin_code, $id_origin_warehouse );
 
+                        $logging_enabled = ! empty( $this->woo_contifico->settings['activar_registro'] );
+                        $log_noted       = (bool) $order->get_meta( '_woo_contifico_restore_log_destination_noted', true );
+
+                        if ( $logging_enabled && ! empty( $this->log_path ) && ! $log_noted ) {
+                                $log_destination = ! empty( $this->log_route ) ? $this->log_route : $this->log_path;
+
+                                $order->add_order_note( sprintf(
+                                        __( '<b>Contífico:</b><br>Los intentos de devolución se están registrando en %s', $this->plugin_name ),
+                                        $log_destination
+                                ) );
+
+                                $this->log_api_transaction(
+                                        'transfer_stock_restore_log_destination',
+                                        [
+                                                'order_id'      => $order_id,
+                                                'trigger'       => $trigger,
+                                                'reason'        => $reason_label,
+                                                'log_path'      => $this->log_path,
+                                                'log_url'       => $this->log_route,
+                                                'logging_state' => 'enabled',
+                                        ]
+                                );
+
+                                $order->update_meta_data( '_woo_contifico_restore_log_destination_noted', true );
+                                $order->save();
+                        }
+
                         if ( empty( $grouped_items ) ) {
                                 $grouped_items = $this->group_order_items_by_location_context( $order, $items, $destination_code, $default_destination_id );
                         }
-                        $processed_groups  = 0;
-                        $successful_groups = 0;
-                        $origin_stock      = [];
-                        $product_id_cache  = [];
+                        $processed_groups   = 0;
+                        $successful_groups  = 0;
+                        $origin_stock       = [];
+                        $product_id_cache   = [];
+                        $restore_plan_groups = [];
 
                         $resolve_product_id = function ( WC_Order_Item_Product $item, WC_Product $wc_product ) use ( &$product_id_cache, $order ) : string {
                                 $sku = (string) $wc_product->get_sku();
@@ -7552,6 +7580,60 @@ $filters = [
                                         $origin_codes_for_stock[]              = $group_origin_code;
                                         $origin_code_id_map[ $group_origin_code ] = $group_origin_id;
                                 }
+
+                                $group_context    = isset( $group['context'] ) && is_array( $group['context'] ) ? $group['context'] : [];
+                                $origin_context   = isset( $group['origin_context'] ) && is_array( $group['origin_context'] ) ? $group['origin_context'] : [];
+                                $group_items_plan = [];
+
+                                foreach ( $group['items'] as $index => $group_item ) {
+                                        if ( ! is_a( $group_item, 'WC_Order_Item_Product' ) ) {
+                                                continue;
+                                        }
+
+                                        $wc_product = $group_item->get_product();
+                                        $quantity   = isset( $group['item_quantities'][ $index ] )
+                                                ? (float) $group['item_quantities'][ $index ]
+                                                : (float) $group_item->get_quantity();
+
+                                        if ( ! $wc_product ) {
+                                                continue;
+                                        }
+
+                                        $group_items_plan[] = [
+                                                'order_item_id' => $group_item->get_id(),
+                                                'product_id'    => $resolve_product_id( $group_item, $wc_product ),
+                                                'sku'           => (string) $wc_product->get_sku(),
+                                                'quantity'      => $quantity,
+                                                'price'         => (float) $wc_product->get_price(),
+                                                'origin_context'=> isset( $group['origin_contexts'][ $index ] ) && is_array( $group['origin_contexts'][ $index ] )
+                                                        ? $group['origin_contexts'][ $index ]
+                                                        : $origin_context,
+                                        ];
+                                }
+
+                                if ( ! empty( $group_items_plan ) ) {
+                                        $restore_plan_groups[] = [
+                                                'destination_context' => $group_context,
+                                                'origin_context'      => $origin_context,
+                                                'items'               => $group_items_plan,
+                                        ];
+                                }
+                        }
+
+                        if ( ! empty( $restore_plan_groups ) ) {
+                                $this->log_api_transaction(
+                                        'transfer_stock_restore_plan',
+                                        [
+                                                'order_id'                => $order_id,
+                                                'trigger'                 => $trigger,
+                                                'reason'                  => $reason_label,
+                                                'default_origin_code'     => $origin_code,
+                                                'default_origin_id'       => $id_origin_warehouse,
+                                                'default_destination'     => $destination_code,
+                                                'group_count'             => count( $restore_plan_groups ),
+                                                'grouped_items'           => $restore_plan_groups,
+                                        ]
+                                );
                         }
 
                         $product_ids_for_stock = array_values( array_unique( $product_ids_for_stock ) );
