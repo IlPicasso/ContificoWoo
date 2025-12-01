@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.60 =
+* Restaura las asignaciones de bodegas preferidas en ítems de reembolso para que las cancelaciones y devoluciones reproduzcan los movimientos desde todas las bodegas originales sin marcar falta de stock en la bodega de facturación.
+
 = 4.1.59 =
 * Conserva las asignaciones de bodegas preferidas dentro de cada ítem de la orden para que las cancelaciones y reembolsos generen las transferencias desde todas las bodegas originales.
 
