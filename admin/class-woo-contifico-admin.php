@@ -2879,10 +2879,10 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                 }
         }
 
-        private function store_item_preferred_allocations( WC_Order $order, WC_Order_Item $item, array $allocations ) : void {
-                if ( empty( $allocations ) ) {
-                        return;
-                }
+	private function store_item_preferred_allocations( WC_Order $order, WC_Order_Item $item, array $allocations ) : void {
+		if ( empty( $allocations ) ) {
+			return;
+		}
 
 		$filtered = [];
 
@@ -2925,9 +2925,13 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
 		}
 	}
 
-        private function get_item_preferred_allocations( WC_Order $order, WC_Order_Item $item ) : array {
-                $order_id = $order->get_id();
-                $item_id  = $item->get_id();
+		if ( $item_id > 0 ) {
+			$item->update_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $filtered );
+			$item->save();
+		} else {
+			$item->add_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $filtered, true );
+		}
+	}
 
                 if ( isset( $this->preferred_item_allocations[ $order_id ][ $item_id ] ) ) {
                         return $this->preferred_item_allocations[ $order_id ][ $item_id ];
