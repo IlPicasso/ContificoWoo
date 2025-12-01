@@ -83,6 +83,21 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.67 =
+* Registra las consultas de stock y las decisiones de devolución por SKU al cancelar o reembolsar para diagnosticar por qué se marca falta de stock en la bodega de facturación.
+
+= 4.1.66 =
+* Añade registros detallados para intentos de restitución sin stock o con stock insuficiente, incluyendo la bodega origen y cantidades solicitadas.
+
+= 4.1.65 =
+* Registra las solicitudes de traslado de inventario en el log de API cuando la opción de registro está activa, facilitando el diagnóstico de cancelaciones o reembolsos multi-bodega.
+
+= 4.1.64 =
+* Usa la bodega destino registrada en cada movimiento para reconstruir el origen de las devoluciones y evitar errores de stock al restituir pedidos despachados desde múltiples bodegas.
+
+= 4.1.63 =
+* Al cancelar o reembolsar, reconstruye los traslados con base en los movimientos registrados para devolver el inventario a todas las bodegas de origen sin depender de un único almacén de facturación.
+
 = 4.1.62 =
 * Ajusta el guardado y la hidratación de asignaciones preferidas para evitar errores de sintaxis al leer los ítems refundados y garantizar que el código de bodega original se replique antes de calcular transferencias.
 
