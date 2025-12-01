@@ -3806,7 +3806,7 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
          *
          * @since 4.1.63
          */
-        private function group_restore_items_from_movements( WC_Order $order, array $items, string $default_code, string $default_id ) : array {
+        private function group_restore_items_from_movements( WC_Order $order, array $items, string $default_code, string $default_id, string $default_origin_code, string $default_origin_id ) : array {
                 $order_id      = $order->get_id();
                 $items_by_id   = [];
                 $item_ids      = [];
@@ -3874,6 +3874,36 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                         $warehouse_id   = isset( $from_warehouse['id'] ) ? (string) $from_warehouse['id'] : '';
                         $location_id    = isset( $from_warehouse['location_id'] ) ? (string) $from_warehouse['location_id'] : '';
                         $location_label = isset( $from_warehouse['location_label'] ) ? (string) $from_warehouse['location_label'] : '';
+                        $origin_ctx     = $this->build_default_inventory_context( $default_origin_code, $default_origin_id );
+                        $origin_from    = isset( $movement['warehouses']['to'] ) && is_array( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : [];
+                        $origin_code    = isset( $origin_from['code'] ) ? (string) $origin_from['code'] : '';
+                        $origin_id      = isset( $origin_from['id'] ) ? (string) $origin_from['id'] : '';
+                        $origin_loc_id  = isset( $origin_from['location_id'] ) ? (string) $origin_from['location_id'] : '';
+                        $origin_loc_lbl = isset( $origin_from['location_label'] ) ? (string) $origin_from['location_label'] : '';
+
+                        if ( '' !== $origin_code || '' !== $origin_id ) {
+                                $origin_ctx = $this->override_inventory_context_with_warehouse_code( $origin_ctx, $origin_code );
+
+                                if ( '' === $origin_ctx['id'] && '' !== $origin_id ) {
+                                        $origin_ctx['id'] = $origin_id;
+                                }
+
+                                if ( '' === $origin_ctx['code'] && '' !== $origin_code ) {
+                                        $origin_ctx['code'] = $origin_code;
+                                }
+                        }
+
+                        if ( '' !== $origin_loc_id ) {
+                                $origin_ctx['location_id'] = $origin_loc_id;
+                        }
+
+                        if ( '' !== $origin_loc_lbl ) {
+                                $origin_ctx['location_label'] = $origin_loc_lbl;
+                        }
+
+                        if ( '' === $origin_ctx['label'] && '' !== $origin_ctx['code'] ) {
+                                $origin_ctx['label'] = $origin_ctx['code'];
+                        }
 
                         if ( '' !== $warehouse_code || '' !== $warehouse_id ) {
                                 $group_ctx = $this->override_inventory_context_with_warehouse_code( $group_ctx, $warehouse_code );
@@ -3912,12 +3942,15 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                                         'item_contexts'   => [],
                                         'item_quantities' => [],
                                         'locations'       => [],
+                                        'origin_contexts' => [],
+                                        'origin_locations' => [],
                                 ];
                         }
 
                         $groups[ $group_key ]['items'][]           = $item;
                         $groups[ $group_key ]['item_contexts'][]   = $group_ctx;
                         $groups[ $group_key ]['item_quantities'][] = $quantity;
+                        $groups[ $group_key ]['origin_contexts'][] = $origin_ctx;
 
                         $location_id    = '' !== $group_ctx['location_id'] ? $group_ctx['location_id'] : sprintf( 'default-%s', $group_key );
                         $location_label = '' !== $group_ctx['location_label']
@@ -3925,6 +3958,13 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                                 : $this->describe_inventory_location_for_note( $group_ctx );
 
                         $groups[ $group_key ]['locations'][ $location_id ] = $location_label;
+
+                        $origin_location_id = '' !== $origin_ctx['location_id'] ? $origin_ctx['location_id'] : sprintf( 'default-origin-%s', $group_key );
+                        $origin_location_label = '' !== $origin_ctx['location_label']
+                                ? $origin_ctx['location_label']
+                                : $this->describe_inventory_location_for_note( $origin_ctx );
+
+                        $groups[ $group_key ]['origin_locations'][ $origin_location_id ] = $origin_location_label;
                 }
 
                 foreach ( $groups as &$group ) {
@@ -3933,6 +3973,17 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                         if ( count( $group['locations'] ) > 1 ) {
                                 $group['context']['location_id'] = 'mixed';
                         }
+
+                        $origin_contexts = array_values( $group['origin_contexts'] );
+                        $origin_ctx      = ! empty( $origin_contexts ) ? $origin_contexts[0] : $this->build_default_inventory_context( $default_origin_code, $default_origin_id );
+
+                        $origin_ctx['location_label'] = $this->summarize_group_location_labels( $group['origin_locations'], $origin_ctx );
+
+                        if ( count( $group['origin_locations'] ) > 1 ) {
+                                $origin_ctx['location_id'] = 'mixed';
+                        }
+
+                        $group['origin_context'] = $origin_ctx;
                 }
                 unset( $group );
 
@@ -7377,7 +7428,7 @@ $filters = [
                         $reason_label      = empty( $refund )
                                 ? ( empty( $refund_id ) ? 'cancelación de la orden' : "reembolso #{$refund_id}" )
                                 : "reembolso total o parcial #{$refund_id}";
-                        $grouped_items     = $this->group_restore_items_from_movements( $order, $items, $destination_code, $default_destination_id );
+                        $grouped_items     = $this->group_restore_items_from_movements( $order, $items, $destination_code, $default_destination_id, $origin_code, $id_origin_warehouse );
 
                         if ( empty( $grouped_items ) ) {
                                 $grouped_items = $this->group_order_items_by_location_context( $order, $items, $destination_code, $default_destination_id );
@@ -7410,6 +7461,8 @@ $filters = [
                         };
 
                         $product_ids_for_stock = [];
+                        $origin_codes_for_stock = [];
+                        $origin_code_id_map     = [];
 
                         foreach ( $grouped_items as $group ) {
                                 foreach ( $group['items'] as $item ) {
@@ -7429,18 +7482,33 @@ $filters = [
                                                 $product_ids_for_stock[] = $product_id;
                                         }
                                 }
+
+                                $origin_context = isset( $group['origin_context'] ) && is_array( $group['origin_context'] ) ? $group['origin_context'] : [];
+                                $group_origin_code = isset( $origin_context['code'] ) ? (string) $origin_context['code'] : '';
+                                $group_origin_id   = isset( $origin_context['id'] ) ? (string) $origin_context['id'] : '';
+
+                                if ( '' === $group_origin_code ) {
+                                        $group_origin_code = $origin_code;
+                                }
+
+                                if ( '' === $group_origin_id ) {
+                                        $group_origin_id = $id_origin_warehouse;
+                                }
+
+                                if ( '' !== $group_origin_code ) {
+                                        $origin_codes_for_stock[]              = $group_origin_code;
+                                        $origin_code_id_map[ $group_origin_code ] = $group_origin_id;
+                                }
                         }
 
                         $product_ids_for_stock = array_values( array_unique( $product_ids_for_stock ) );
+                        $origin_codes_for_stock = array_values( array_unique( array_filter( array_map( 'trim', $origin_codes_for_stock ) ) ) );
                         $stock_lookup_failed   = false;
 
-                        if ( ! empty( $product_ids_for_stock ) && '' !== $origin_code ) {
+                        if ( ! empty( $product_ids_for_stock ) && ! empty( $origin_codes_for_stock ) ) {
                                 try {
-                                        $warehouse_stock = $this->contifico->get_warehouses_stock( [ $origin_code ], $product_ids_for_stock );
-
-                                        if ( isset( $warehouse_stock[ $origin_code ] ) && is_array( $warehouse_stock[ $origin_code ] ) ) {
-                                                $origin_stock = $warehouse_stock[ $origin_code ];
-                                        }
+                                        $warehouse_stock = $this->contifico->get_warehouses_stock( $origin_codes_for_stock, $product_ids_for_stock );
+                                        $origin_stock    = is_array( $warehouse_stock ) ? $warehouse_stock : [];
                                 } catch ( Exception $exception ) {
                                         $stock_lookup_failed = true;
                                         $order->add_order_note( sprintf(
@@ -7450,24 +7518,42 @@ $filters = [
                                 }
                         }
 
-                        if ( empty( $origin_stock ) && ! $stock_lookup_failed ) {
-                                try {
-                                        $origin_stock = $this->contifico->get_stock( $id_origin_warehouse );
-                                } catch ( Exception $exception ) {
-                                        $order->add_order_note( sprintf(
-                                                __( '<b>Contífico:</b><br>No se pudo consultar el stock disponible en la bodega de facturación: %s', $this->plugin_name ),
-                                                $exception->getMessage()
-                                        ) );
+                        if ( ! $stock_lookup_failed ) {
+                                foreach ( $origin_codes_for_stock as $stock_code ) {
+                                        $has_stock = isset( $origin_stock[ $stock_code ] ) && is_array( $origin_stock[ $stock_code ] );
+
+                                        if ( $has_stock ) {
+                                                continue;
+                                        }
+
+                                        $fallback_id = isset( $origin_code_id_map[ $stock_code ] ) ? (string) $origin_code_id_map[ $stock_code ] : '';
+
+                                        if ( '' === $fallback_id ) {
+                                                continue;
+                                        }
+
+                                        try {
+                                                $origin_stock[ $stock_code ] = $this->contifico->get_stock( $fallback_id );
+                                        } catch ( Exception $exception ) {
+                                                $order->add_order_note( sprintf(
+                                                        __( '<b>Contífico:</b><br>No se pudo consultar el stock disponible en la bodega de facturación: %s', $this->plugin_name ),
+                                                        $exception->getMessage()
+                                                ) );
+                                        }
                                 }
                         }
 
                         foreach ( $grouped_items as $group ) {
                                 $group_context = $group['context'];
-                                $group_entries = [];
+                                $group_entries  = [];
+                                $origin_context = isset( $group['origin_context'] ) && is_array( $group['origin_context'] ) ? $group['origin_context'] : [];
+                                $group_origin_code = isset( $origin_context['code'] ) ? (string) $origin_context['code'] : $origin_code;
+                                $group_origin_id   = isset( $origin_context['id'] ) ? (string) $origin_context['id'] : $id_origin_warehouse;
+
                                 $restore_stock = [
                                         'tipo'              => 'TRA',
                                         'fecha'             => date( 'd/m/Y' ),
-                                        'bodega_id'         => $id_origin_warehouse,
+                                        'bodega_id'         => $group_origin_id,
                                         'bodega_destino_id' => $group_context['id'],
                                         'detalles'          => [],
                                         'descripcion'       => sprintf(
@@ -7525,13 +7611,17 @@ $filters = [
                                                 continue;
                                         }
 
-                                        $available_stock = isset( $origin_stock[ $product_id ] ) ? (float) $origin_stock[ $product_id ] : null;
+                                        $origin_stock_for_group = isset( $origin_stock[ $group_origin_code ] ) && is_array( $origin_stock[ $group_origin_code ] )
+                                                ? $origin_stock[ $group_origin_code ]
+                                                : [];
+                                        $available_stock = isset( $origin_stock_for_group[ $product_id ] ) ? (float) $origin_stock_for_group[ $product_id ] : null;
+                                        $origin_code_label = '' !== $group_origin_code ? $group_origin_code : $origin_code;
 
                                         if ( null === $available_stock ) {
                                                 $order->add_order_note( sprintf(
                                                         __( '<b>Contífico:</b><br>No se pudo verificar el stock del SKU %1$s en la bodega de facturación (%2$s); se omite la restitución.', $this->plugin_name ),
                                                         $sku,
-                                                        $origin_code
+                                                        $origin_code_label
                                                 ) );
 
                                                 continue;
@@ -7541,7 +7631,7 @@ $filters = [
                                                 $order->add_order_note( sprintf(
                                                         __( '<b>Contífico:</b><br>No hay stock disponible en la bodega de facturación (%2$s) para devolver el SKU %1$s.', $this->plugin_name ),
                                                         $sku,
-                                                        $origin_code
+                                                        $origin_code_label
                                                 ) );
 
                                                 continue;
@@ -7566,24 +7656,24 @@ $filters = [
                                                 'cantidad'    => $transfer_quantity,
                                         ];
 
-                                                $group_entries[] = $this->build_inventory_movement_entry( [
-                                                        'order_id'      => $order_id,
-                                                        'event_type'    => 'ingreso',
-                                                        'product_id'    => $product_id,
-                                                        'wc_product_id' => $wc_product->get_id(),
+                                                        $group_entries[] = $this->build_inventory_movement_entry( [
+                                                                'order_id'      => $order_id,
+                                                                'event_type'    => 'ingreso',
+                                                                'product_id'    => $product_id,
+                                                                'wc_product_id' => $wc_product->get_id(),
                                                         'sku'           => $sku,
                                                         'product_name'  => $wc_product->get_name(),
                                                         'quantity'      => $transfer_quantity,
-                                                        'warehouses'    => [
-                                                                'from' => [
-                                                                        'id'    => (string) $id_origin_warehouse,
-                                                                        'code'  => (string) $origin_code,
-                                                                        'label' => $origin_code,
-                                                                ],
-                                                                'to'   => [
-                                                                        'id'             => (string) $group_context['id'],
-                                                                        'code'           => (string) $group_context['code'],
-                                                                        'label'          => $group_context['label'],
+                                                                'warehouses'    => [
+                                                                        'from' => [
+                                                                                'id'    => (string) $group_origin_id,
+                                                                                'code'  => (string) $group_origin_code,
+                                                                                'label' => $group_origin_code,
+                                                                        ],
+                                                                        'to'   => [
+                                                                                'id'             => (string) $group_context['id'],
+                                                                                'code'           => (string) $group_context['code'],
+                                                                                'label'          => $group_context['label'],
                                                                         'location_id'    => (string) $group_context['location_id'],
                                                                         'location_label' => (string) $group_context['location_label'],
                                                                         'mapped'         => (bool) $group_context['mapped'],
