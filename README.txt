@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.66 =
+* Añade registros detallados para intentos de restitución sin stock o con stock insuficiente, incluyendo la bodega origen y cantidades solicitadas.
+
 = 4.1.65 =
 * Registra las solicitudes de traslado de inventario en el log de API cuando la opción de registro está activa, facilitando el diagnóstico de cancelaciones o reembolsos multi-bodega.
 

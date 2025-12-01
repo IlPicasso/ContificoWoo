@@ -7677,6 +7677,18 @@ $filters = [
                                                         $origin_code_label
                                                 ) );
 
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_unverifiable',
+                                                        [
+                                                                'order_id'          => $order_id,
+                                                                'product_id'        => $product_id,
+                                                                'sku'               => $sku,
+                                                                'origin_warehouse'  => $origin_code_label,
+                                                                'available_stock'   => null,
+                                                                'requested_quantity'=> $item_quantity,
+                                                        ]
+                                                );
+
                                                 continue;
                                         }
 
@@ -7686,6 +7698,18 @@ $filters = [
                                                         $sku,
                                                         $origin_code_label
                                                 ) );
+
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_no_stock',
+                                                        [
+                                                                'order_id'          => $order_id,
+                                                                'product_id'        => $product_id,
+                                                                'sku'               => $sku,
+                                                                'origin_warehouse'  => $origin_code_label,
+                                                                'available_stock'   => $available_stock,
+                                                                'requested_quantity'=> $item_quantity,
+                                                        ]
+                                                );
 
                                                 continue;
                                         }
@@ -7701,6 +7725,19 @@ $filters = [
                                                         $sku,
                                                         $origin_code
                                                 ) );
+
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_partial',
+                                                        [
+                                                                'order_id'          => $order_id,
+                                                                'product_id'        => $product_id,
+                                                                'sku'               => $sku,
+                                                                'origin_warehouse'  => $origin_code_label,
+                                                                'available_stock'   => $available_stock,
+                                                                'requested_quantity'=> $item_quantity,
+                                                                'transfer_quantity' => $transfer_quantity,
+                                                        ]
+                                                );
                                         }
 
                                         $restore_stock['detalles'][] = [
