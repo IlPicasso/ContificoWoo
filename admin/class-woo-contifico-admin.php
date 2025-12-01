@@ -3802,6 +3802,144 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
         }
 
         /**
+         * Group restore items using the same warehouse allocations recorded during the transfer.
+         *
+         * @since 4.1.63
+         */
+        private function group_restore_items_from_movements( WC_Order $order, array $items, string $default_code, string $default_id ) : array {
+                $order_id      = $order->get_id();
+                $items_by_id   = [];
+                $item_ids      = [];
+                $groups        = [];
+                $default_ctx   = $this->build_default_inventory_context( $default_code, $default_id );
+
+                foreach ( $items as $item ) {
+                        if ( ! is_a( $item, 'WC_Order_Item_Product' ) ) {
+                                continue;
+                        }
+
+                        $items_by_id[ $item->get_id() ] = $item;
+                        $item_ids[]                      = $item->get_id();
+                }
+
+                $movements = array_filter(
+                        $this->get_inventory_movements_storage(),
+                        static function ( array $movement ) use ( $order_id, $item_ids ) : bool {
+                                $movement_order_id = isset( $movement['order_id'] ) ? (int) $movement['order_id'] : 0;
+                                $order_item_id     = isset( $movement['order_item_id'] ) ? (int) $movement['order_item_id'] : 0;
+                                $context           = isset( $movement['context'] ) ? (string) $movement['context'] : '';
+                                $status            = isset( $movement['status'] ) ? (string) $movement['status'] : '';
+                                $event_type        = isset( $movement['event_type'] ) ? (string) $movement['event_type'] : '';
+
+                                if ( $movement_order_id !== $order_id || 'transfer' !== $context ) {
+                                        return false;
+                                }
+
+                                if ( 'success' !== $status || 'egreso' !== $event_type ) {
+                                        return false;
+                                }
+
+                                if ( ! empty( $item_ids ) && ! in_array( $order_item_id, $item_ids, true ) ) {
+                                        return false;
+                                }
+
+                                return $order_item_id > 0;
+                        }
+                );
+
+                if ( empty( $movements ) ) {
+                        return [];
+                }
+
+                foreach ( $movements as $movement ) {
+                        $order_item_id = (int) ( $movement['order_item_id'] ?? 0 );
+
+                        if ( ! isset( $items_by_id[ $order_item_id ] ) ) {
+                                continue;
+                        }
+
+                        $item      = $items_by_id[ $order_item_id ];
+                        $quantity  = isset( $movement['quantity'] ) ? (float) $movement['quantity'] : 0.0;
+                        $group_ctx = $default_ctx;
+
+                        if ( $quantity <= 0.0 ) {
+                                continue;
+                        }
+
+                        $from_warehouse = isset( $movement['warehouses']['from'] ) && is_array( $movement['warehouses']['from'] )
+                                ? $movement['warehouses']['from']
+                                : [];
+
+                        $warehouse_code = isset( $from_warehouse['code'] ) ? (string) $from_warehouse['code'] : '';
+                        $warehouse_id   = isset( $from_warehouse['id'] ) ? (string) $from_warehouse['id'] : '';
+                        $location_id    = isset( $from_warehouse['location_id'] ) ? (string) $from_warehouse['location_id'] : '';
+                        $location_label = isset( $from_warehouse['location_label'] ) ? (string) $from_warehouse['location_label'] : '';
+
+                        if ( '' !== $warehouse_code || '' !== $warehouse_id ) {
+                                $group_ctx = $this->override_inventory_context_with_warehouse_code( $group_ctx, $warehouse_code );
+
+                                if ( '' === $group_ctx['id'] && '' !== $warehouse_id ) {
+                                        $group_ctx['id'] = $warehouse_id;
+                                }
+
+                                if ( '' === $group_ctx['code'] && '' !== $warehouse_code ) {
+                                        $group_ctx['code'] = $warehouse_code;
+                                }
+                        }
+
+                        if ( '' !== $location_id ) {
+                                $group_ctx['location_id'] = $location_id;
+                        }
+
+                        if ( '' !== $location_label ) {
+                                $group_ctx['location_label'] = $location_label;
+                        }
+
+                        if ( '' === $group_ctx['label'] && '' !== $group_ctx['code'] ) {
+                                $group_ctx['label'] = $group_ctx['code'];
+                        }
+
+                        $group_key = $group_ctx['id'] ?: $group_ctx['code'];
+
+                        if ( '' === $group_key ) {
+                                $group_key = 'default';
+                        }
+
+                        if ( ! isset( $groups[ $group_key ] ) ) {
+                                $groups[ $group_key ] = [
+                                        'context'         => $group_ctx,
+                                        'items'           => [],
+                                        'item_contexts'   => [],
+                                        'item_quantities' => [],
+                                        'locations'       => [],
+                                ];
+                        }
+
+                        $groups[ $group_key ]['items'][]           = $item;
+                        $groups[ $group_key ]['item_contexts'][]   = $group_ctx;
+                        $groups[ $group_key ]['item_quantities'][] = $quantity;
+
+                        $location_id    = '' !== $group_ctx['location_id'] ? $group_ctx['location_id'] : sprintf( 'default-%s', $group_key );
+                        $location_label = '' !== $group_ctx['location_label']
+                                ? $group_ctx['location_label']
+                                : $this->describe_inventory_location_for_note( $group_ctx );
+
+                        $groups[ $group_key ]['locations'][ $location_id ] = $location_label;
+                }
+
+                foreach ( $groups as &$group ) {
+                        $group['context']['location_label'] = $this->summarize_group_location_labels( $group['locations'], $group['context'] );
+
+                        if ( count( $group['locations'] ) > 1 ) {
+                                $group['context']['location_id'] = 'mixed';
+                        }
+                }
+                unset( $group );
+
+                return $groups;
+        }
+
+        /**
          * Summarize location labels belonging to a grouped warehouse context.
          *
          * @since 4.4.0
@@ -7239,7 +7377,11 @@ $filters = [
                         $reason_label      = empty( $refund )
                                 ? ( empty( $refund_id ) ? 'cancelación de la orden' : "reembolso #{$refund_id}" )
                                 : "reembolso total o parcial #{$refund_id}";
-                        $grouped_items     = $this->group_order_items_by_location_context( $order, $items, $destination_code, $default_destination_id );
+                        $grouped_items     = $this->group_restore_items_from_movements( $order, $items, $destination_code, $default_destination_id );
+
+                        if ( empty( $grouped_items ) ) {
+                                $grouped_items = $this->group_order_items_by_location_context( $order, $items, $destination_code, $default_destination_id );
+                        }
                         $processed_groups  = 0;
                         $successful_groups = 0;
                         $origin_stock      = [];

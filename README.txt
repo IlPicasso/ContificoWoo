@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.63 =
+* Al cancelar o reembolsar, reconstruye los traslados con base en los movimientos registrados para devolver el inventario a todas las bodegas de origen sin depender de un único almacén de facturación.
+
 = 4.1.62 =
 * Ajusta el guardado y la hidratación de asignaciones preferidas para evitar errores de sintaxis al leer los ítems refundados y garantizar que el código de bodega original se replique antes de calcular transferencias.
 
