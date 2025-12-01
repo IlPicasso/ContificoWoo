@@ -6849,6 +6849,40 @@ $filters = [
 
         }
 
+        /**
+         * Log Contífico API transactions when API logging is enabled.
+         *
+         * @since 4.1.65
+         */
+        private function log_api_transaction( string $action, array $request, $response = null ) : void {
+
+                $logging_enabled = ! empty( $this->woo_contifico->settings['activar_registro'] );
+
+                if ( ! $logging_enabled || empty( $this->log_path ) ) {
+                        return;
+                }
+
+                $entry = [
+                        'action'  => $action,
+                        'request' => $request,
+                ];
+
+                if ( null !== $response ) {
+                        $entry['response'] = $response;
+                }
+
+                $json_message = wp_json_encode( $entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK );
+
+                if ( false === $json_message ) {
+                        return;
+                }
+
+                $log_time = current_time( 'mysql' );
+
+                error_log( "[{$log_time}]: {$json_message}" . PHP_EOL, 3, $this->log_path );
+
+        }
+
 	/**
 	 * Get product ids from an array of skus
 	 *
@@ -7332,6 +7366,7 @@ $filters = [
                                 $reference_code = '';
                                 $error_message  = '';
                                 $location_label = $this->describe_inventory_location_for_note( $group_context );
+                                $api_request    = $transfer_stock;
 
                                 try {
                                         $result        = $this->contifico->transfer_stock( json_encode( $transfer_stock ) );
@@ -7343,6 +7378,15 @@ $filters = [
                                                 $location_label,
                                                 $reference_code
                                         ) );
+                                        $this->log_api_transaction(
+                                                'transfer_stock_dispatch',
+                                                [
+                                                        'order_id'       => $order_id,
+                                                        'payload'        => $api_request,
+                                                        'location_label' => $location_label,
+                                                ],
+                                                $result
+                                        );
                                 } catch ( Exception $exception ) {
                                         $status        = 'error';
                                         $error_message = $exception->getMessage();
@@ -7351,6 +7395,15 @@ $filters = [
                                                 $location_label,
                                                 $error_message
                                         ) );
+                                        $this->log_api_transaction(
+                                                'transfer_stock_dispatch_error',
+                                                [
+                                                        'order_id'       => $order_id,
+                                                        'payload'        => $api_request,
+                                                        'location_label' => $location_label,
+                                                ],
+                                                $error_message
+                                        );
                                 }
 
                                 if ( ! empty( $group_entries ) ) {
@@ -7702,6 +7755,7 @@ $filters = [
                                 $reference_code = '';
                                 $error_message  = '';
                                 $location_label = $this->describe_inventory_location_for_note( $group_context );
+                                $api_request    = $restore_stock;
 
                                 try {
                                         $result        = $this->contifico->transfer_stock( json_encode( $restore_stock ) );
@@ -7714,6 +7768,16 @@ $filters = [
                                                 $reason_label,
                                                 $reference_code
                                         ) );
+                                        $this->log_api_transaction(
+                                                'transfer_stock_restore',
+                                                [
+                                                        'order_id'       => $order_id,
+                                                        'payload'        => $api_request,
+                                                        'location_label' => $location_label,
+                                                        'reason'         => $reason_label,
+                                                ],
+                                                $result
+                                        );
                                 } catch ( Exception $exception ) {
                                         $status        = 'error';
                                         $error_message = $exception->getMessage();
@@ -7722,6 +7786,16 @@ $filters = [
                                                 $location_label,
                                                 $error_message
                                         ) );
+                                        $this->log_api_transaction(
+                                                'transfer_stock_restore_error',
+                                                [
+                                                        'order_id'       => $order_id,
+                                                        'payload'        => $api_request,
+                                                        'location_label' => $location_label,
+                                                        'reason'         => $reason_label,
+                                                ],
+                                                $error_message
+                                        );
                                 }
 
                                 if ( ! empty( $group_entries ) ) {

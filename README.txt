@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.65 =
+* Registra las solicitudes de traslado de inventario en el log de API cuando la opción de registro está activa, facilitando el diagnóstico de cancelaciones o reembolsos multi-bodega.
+
 = 4.1.64 =
 * Usa la bodega destino registrada en cada movimiento para reconstruir el origen de las devoluciones y evitar errores de stock al restituir pedidos despachados desde múltiples bodegas.
 
