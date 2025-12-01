@@ -2928,9 +2928,15 @@ class Woo_Contifico_Admin {
                 return $this->preferred_item_allocations[ $order_id ][ $item_id ];
         }
 
-        private function build_preferred_warehouse_allocations( int $order_id, float $quantity, array $preferred_codes, array $stock_by_warehouse ) : array {
+        private function build_preferred_warehouse_allocations( int $order_id, string $product_id, float $quantity, array $preferred_codes, array $stock_by_warehouse ) : array {
                 $allocations = [];
                 $needed      = $quantity;
+
+                $product_id = trim( $product_id );
+
+                if ( '' === $product_id ) {
+                        return [];
+                }
 
                 foreach ( $preferred_codes as $code ) {
                         $warehouse_id = (string) ( $this->contifico->get_id_bodega( $code ) ?? '' );
@@ -2944,8 +2950,8 @@ class Woo_Contifico_Admin {
                         }
 
                         $available = (float) $stock_by_warehouse[ $warehouse_id ];
-                        $allocated = isset( $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] )
-                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ]
+                        $allocated = isset( $this->preferred_warehouse_allocations[ $order_id ][ $product_id ][ $warehouse_id ] )
+                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $product_id ][ $warehouse_id ]
                                 : 0.0;
 
                         $remaining = $available - $allocated;
@@ -2966,7 +2972,7 @@ class Woo_Contifico_Admin {
                                 'quantity'     => $take,
                         ];
 
-                        $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] = $allocated + $take;
+                        $this->preferred_warehouse_allocations[ $order_id ][ $product_id ][ $warehouse_id ] = $allocated + $take;
 
                         $needed -= $take;
 
@@ -3056,9 +3062,9 @@ class Woo_Contifico_Admin {
                         $warehouse_id = (string) ( $this->contifico->get_id_bodega( $stored_code ) ?? '' );
 
                         if ( '' !== $warehouse_id ) {
-                                $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] = (
-                                        isset( $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] )
-                                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ]
+                                $this->preferred_warehouse_allocations[ $order_id ][ $product_id ][ $warehouse_id ] = (
+                                        isset( $this->preferred_warehouse_allocations[ $order_id ][ $product_id ][ $warehouse_id ] )
+                                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $product_id ][ $warehouse_id ]
                                                 : 0.0
                                 ) + $quantity;
 
@@ -3073,7 +3079,7 @@ class Woo_Contifico_Admin {
                 }
 
                 if ( empty( $allocations ) ) {
-                        $allocations = $this->build_preferred_warehouse_allocations( $order_id, $quantity, $preferred_codes, $stock_by_warehouse );
+                        $allocations = $this->build_preferred_warehouse_allocations( $order_id, $product_id, $quantity, $preferred_codes, $stock_by_warehouse );
                 }
 
                 if ( empty( $allocations ) ) {
