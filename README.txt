@@ -83,6 +83,33 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.71 =
+* Refresca las consultas de stock directamente desde Contífico al devolver inventario y registra el mapeo de bodegas utilizado para saber qué IDs se solicitaron.
+
+= 4.1.70 =
+* Registra el detalle de los IDs de producto, SKUs y cantidades solicitadas por bodega al consultar stock para devoluciones, facilitando saber qué intenta devolver el plugin.
+
+= 4.1.69 =
+* Añade una nota en la orden y un registro dedicado que indica la ubicación del log de Contífico cuando se intenta devolver stock.
+
+= 4.1.68 =
+* Registra un log detallado del plan de restitución (bodega origen y destino, SKUs y cantidades) antes de ejecutar la devolución para saber qué intenta hacer el plugin.
+
+= 4.1.67 =
+* Registra las consultas de stock y las decisiones de devolución por SKU al cancelar o reembolsar para diagnosticar por qué se marca falta de stock en la bodega de facturación.
+
+= 4.1.66 =
+* Añade registros detallados para intentos de restitución sin stock o con stock insuficiente, incluyendo la bodega origen y cantidades solicitadas.
+
+= 4.1.65 =
+* Registra las solicitudes de traslado de inventario en el log de API cuando la opción de registro está activa, facilitando el diagnóstico de cancelaciones o reembolsos multi-bodega.
+
+= 4.1.64 =
+* Usa la bodega destino registrada en cada movimiento para reconstruir el origen de las devoluciones y evitar errores de stock al restituir pedidos despachados desde múltiples bodegas.
+
+= 4.1.63 =
+* Al cancelar o reembolsar, reconstruye los traslados con base en los movimientos registrados para devolver el inventario a todas las bodegas de origen sin depender de un único almacén de facturación.
+
 = 4.1.62 =
 * Ajusta el guardado y la hidratación de asignaciones preferidas para evitar errores de sintaxis al leer los ítems refundados y garantizar que el código de bodega original se replique antes de calcular transferencias.
 

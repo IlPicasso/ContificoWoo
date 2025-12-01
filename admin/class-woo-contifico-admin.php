@@ -3802,6 +3802,195 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
         }
 
         /**
+         * Group restore items using the same warehouse allocations recorded during the transfer.
+         *
+         * @since 4.1.63
+         */
+        private function group_restore_items_from_movements( WC_Order $order, array $items, string $default_code, string $default_id, string $default_origin_code, string $default_origin_id ) : array {
+                $order_id      = $order->get_id();
+                $items_by_id   = [];
+                $item_ids      = [];
+                $groups        = [];
+                $default_ctx   = $this->build_default_inventory_context( $default_code, $default_id );
+
+                foreach ( $items as $item ) {
+                        if ( ! is_a( $item, 'WC_Order_Item_Product' ) ) {
+                                continue;
+                        }
+
+                        $items_by_id[ $item->get_id() ] = $item;
+                        $item_ids[]                      = $item->get_id();
+                }
+
+                $movements = array_filter(
+                        $this->get_inventory_movements_storage(),
+                        static function ( array $movement ) use ( $order_id, $item_ids ) : bool {
+                                $movement_order_id = isset( $movement['order_id'] ) ? (int) $movement['order_id'] : 0;
+                                $order_item_id     = isset( $movement['order_item_id'] ) ? (int) $movement['order_item_id'] : 0;
+                                $context           = isset( $movement['context'] ) ? (string) $movement['context'] : '';
+                                $status            = isset( $movement['status'] ) ? (string) $movement['status'] : '';
+                                $event_type        = isset( $movement['event_type'] ) ? (string) $movement['event_type'] : '';
+
+                                if ( $movement_order_id !== $order_id || 'transfer' !== $context ) {
+                                        return false;
+                                }
+
+                                if ( 'success' !== $status || 'egreso' !== $event_type ) {
+                                        return false;
+                                }
+
+                                if ( ! empty( $item_ids ) && ! in_array( $order_item_id, $item_ids, true ) ) {
+                                        return false;
+                                }
+
+                                return $order_item_id > 0;
+                        }
+                );
+
+                if ( empty( $movements ) ) {
+                        return [];
+                }
+
+                foreach ( $movements as $movement ) {
+                        $order_item_id = (int) ( $movement['order_item_id'] ?? 0 );
+
+                        if ( ! isset( $items_by_id[ $order_item_id ] ) ) {
+                                continue;
+                        }
+
+                        $item      = $items_by_id[ $order_item_id ];
+                        $quantity  = isset( $movement['quantity'] ) ? (float) $movement['quantity'] : 0.0;
+                        $group_ctx = $default_ctx;
+
+                        if ( $quantity <= 0.0 ) {
+                                continue;
+                        }
+
+                        $from_warehouse = isset( $movement['warehouses']['from'] ) && is_array( $movement['warehouses']['from'] )
+                                ? $movement['warehouses']['from']
+                                : [];
+
+                        $warehouse_code = isset( $from_warehouse['code'] ) ? (string) $from_warehouse['code'] : '';
+                        $warehouse_id   = isset( $from_warehouse['id'] ) ? (string) $from_warehouse['id'] : '';
+                        $location_id    = isset( $from_warehouse['location_id'] ) ? (string) $from_warehouse['location_id'] : '';
+                        $location_label = isset( $from_warehouse['location_label'] ) ? (string) $from_warehouse['location_label'] : '';
+                        $origin_ctx     = $this->build_default_inventory_context( $default_origin_code, $default_origin_id );
+                        $origin_from    = isset( $movement['warehouses']['to'] ) && is_array( $movement['warehouses']['to'] ) ? $movement['warehouses']['to'] : [];
+                        $origin_code    = isset( $origin_from['code'] ) ? (string) $origin_from['code'] : '';
+                        $origin_id      = isset( $origin_from['id'] ) ? (string) $origin_from['id'] : '';
+                        $origin_loc_id  = isset( $origin_from['location_id'] ) ? (string) $origin_from['location_id'] : '';
+                        $origin_loc_lbl = isset( $origin_from['location_label'] ) ? (string) $origin_from['location_label'] : '';
+
+                        if ( '' !== $origin_code || '' !== $origin_id ) {
+                                $origin_ctx = $this->override_inventory_context_with_warehouse_code( $origin_ctx, $origin_code );
+
+                                if ( '' === $origin_ctx['id'] && '' !== $origin_id ) {
+                                        $origin_ctx['id'] = $origin_id;
+                                }
+
+                                if ( '' === $origin_ctx['code'] && '' !== $origin_code ) {
+                                        $origin_ctx['code'] = $origin_code;
+                                }
+                        }
+
+                        if ( '' !== $origin_loc_id ) {
+                                $origin_ctx['location_id'] = $origin_loc_id;
+                        }
+
+                        if ( '' !== $origin_loc_lbl ) {
+                                $origin_ctx['location_label'] = $origin_loc_lbl;
+                        }
+
+                        if ( '' === $origin_ctx['label'] && '' !== $origin_ctx['code'] ) {
+                                $origin_ctx['label'] = $origin_ctx['code'];
+                        }
+
+                        if ( '' !== $warehouse_code || '' !== $warehouse_id ) {
+                                $group_ctx = $this->override_inventory_context_with_warehouse_code( $group_ctx, $warehouse_code );
+
+                                if ( '' === $group_ctx['id'] && '' !== $warehouse_id ) {
+                                        $group_ctx['id'] = $warehouse_id;
+                                }
+
+                                if ( '' === $group_ctx['code'] && '' !== $warehouse_code ) {
+                                        $group_ctx['code'] = $warehouse_code;
+                                }
+                        }
+
+                        if ( '' !== $location_id ) {
+                                $group_ctx['location_id'] = $location_id;
+                        }
+
+                        if ( '' !== $location_label ) {
+                                $group_ctx['location_label'] = $location_label;
+                        }
+
+                        if ( '' === $group_ctx['label'] && '' !== $group_ctx['code'] ) {
+                                $group_ctx['label'] = $group_ctx['code'];
+                        }
+
+                        $group_key = $group_ctx['id'] ?: $group_ctx['code'];
+
+                        if ( '' === $group_key ) {
+                                $group_key = 'default';
+                        }
+
+                        if ( ! isset( $groups[ $group_key ] ) ) {
+                                $groups[ $group_key ] = [
+                                        'context'         => $group_ctx,
+                                        'items'           => [],
+                                        'item_contexts'   => [],
+                                        'item_quantities' => [],
+                                        'locations'       => [],
+                                        'origin_contexts' => [],
+                                        'origin_locations' => [],
+                                ];
+                        }
+
+                        $groups[ $group_key ]['items'][]           = $item;
+                        $groups[ $group_key ]['item_contexts'][]   = $group_ctx;
+                        $groups[ $group_key ]['item_quantities'][] = $quantity;
+                        $groups[ $group_key ]['origin_contexts'][] = $origin_ctx;
+
+                        $location_id    = '' !== $group_ctx['location_id'] ? $group_ctx['location_id'] : sprintf( 'default-%s', $group_key );
+                        $location_label = '' !== $group_ctx['location_label']
+                                ? $group_ctx['location_label']
+                                : $this->describe_inventory_location_for_note( $group_ctx );
+
+                        $groups[ $group_key ]['locations'][ $location_id ] = $location_label;
+
+                        $origin_location_id = '' !== $origin_ctx['location_id'] ? $origin_ctx['location_id'] : sprintf( 'default-origin-%s', $group_key );
+                        $origin_location_label = '' !== $origin_ctx['location_label']
+                                ? $origin_ctx['location_label']
+                                : $this->describe_inventory_location_for_note( $origin_ctx );
+
+                        $groups[ $group_key ]['origin_locations'][ $origin_location_id ] = $origin_location_label;
+                }
+
+                foreach ( $groups as &$group ) {
+                        $group['context']['location_label'] = $this->summarize_group_location_labels( $group['locations'], $group['context'] );
+
+                        if ( count( $group['locations'] ) > 1 ) {
+                                $group['context']['location_id'] = 'mixed';
+                        }
+
+                        $origin_contexts = array_values( $group['origin_contexts'] );
+                        $origin_ctx      = ! empty( $origin_contexts ) ? $origin_contexts[0] : $this->build_default_inventory_context( $default_origin_code, $default_origin_id );
+
+                        $origin_ctx['location_label'] = $this->summarize_group_location_labels( $group['origin_locations'], $origin_ctx );
+
+                        if ( count( $group['origin_locations'] ) > 1 ) {
+                                $origin_ctx['location_id'] = 'mixed';
+                        }
+
+                        $group['origin_context'] = $origin_ctx;
+                }
+                unset( $group );
+
+                return $groups;
+        }
+
+        /**
          * Summarize location labels belonging to a grouped warehouse context.
          *
          * @since 4.4.0
@@ -6660,6 +6849,40 @@ $filters = [
 
         }
 
+        /**
+         * Log Contífico API transactions when API logging is enabled.
+         *
+         * @since 4.1.65
+         */
+        private function log_api_transaction( string $action, array $request, $response = null ) : void {
+
+                $logging_enabled = ! empty( $this->woo_contifico->settings['activar_registro'] );
+
+                if ( ! $logging_enabled || empty( $this->log_path ) ) {
+                        return;
+                }
+
+                $entry = [
+                        'action'  => $action,
+                        'request' => $request,
+                ];
+
+                if ( null !== $response ) {
+                        $entry['response'] = $response;
+                }
+
+                $json_message = wp_json_encode( $entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK );
+
+                if ( false === $json_message ) {
+                        return;
+                }
+
+                $log_time = current_time( 'mysql' );
+
+                error_log( "[{$log_time}]: {$json_message}" . PHP_EOL, 3, $this->log_path );
+
+        }
+
 	/**
 	 * Get product ids from an array of skus
 	 *
@@ -7143,6 +7366,7 @@ $filters = [
                                 $reference_code = '';
                                 $error_message  = '';
                                 $location_label = $this->describe_inventory_location_for_note( $group_context );
+                                $api_request    = $transfer_stock;
 
                                 try {
                                         $result        = $this->contifico->transfer_stock( json_encode( $transfer_stock ) );
@@ -7154,6 +7378,15 @@ $filters = [
                                                 $location_label,
                                                 $reference_code
                                         ) );
+                                        $this->log_api_transaction(
+                                                'transfer_stock_dispatch',
+                                                [
+                                                        'order_id'       => $order_id,
+                                                        'payload'        => $api_request,
+                                                        'location_label' => $location_label,
+                                                ],
+                                                $result
+                                        );
                                 } catch ( Exception $exception ) {
                                         $status        = 'error';
                                         $error_message = $exception->getMessage();
@@ -7162,6 +7395,15 @@ $filters = [
                                                 $location_label,
                                                 $error_message
                                         ) );
+                                        $this->log_api_transaction(
+                                                'transfer_stock_dispatch_error',
+                                                [
+                                                        'order_id'       => $order_id,
+                                                        'payload'        => $api_request,
+                                                        'location_label' => $location_label,
+                                                ],
+                                                $error_message
+                                        );
                                 }
 
                                 if ( ! empty( $group_entries ) ) {
@@ -7239,11 +7481,43 @@ $filters = [
                         $reason_label      = empty( $refund )
                                 ? ( empty( $refund_id ) ? 'cancelación de la orden' : "reembolso #{$refund_id}" )
                                 : "reembolso total o parcial #{$refund_id}";
-                        $grouped_items     = $this->group_order_items_by_location_context( $order, $items, $destination_code, $default_destination_id );
-                        $processed_groups  = 0;
-                        $successful_groups = 0;
-                        $origin_stock      = [];
-                        $product_id_cache  = [];
+                        $grouped_items     = $this->group_restore_items_from_movements( $order, $items, $destination_code, $default_destination_id, $origin_code, $id_origin_warehouse );
+
+                        $logging_enabled = ! empty( $this->woo_contifico->settings['activar_registro'] );
+                        $log_noted       = (bool) $order->get_meta( '_woo_contifico_restore_log_destination_noted', true );
+
+                        if ( $logging_enabled && ! empty( $this->log_path ) && ! $log_noted ) {
+                                $log_destination = ! empty( $this->log_route ) ? $this->log_route : $this->log_path;
+
+                                $order->add_order_note( sprintf(
+                                        __( '<b>Contífico:</b><br>Los intentos de devolución se están registrando en %s', $this->plugin_name ),
+                                        $log_destination
+                                ) );
+
+                                $this->log_api_transaction(
+                                        'transfer_stock_restore_log_destination',
+                                        [
+                                                'order_id'      => $order_id,
+                                                'trigger'       => $trigger,
+                                                'reason'        => $reason_label,
+                                                'log_path'      => $this->log_path,
+                                                'log_url'       => $this->log_route,
+                                                'logging_state' => 'enabled',
+                                        ]
+                                );
+
+                                $order->update_meta_data( '_woo_contifico_restore_log_destination_noted', true );
+                                $order->save();
+                        }
+
+                        if ( empty( $grouped_items ) ) {
+                                $grouped_items = $this->group_order_items_by_location_context( $order, $items, $destination_code, $default_destination_id );
+                        }
+                        $processed_groups   = 0;
+                        $successful_groups  = 0;
+                        $origin_stock       = [];
+                        $product_id_cache   = [];
+                        $restore_plan_groups = [];
 
                         $resolve_product_id = function ( WC_Order_Item_Product $item, WC_Product $wc_product ) use ( &$product_id_cache, $order ) : string {
                                 $sku = (string) $wc_product->get_sku();
@@ -7267,7 +7541,11 @@ $filters = [
                                 return $product_id_cache[ $sku ];
                         };
 
-                        $product_ids_for_stock = [];
+                        $product_ids_for_stock           = [];
+                        $origin_codes_for_stock          = [];
+                        $origin_code_id_map              = [];
+                        $stock_lookup_products           = [];
+                        $stock_lookup_origin_breakdown   = [];
 
                         foreach ( $grouped_items as $group ) {
                                 foreach ( $group['items'] as $item ) {
@@ -7282,50 +7560,219 @@ $filters = [
                                         }
 
                                         $product_id = $resolve_product_id( $item, $wc_product );
+                                        $sku        = (string) $wc_product->get_sku();
 
                                         if ( '' !== $product_id ) {
                                                 $product_ids_for_stock[] = $product_id;
+
+                                                if ( ! isset( $stock_lookup_products[ $product_id ] ) ) {
+                                                        $stock_lookup_products[ $product_id ] = [
+                                                                'skus'                      => [],
+                                                                'order_item_ids'            => [],
+                                                                'total_requested_quantity'  => 0.0,
+                                                                'item_quantities'           => [],
+                                                        ];
+                                                }
+
+                                                $stock_lookup_products[ $product_id ]['skus'][ $sku ]             = true;
+                                                $stock_lookup_products[ $product_id ]['order_item_ids'][]         = $item->get_id();
                                         }
+                                }
+
+                                $origin_context = isset( $group['origin_context'] ) && is_array( $group['origin_context'] ) ? $group['origin_context'] : [];
+                                $group_origin_code = isset( $origin_context['code'] ) ? (string) $origin_context['code'] : '';
+                                $group_origin_id   = isset( $origin_context['id'] ) ? (string) $origin_context['id'] : '';
+
+                                if ( '' === $group_origin_code ) {
+                                        $group_origin_code = $origin_code;
+                                }
+
+                                if ( '' === $group_origin_id ) {
+                                        $group_origin_id = $id_origin_warehouse;
+                                }
+
+                                if ( '' !== $group_origin_code ) {
+                                        $origin_codes_for_stock[]              = $group_origin_code;
+                                        $origin_code_id_map[ $group_origin_code ] = $group_origin_id;
+                                }
+
+                                $group_context    = isset( $group['context'] ) && is_array( $group['context'] ) ? $group['context'] : [];
+                                $origin_context   = isset( $group['origin_context'] ) && is_array( $group['origin_context'] ) ? $group['origin_context'] : [];
+                                $group_items_plan = [];
+
+                                foreach ( $group['items'] as $index => $group_item ) {
+                                        if ( ! is_a( $group_item, 'WC_Order_Item_Product' ) ) {
+                                                continue;
+                                        }
+
+                                        $wc_product = $group_item->get_product();
+                                        $quantity   = isset( $group['item_quantities'][ $index ] )
+                                                ? (float) $group['item_quantities'][ $index ]
+                                                : (float) $group_item->get_quantity();
+
+                                        if ( ! $wc_product ) {
+                                                continue;
+                                        }
+
+                                        $group_items_plan[] = [
+                                                'order_item_id' => $group_item->get_id(),
+                                                'product_id'    => $resolve_product_id( $group_item, $wc_product ),
+                                                'sku'           => (string) $wc_product->get_sku(),
+                                                'quantity'      => $quantity,
+                                                'price'         => (float) $wc_product->get_price(),
+                                                'origin_context'=> isset( $group['origin_contexts'][ $index ] ) && is_array( $group['origin_contexts'][ $index ] )
+                                                        ? $group['origin_contexts'][ $index ]
+                                                        : $origin_context,
+                                        ];
+
+                                        $resolved_product_id = $group_items_plan[ array_key_last( $group_items_plan ) ]['product_id'];
+                                        $resolved_sku         = $group_items_plan[ array_key_last( $group_items_plan ) ]['sku'];
+
+                                        if ( '' !== $resolved_product_id ) {
+                                                $stock_lookup_products[ $resolved_product_id ]['total_requested_quantity'] += $quantity;
+                                                $stock_lookup_products[ $resolved_product_id ]['item_quantities'][]         = [
+                                                        'order_item_id' => $group_item->get_id(),
+                                                        'sku'           => $resolved_sku,
+                                                        'quantity'      => $quantity,
+                                                        'origin_code'   => $group_origin_code,
+                                                ];
+
+                                                if ( '' !== $group_origin_code ) {
+                                                        if ( ! isset( $stock_lookup_origin_breakdown[ $group_origin_code ] ) ) {
+                                                                $stock_lookup_origin_breakdown[ $group_origin_code ] = [];
+                                                        }
+
+                                                        if ( ! isset( $stock_lookup_origin_breakdown[ $group_origin_code ][ $resolved_product_id ] ) ) {
+                                                                $stock_lookup_origin_breakdown[ $group_origin_code ][ $resolved_product_id ] = 0.0;
+                                                        }
+
+                                                        $stock_lookup_origin_breakdown[ $group_origin_code ][ $resolved_product_id ] += $quantity;
+                                                }
+                                        }
+                                }
+
+                                if ( ! empty( $group_items_plan ) ) {
+                                        $restore_plan_groups[] = [
+                                                'destination_context' => $group_context,
+                                                'origin_context'      => $origin_context,
+                                                'items'               => $group_items_plan,
+                                        ];
                                 }
                         }
 
-                        $product_ids_for_stock = array_values( array_unique( $product_ids_for_stock ) );
-                        $stock_lookup_failed   = false;
+                        if ( ! empty( $restore_plan_groups ) ) {
+                                $this->log_api_transaction(
+                                        'transfer_stock_restore_plan',
+                                        [
+                                                'order_id'                => $order_id,
+                                                'trigger'                 => $trigger,
+                                                'reason'                  => $reason_label,
+                                                'default_origin_code'     => $origin_code,
+                                                'default_origin_id'       => $id_origin_warehouse,
+                                                'default_destination'     => $destination_code,
+                                                'group_count'             => count( $restore_plan_groups ),
+                                                'grouped_items'           => $restore_plan_groups,
+                                        ]
+                                );
+                        }
 
-                        if ( ! empty( $product_ids_for_stock ) && '' !== $origin_code ) {
+                        $product_ids_for_stock   = array_values( array_unique( $product_ids_for_stock ) );
+                        $origin_codes_for_stock  = array_values( array_unique( array_filter( array_map( 'trim', $origin_codes_for_stock ) ) ) );
+                        $stock_lookup_failed     = false;
+
+                        foreach ( $stock_lookup_products as $product_id => $product_context ) {
+                                $stock_lookup_products[ $product_id ]['skus']             = array_values( array_unique( array_keys( $product_context['skus'] ) ) );
+                                $stock_lookup_products[ $product_id ]['order_item_ids']    = array_values( array_unique( $product_context['order_item_ids'] ) );
+                                $stock_lookup_products[ $product_id ]['total_requested_quantity'] = (float) $product_context['total_requested_quantity'];
+                        }
+
+                        if ( ! empty( $product_ids_for_stock ) && ! empty( $origin_codes_for_stock ) ) {
+                                $stock_lookup_request = [
+                                        'order_id'           => $order_id,
+                                        'warehouses'         => $origin_codes_for_stock,
+                                        'warehouse_id_map'   => $origin_code_id_map,
+                                        'product_ids'        => $product_ids_for_stock,
+                                        'products'           => $stock_lookup_products,
+                                        'origin_breakdown'   => $stock_lookup_origin_breakdown,
+                                        'force_refresh'      => true,
+                                ];
+
                                 try {
-                                        $warehouse_stock = $this->contifico->get_warehouses_stock( [ $origin_code ], $product_ids_for_stock );
+                                        $warehouse_stock = $this->contifico->get_warehouses_stock( $origin_codes_for_stock, $product_ids_for_stock, true );
+                                        $origin_stock    = is_array( $warehouse_stock ) ? $warehouse_stock : [];
 
-                                        if ( isset( $warehouse_stock[ $origin_code ] ) && is_array( $warehouse_stock[ $origin_code ] ) ) {
-                                                $origin_stock = $warehouse_stock[ $origin_code ];
-                                        }
+                                        $this->log_api_transaction( 'transfer_stock_restore_stock_lookup', $stock_lookup_request, $origin_stock );
                                 } catch ( Exception $exception ) {
                                         $stock_lookup_failed = true;
                                         $order->add_order_note( sprintf(
                                                 __( '<b>Contífico:</b><br>No se pudo consultar el stock disponible en la bodega de facturación: %s', $this->plugin_name ),
                                                 $exception->getMessage()
                                         ) );
+
+                                        $this->log_api_transaction(
+                                                'transfer_stock_restore_stock_lookup_error',
+                                                $stock_lookup_request,
+                                                $exception->getMessage()
+                                        );
                                 }
                         }
 
-                        if ( empty( $origin_stock ) && ! $stock_lookup_failed ) {
-                                try {
-                                        $origin_stock = $this->contifico->get_stock( $id_origin_warehouse );
-                                } catch ( Exception $exception ) {
-                                        $order->add_order_note( sprintf(
-                                                __( '<b>Contífico:</b><br>No se pudo consultar el stock disponible en la bodega de facturación: %s', $this->plugin_name ),
-                                                $exception->getMessage()
-                                        ) );
+                        if ( ! $stock_lookup_failed ) {
+                                foreach ( $origin_codes_for_stock as $stock_code ) {
+                                        $has_stock = isset( $origin_stock[ $stock_code ] ) && is_array( $origin_stock[ $stock_code ] );
+
+                                        if ( $has_stock ) {
+                                                continue;
+                                        }
+
+                                        $fallback_id = isset( $origin_code_id_map[ $stock_code ] ) ? (string) $origin_code_id_map[ $stock_code ] : '';
+
+                                        if ( '' === $fallback_id ) {
+                                                continue;
+                                        }
+
+                                        try {
+                                                $origin_stock[ $stock_code ] = $this->contifico->get_stock( $fallback_id );
+
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_stock_fallback',
+                                                        [
+                                                                'order_id'       => $order_id,
+                                                                'warehouse_code' => $stock_code,
+                                                                'warehouse_id'   => $fallback_id,
+                                                        ],
+                                                        $origin_stock[ $stock_code ]
+                                                );
+                                        } catch ( Exception $exception ) {
+                                                $order->add_order_note( sprintf(
+                                                        __( '<b>Contífico:</b><br>No se pudo consultar el stock disponible en la bodega de facturación: %s', $this->plugin_name ),
+                                                        $exception->getMessage()
+                                                ) );
+
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_stock_fallback_error',
+                                                        [
+                                                                'order_id'       => $order_id,
+                                                                'warehouse_code' => $stock_code,
+                                                                'warehouse_id'   => $fallback_id,
+                                                        ],
+                                                        $exception->getMessage()
+                                                );
+                                        }
                                 }
                         }
 
                         foreach ( $grouped_items as $group ) {
                                 $group_context = $group['context'];
-                                $group_entries = [];
+                                $group_entries  = [];
+                                $origin_context = isset( $group['origin_context'] ) && is_array( $group['origin_context'] ) ? $group['origin_context'] : [];
+                                $group_origin_code = isset( $origin_context['code'] ) ? (string) $origin_context['code'] : $origin_code;
+                                $group_origin_id   = isset( $origin_context['id'] ) ? (string) $origin_context['id'] : $id_origin_warehouse;
+
                                 $restore_stock = [
                                         'tipo'              => 'TRA',
                                         'fecha'             => date( 'd/m/Y' ),
-                                        'bodega_id'         => $id_origin_warehouse,
+                                        'bodega_id'         => $group_origin_id,
                                         'bodega_destino_id' => $group_context['id'],
                                         'detalles'          => [],
                                         'descripcion'       => sprintf(
@@ -7383,31 +7830,93 @@ $filters = [
                                                 continue;
                                         }
 
-                                        $available_stock = isset( $origin_stock[ $product_id ] ) ? (float) $origin_stock[ $product_id ] : null;
+                                        $origin_stock_for_group = isset( $origin_stock[ $group_origin_code ] ) && is_array( $origin_stock[ $group_origin_code ] )
+                                                ? $origin_stock[ $group_origin_code ]
+                                                : [];
+                                        $available_stock = isset( $origin_stock_for_group[ $product_id ] ) ? (float) $origin_stock_for_group[ $product_id ] : null;
+                                        $origin_code_label = '' !== $group_origin_code ? $group_origin_code : $origin_code;
+
+                                        $transfer_quantity = $item_quantity;
+                                        $decision          = 'full';
 
                                         if ( null === $available_stock ) {
+                                                $decision = 'unverifiable';
+
                                                 $order->add_order_note( sprintf(
                                                         __( '<b>Contífico:</b><br>No se pudo verificar el stock del SKU %1$s en la bodega de facturación (%2$s); se omite la restitución.', $this->plugin_name ),
                                                         $sku,
-                                                        $origin_code
+                                                        $origin_code_label
                                                 ) );
+
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_unverifiable',
+                                                        [
+                                                                'order_id'          => $order_id,
+                                                                'product_id'        => $product_id,
+                                                                'sku'               => $sku,
+                                                                'origin_warehouse'  => $origin_code_label,
+                                                                'available_stock'   => null,
+                                                                'requested_quantity'=> $item_quantity,
+                                                        ]
+                                                );
+
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_stock_check',
+                                                        [
+                                                                'order_id'           => $order_id,
+                                                                'product_id'         => $product_id,
+                                                                'sku'                => $sku,
+                                                                'origin_warehouse'   => $origin_code_label,
+                                                                'available_stock'    => null,
+                                                                'requested_quantity' => $item_quantity,
+                                                                'decision'           => $decision,
+                                                                'transfer_quantity'  => 0,
+                                                        ]
+                                                );
 
                                                 continue;
                                         }
 
                                         if ( $available_stock <= 0.0 ) {
+                                                $decision = 'no_stock';
+
                                                 $order->add_order_note( sprintf(
                                                         __( '<b>Contífico:</b><br>No hay stock disponible en la bodega de facturación (%2$s) para devolver el SKU %1$s.', $this->plugin_name ),
                                                         $sku,
-                                                        $origin_code
+                                                        $origin_code_label
                                                 ) );
+
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_no_stock',
+                                                        [
+                                                                'order_id'          => $order_id,
+                                                                'product_id'        => $product_id,
+                                                                'sku'               => $sku,
+                                                                'origin_warehouse'  => $origin_code_label,
+                                                                'available_stock'   => $available_stock,
+                                                                'requested_quantity'=> $item_quantity,
+                                                        ]
+                                                );
+
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_stock_check',
+                                                        [
+                                                                'order_id'           => $order_id,
+                                                                'product_id'         => $product_id,
+                                                                'sku'                => $sku,
+                                                                'origin_warehouse'   => $origin_code_label,
+                                                                'available_stock'    => $available_stock,
+                                                                'requested_quantity' => $item_quantity,
+                                                                'decision'           => $decision,
+                                                                'transfer_quantity'  => 0,
+                                                        ]
+                                                );
 
                                                 continue;
                                         }
 
-                                        $transfer_quantity = $item_quantity;
-
                                         if ( $available_stock < $item_quantity ) {
+                                                $decision          = 'partial';
                                                 $transfer_quantity = $available_stock;
 
                                                 $order->add_order_note( sprintf(
@@ -7416,7 +7925,34 @@ $filters = [
                                                         $sku,
                                                         $origin_code
                                                 ) );
+
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_partial',
+                                                        [
+                                                                'order_id'          => $order_id,
+                                                                'product_id'        => $product_id,
+                                                                'sku'               => $sku,
+                                                                'origin_warehouse'  => $origin_code_label,
+                                                                'available_stock'   => $available_stock,
+                                                                'requested_quantity'=> $item_quantity,
+                                                                'transfer_quantity' => $transfer_quantity,
+                                                        ]
+                                                );
                                         }
+
+                                        $this->log_api_transaction(
+                                                'transfer_stock_restore_stock_check',
+                                                [
+                                                        'order_id'           => $order_id,
+                                                        'product_id'         => $product_id,
+                                                        'sku'                => $sku,
+                                                        'origin_warehouse'   => $origin_code_label,
+                                                        'available_stock'    => $available_stock,
+                                                        'requested_quantity' => $item_quantity,
+                                                        'decision'           => $decision,
+                                                        'transfer_quantity'  => $transfer_quantity,
+                                                ]
+                                        );
 
                                         $restore_stock['detalles'][] = [
                                                 'producto_id' => $product_id,
@@ -7424,24 +7960,24 @@ $filters = [
                                                 'cantidad'    => $transfer_quantity,
                                         ];
 
-                                                $group_entries[] = $this->build_inventory_movement_entry( [
-                                                        'order_id'      => $order_id,
-                                                        'event_type'    => 'ingreso',
-                                                        'product_id'    => $product_id,
-                                                        'wc_product_id' => $wc_product->get_id(),
+                                                        $group_entries[] = $this->build_inventory_movement_entry( [
+                                                                'order_id'      => $order_id,
+                                                                'event_type'    => 'ingreso',
+                                                                'product_id'    => $product_id,
+                                                                'wc_product_id' => $wc_product->get_id(),
                                                         'sku'           => $sku,
                                                         'product_name'  => $wc_product->get_name(),
                                                         'quantity'      => $transfer_quantity,
-                                                        'warehouses'    => [
-                                                                'from' => [
-                                                                        'id'    => (string) $id_origin_warehouse,
-                                                                        'code'  => (string) $origin_code,
-                                                                        'label' => $origin_code,
-                                                                ],
-                                                                'to'   => [
-                                                                        'id'             => (string) $group_context['id'],
-                                                                        'code'           => (string) $group_context['code'],
-                                                                        'label'          => $group_context['label'],
+                                                                'warehouses'    => [
+                                                                        'from' => [
+                                                                                'id'    => (string) $group_origin_id,
+                                                                                'code'  => (string) $group_origin_code,
+                                                                                'label' => $group_origin_code,
+                                                                        ],
+                                                                        'to'   => [
+                                                                                'id'             => (string) $group_context['id'],
+                                                                                'code'           => (string) $group_context['code'],
+                                                                                'label'          => $group_context['label'],
                                                                         'location_id'    => (string) $group_context['location_id'],
                                                                         'location_label' => (string) $group_context['location_label'],
                                                                         'mapped'         => (bool) $group_context['mapped'],
@@ -7470,6 +8006,7 @@ $filters = [
                                 $reference_code = '';
                                 $error_message  = '';
                                 $location_label = $this->describe_inventory_location_for_note( $group_context );
+                                $api_request    = $restore_stock;
 
                                 try {
                                         $result        = $this->contifico->transfer_stock( json_encode( $restore_stock ) );
@@ -7482,6 +8019,16 @@ $filters = [
                                                 $reason_label,
                                                 $reference_code
                                         ) );
+                                        $this->log_api_transaction(
+                                                'transfer_stock_restore',
+                                                [
+                                                        'order_id'       => $order_id,
+                                                        'payload'        => $api_request,
+                                                        'location_label' => $location_label,
+                                                        'reason'         => $reason_label,
+                                                ],
+                                                $result
+                                        );
                                 } catch ( Exception $exception ) {
                                         $status        = 'error';
                                         $error_message = $exception->getMessage();
@@ -7490,6 +8037,16 @@ $filters = [
                                                 $location_label,
                                                 $error_message
                                         ) );
+                                        $this->log_api_transaction(
+                                                'transfer_stock_restore_error',
+                                                [
+                                                        'order_id'       => $order_id,
+                                                        'payload'        => $api_request,
+                                                        'location_label' => $location_label,
+                                                        'reason'         => $reason_label,
+                                                ],
+                                                $error_message
+                                        );
                                 }
 
                                 if ( ! empty( $group_entries ) ) {
