@@ -2879,170 +2879,122 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                 }
         }
 
-        /**
-         * Cache and persist the preferred warehouse allocation breakdown for an order item.
-         *
-         * @since 4.4.0
-         */
-        private function store_item_preferred_allocations( WC_Order $order, WC_Order_Item $item, array $allocations ) : void {
-                if ( empty( $allocations ) ) {
-                        return;
-                }
+    /**
+     * Cache and persist the preferred warehouse allocation breakdown for an order item.
+     *
+     * @since 4.4.0
+     */
+    private function store_item_preferred_allocations( WC_Order $order, WC_Order_Item $item, array $allocations ) : void {
+            if ( empty( $allocations ) ) {
+                    return;
+            }
 
-		$filtered = [];
+            $filtered = [];
 
-                foreach ( $allocations as $allocation ) {
-                        $code = isset( $allocation['code'] ) ? (string) $allocation['code'] : '';
+            foreach ( $allocations as $allocation ) {
+                    $code     = isset( $allocation['code'] ) ? (string) $allocation['code'] : '';
+                    $quantity = isset( $allocation['quantity'] ) ? (float) $allocation['quantity'] : 0.0;
 
-                        if ( '' === $code ) {
-                                continue;
-                        }
+                    if ( '' === $code || $quantity <= 0.0 ) {
+                            continue;
+                    }
 
-			$quantity = isset( $allocation['quantity'] ) ? (float) $allocation['quantity'] : 0.0;
+                    $filtered[] = [
+                            'code'         => strtoupper( $code ),
+                            'warehouse_id' => isset( $allocation['warehouse_id'] ) ? (string) $allocation['warehouse_id'] : '',
+                            'quantity'     => $quantity,
+                    ];
+            }
 
-			if ( $quantity <= 0.0 ) {
-				continue;
-			}
+            if ( empty( $filtered ) ) {
+                    return;
+            }
 
-                        $warehouse_id = isset( $allocation['warehouse_id'] ) ? (string) $allocation['warehouse_id'] : '';
+            $order_id = $order->get_id();
+            $item_id  = $item->get_id();
 
-                        $filtered[] = [
-                                'code'         => strtoupper( $code ),
-                                'warehouse_id' => $warehouse_id,
-                                'quantity'     => $quantity,
-                        ];
-                }
+            if ( ! isset( $this->preferred_item_allocations[ $order_id ] ) ) {
+                    $this->preferred_item_allocations[ $order_id ] = [];
+            }
 
-		if ( empty( $filtered ) ) {
-			return;
-		}
+            $this->preferred_item_allocations[ $order_id ][ $item_id ] = $filtered;
 
-		$order_id = $order->get_id();
-		$item_id  = $item->get_id();
+            if ( $item_id > 0 ) {
+                    $item->update_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $filtered );
+                    $item->save();
+            } else {
+                    $item->add_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $filtered, true );
+            }
+    }
 
-		if ( ! isset( $this->preferred_item_allocations[ $order_id ] ) ) {
-			$this->preferred_item_allocations[ $order_id ] = [];
-		}
+    /**
+     * Retrieve the stored preferred allocation map for an order item, hydrating refunds when needed.
+     *
+     * @since 4.4.0
+     */
+    private function get_item_preferred_allocations( WC_Order $order, WC_Order_Item $item ) : array {
+            $order_id = $order->get_id();
+            $item_id  = $item->get_id();
 
-		$this->preferred_item_allocations[ $order_id ][ $item_id ] = $filtered;
+            if ( isset( $this->preferred_item_allocations[ $order_id ][ $item_id ] ) ) {
+                    return $this->preferred_item_allocations[ $order_id ][ $item_id ];
+            }
 
-		if ( $item_id > 0 ) {
-			$item->update_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $filtered );
-			$item->save();
-		} else {
-			$item->add_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $filtered, true );
-		}
-	}
+            $stored_allocations = $item->get_meta( self::ORDER_ITEM_ALLOCATION_META_KEY, true );
 
-		if ( $item_id > 0 ) {
-			$item->update_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $filtered );
-			$item->save();
-		} else {
-			$item->add_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $filtered, true );
-		}
-	}
+            if ( empty( $stored_allocations ) ) {
+                    $refunded_item_id = (int) $item->get_meta( '_refunded_item_id', true );
 
-                if ( isset( $this->preferred_item_allocations[ $order_id ][ $item_id ] ) ) {
-                        return $this->preferred_item_allocations[ $order_id ][ $item_id ];
-                }
+                    if ( $refunded_item_id > 0 ) {
+                            $refunded_item = $order->get_item( $refunded_item_id );
 
-                $stored_allocations = $item->get_meta( self::ORDER_ITEM_ALLOCATION_META_KEY, true );
+                            if ( $refunded_item instanceof WC_Order_Item ) {
+                                    $stored_allocations = $refunded_item->get_meta( self::ORDER_ITEM_ALLOCATION_META_KEY, true );
 
-                if ( empty( $stored_allocations ) ) {
-                        $refunded_item_id = (int) $item->get_meta( '_refunded_item_id', true );
+                                    if ( '' === (string) $item->get_meta( self::ORDER_ITEM_WAREHOUSE_META_KEY, true ) ) {
+                                            $refunded_origin = (string) $refunded_item->get_meta( self::ORDER_ITEM_WAREHOUSE_META_KEY, true );
 
-                        if ( $refunded_item_id > 0 ) {
-                                $refunded_item = $order->get_item( $refunded_item_id );
+                                            if ( '' !== $refunded_origin ) {
+                                                    $item->add_meta_data( self::ORDER_ITEM_WAREHOUSE_META_KEY, $refunded_origin, true );
+                                            }
+                                    }
 
-                                if ( $refunded_item instanceof WC_Order_Item ) {
-                                        $stored_allocations = $refunded_item->get_meta( self::ORDER_ITEM_ALLOCATION_META_KEY, true );
+                                    if ( ! empty( $stored_allocations ) ) {
+                                            $item->add_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $stored_allocations, true );
+                                            $item->save();
+                                    }
+                            }
+                    }
+            }
 
-                                        if ( ! empty( $stored_allocations ) ) {
-                                                $item->add_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $stored_allocations, true );
-                                                $item->save();
-                                        }
-                                }
-                        }
-                }
+            $parsed_allocations = [];
 
-                $this->preferred_item_allocations[ $order_id ][ $item_id ] = $filtered;
+            if ( is_array( $stored_allocations ) ) {
+                    foreach ( $stored_allocations as $allocation ) {
+                            $code         = isset( $allocation['code'] ) ? (string) $allocation['code'] : '';
+                            $warehouse_id = isset( $allocation['warehouse_id'] ) ? (string) $allocation['warehouse_id'] : '';
+                            $quantity     = isset( $allocation['quantity'] ) ? (float) $allocation['quantity'] : 0.0;
 
-                if ( $item_id > 0 ) {
-                        $item->update_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $filtered );
-                        $item->save();
-                } else {
-                        $item->add_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $filtered, true );
-                }
-        }
+                            if ( '' === $code || $quantity <= 0.0 ) {
+                                    continue;
+                            }
 
-        /**
-         * Retrieve the stored preferred allocation map for an order item, hydrating refunds when needed.
-         *
-         * @since 4.4.0
-         */
-        private function get_item_preferred_allocations( WC_Order $order, WC_Order_Item $item ) : array {
-                $order_id = $order->get_id();
-                $item_id  = $item->get_id();
+                            $parsed_allocations[] = [
+                                    'code'         => strtoupper( $code ),
+                                    'warehouse_id' => $warehouse_id,
+                                    'quantity'     => $quantity,
+                            ];
+                    }
+            }
 
-                if ( isset( $this->preferred_item_allocations[ $order_id ][ $item_id ] ) ) {
-                        return $this->preferred_item_allocations[ $order_id ][ $item_id ];
-                }
+            if ( empty( $parsed_allocations ) ) {
+                    return [];
+            }
 
-                $stored_allocations = $item->get_meta( self::ORDER_ITEM_ALLOCATION_META_KEY, true );
+            $this->preferred_item_allocations[ $order_id ][ $item_id ] = $parsed_allocations;
 
-                if ( empty( $stored_allocations ) ) {
-                        $refunded_item_id = (int) $item->get_meta( '_refunded_item_id', true );
-
-                        if ( $refunded_item_id > 0 ) {
-                                $refunded_item = $order->get_item( $refunded_item_id );
-
-                                if ( $refunded_item instanceof WC_Order_Item ) {
-                                        $stored_allocations = $refunded_item->get_meta( self::ORDER_ITEM_ALLOCATION_META_KEY, true );
-
-                                        if ( '' === (string) $item->get_meta( self::ORDER_ITEM_WAREHOUSE_META_KEY, true ) ) {
-                                                $refunded_origin = (string) $refunded_item->get_meta( self::ORDER_ITEM_WAREHOUSE_META_KEY, true );
-
-                                                if ( '' !== $refunded_origin ) {
-                                                        $item->add_meta_data( self::ORDER_ITEM_WAREHOUSE_META_KEY, $refunded_origin, true );
-                                                }
-                                        }
-
-                                        if ( ! empty( $stored_allocations ) ) {
-                                                $item->add_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $stored_allocations, true );
-                                                $item->save();
-                                        }
-                                }
-                        }
-                }
-
-                $parsed_allocations = [];
-
-                if ( is_array( $stored_allocations ) ) {
-                        foreach ( $stored_allocations as $allocation ) {
-                                $code         = isset( $allocation['code'] ) ? (string) $allocation['code'] : '';
-                                $warehouse_id = isset( $allocation['warehouse_id'] ) ? (string) $allocation['warehouse_id'] : '';
-                                $quantity     = isset( $allocation['quantity'] ) ? (float) $allocation['quantity'] : 0.0;
-
-                                if ( '' === $code || $quantity <= 0.0 ) {
-                                        continue;
-                                }
-
-                                $parsed_allocations[] = [
-                                        'code'         => strtoupper( $code ),
-                                        'warehouse_id' => $warehouse_id,
-                                        'quantity'     => $quantity,
-                                ];
-                        }
-                }
-
-                if ( empty( $parsed_allocations ) ) {
-                        return [];
-                }
-
-                $this->preferred_item_allocations[ $order_id ][ $item_id ] = $parsed_allocations;
-
-                return $parsed_allocations;
-        }
+            return $parsed_allocations;
+    }
 
         private function build_preferred_warehouse_allocations( int $order_id, string $product_id, float $quantity, array $preferred_codes, array $stock_by_warehouse ) : array {
                 $allocations = [];

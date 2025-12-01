@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.62 =
+* Ajusta el guardado y la hidratación de asignaciones preferidas para evitar errores de sintaxis al leer los ítems refundados y garantizar que el código de bodega original se replique antes de calcular transferencias.
+
 = 4.1.61 =
 * Corrige un error de sintaxis al reconstruir las asignaciones de bodegas preferidas en reembolsos y copia el código de bodega de origen a los ítems reembolsados para repetir correctamente las transferencias.
 
