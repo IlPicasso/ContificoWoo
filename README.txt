@@ -83,6 +83,15 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.59 =
+* Conserva las asignaciones de bodegas preferidas dentro de cada ítem de la orden para que las cancelaciones y reembolsos generen las transferencias desde todas las bodegas originales.
+
+= 4.1.58 =
+* Evita que el cálculo de stock disponible por bodega se consuma entre productos distintos al asignar bodegas preferidas, garantizando que se transfieran todas las unidades solicitadas cuando hay inventario suficiente en varias bodegas.
+
+= 4.1.57 =
+* Corrige la distribución de transferencias hacia la bodega de facturación cuando un mismo producto se abastece desde múltiples bodegas preferidas, enviando solicitudes separadas por bodega disponible.
+
 = 4.1.56 =
 * Al visitar la pestaña de movimientos desde la alerta del dashboard se marcan los errores como revisados para que la notificación desaparezca después de consultarla.
 
