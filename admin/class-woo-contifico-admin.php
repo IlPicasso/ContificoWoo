@@ -7541,9 +7541,11 @@ $filters = [
                                 return $product_id_cache[ $sku ];
                         };
 
-                        $product_ids_for_stock = [];
-                        $origin_codes_for_stock = [];
-                        $origin_code_id_map     = [];
+                        $product_ids_for_stock           = [];
+                        $origin_codes_for_stock          = [];
+                        $origin_code_id_map              = [];
+                        $stock_lookup_products           = [];
+                        $stock_lookup_origin_breakdown   = [];
 
                         foreach ( $grouped_items as $group ) {
                                 foreach ( $group['items'] as $item ) {
@@ -7558,10 +7560,103 @@ $filters = [
                                         }
 
                                         $product_id = $resolve_product_id( $item, $wc_product );
+                                        $sku        = (string) $wc_product->get_sku();
 
                                         if ( '' !== $product_id ) {
                                                 $product_ids_for_stock[] = $product_id;
+
+                                                if ( ! isset( $stock_lookup_products[ $product_id ] ) ) {
+                                                        $stock_lookup_products[ $product_id ] = [
+                                                                'skus'                      => [],
+                                                                'order_item_ids'            => [],
+                                                                'total_requested_quantity'  => 0.0,
+                                                                'item_quantities'           => [],
+                                                        ];
+                                                }
+
+                                                $stock_lookup_products[ $product_id ]['skus'][ $sku ]             = true;
+                                                $stock_lookup_products[ $product_id ]['order_item_ids'][]         = $item->get_id();
                                         }
+                                }
+
+                                $origin_context = isset( $group['origin_context'] ) && is_array( $group['origin_context'] ) ? $group['origin_context'] : [];
+                                $group_origin_code = isset( $origin_context['code'] ) ? (string) $origin_context['code'] : '';
+                                $group_origin_id   = isset( $origin_context['id'] ) ? (string) $origin_context['id'] : '';
+
+                                if ( '' === $group_origin_code ) {
+                                        $group_origin_code = $origin_code;
+                                }
+
+                                if ( '' === $group_origin_id ) {
+                                        $group_origin_id = $id_origin_warehouse;
+                                }
+
+                                if ( '' !== $group_origin_code ) {
+                                        $origin_codes_for_stock[]              = $group_origin_code;
+                                        $origin_code_id_map[ $group_origin_code ] = $group_origin_id;
+                                }
+
+                                $group_context    = isset( $group['context'] ) && is_array( $group['context'] ) ? $group['context'] : [];
+                                $origin_context   = isset( $group['origin_context'] ) && is_array( $group['origin_context'] ) ? $group['origin_context'] : [];
+                                $group_items_plan = [];
+
+                                foreach ( $group['items'] as $index => $group_item ) {
+                                        if ( ! is_a( $group_item, 'WC_Order_Item_Product' ) ) {
+                                                continue;
+                                        }
+
+                                        $wc_product = $group_item->get_product();
+                                        $quantity   = isset( $group['item_quantities'][ $index ] )
+                                                ? (float) $group['item_quantities'][ $index ]
+                                                : (float) $group_item->get_quantity();
+
+                                        if ( ! $wc_product ) {
+                                                continue;
+                                        }
+
+                                        $group_items_plan[] = [
+                                                'order_item_id' => $group_item->get_id(),
+                                                'product_id'    => $resolve_product_id( $group_item, $wc_product ),
+                                                'sku'           => (string) $wc_product->get_sku(),
+                                                'quantity'      => $quantity,
+                                                'price'         => (float) $wc_product->get_price(),
+                                                'origin_context'=> isset( $group['origin_contexts'][ $index ] ) && is_array( $group['origin_contexts'][ $index ] )
+                                                        ? $group['origin_contexts'][ $index ]
+                                                        : $origin_context,
+                                        ];
+
+                                        $resolved_product_id = $group_items_plan[ array_key_last( $group_items_plan ) ]['product_id'];
+                                        $resolved_sku         = $group_items_plan[ array_key_last( $group_items_plan ) ]['sku'];
+
+                                        if ( '' !== $resolved_product_id ) {
+                                                $stock_lookup_products[ $resolved_product_id ]['total_requested_quantity'] += $quantity;
+                                                $stock_lookup_products[ $resolved_product_id ]['item_quantities'][]         = [
+                                                        'order_item_id' => $group_item->get_id(),
+                                                        'sku'           => $resolved_sku,
+                                                        'quantity'      => $quantity,
+                                                        'origin_code'   => $group_origin_code,
+                                                ];
+
+                                                if ( '' !== $group_origin_code ) {
+                                                        if ( ! isset( $stock_lookup_origin_breakdown[ $group_origin_code ] ) ) {
+                                                                $stock_lookup_origin_breakdown[ $group_origin_code ] = [];
+                                                        }
+
+                                                        if ( ! isset( $stock_lookup_origin_breakdown[ $group_origin_code ][ $resolved_product_id ] ) ) {
+                                                                $stock_lookup_origin_breakdown[ $group_origin_code ][ $resolved_product_id ] = 0.0;
+                                                        }
+
+                                                        $stock_lookup_origin_breakdown[ $group_origin_code ][ $resolved_product_id ] += $quantity;
+                                                }
+                                        }
+                                }
+
+                                if ( ! empty( $group_items_plan ) ) {
+                                        $restore_plan_groups[] = [
+                                                'destination_context' => $group_context,
+                                                'origin_context'      => $origin_context,
+                                                'items'               => $group_items_plan,
+                                        ];
                                 }
 
                                 $origin_context = isset( $group['origin_context'] ) && is_array( $group['origin_context'] ) ? $group['origin_context'] : [];
@@ -7636,15 +7731,39 @@ $filters = [
                                 );
                         }
 
-                        $product_ids_for_stock = array_values( array_unique( $product_ids_for_stock ) );
-                        $origin_codes_for_stock = array_values( array_unique( array_filter( array_map( 'trim', $origin_codes_for_stock ) ) ) );
-                        $stock_lookup_failed   = false;
+                        if ( ! empty( $restore_plan_groups ) ) {
+                                $this->log_api_transaction(
+                                        'transfer_stock_restore_plan',
+                                        [
+                                                'order_id'                => $order_id,
+                                                'trigger'                 => $trigger,
+                                                'reason'                  => $reason_label,
+                                                'default_origin_code'     => $origin_code,
+                                                'default_origin_id'       => $id_origin_warehouse,
+                                                'default_destination'     => $destination_code,
+                                                'group_count'             => count( $restore_plan_groups ),
+                                                'grouped_items'           => $restore_plan_groups,
+                                        ]
+                                );
+                        }
+
+                        $product_ids_for_stock   = array_values( array_unique( $product_ids_for_stock ) );
+                        $origin_codes_for_stock  = array_values( array_unique( array_filter( array_map( 'trim', $origin_codes_for_stock ) ) ) );
+                        $stock_lookup_failed     = false;
+
+                        foreach ( $stock_lookup_products as $product_id => $product_context ) {
+                                $stock_lookup_products[ $product_id ]['skus']             = array_values( array_unique( array_keys( $product_context['skus'] ) ) );
+                                $stock_lookup_products[ $product_id ]['order_item_ids']    = array_values( array_unique( $product_context['order_item_ids'] ) );
+                                $stock_lookup_products[ $product_id ]['total_requested_quantity'] = (float) $product_context['total_requested_quantity'];
+                        }
 
                         if ( ! empty( $product_ids_for_stock ) && ! empty( $origin_codes_for_stock ) ) {
                                 $stock_lookup_request = [
                                         'order_id'    => $order_id,
                                         'warehouses'  => $origin_codes_for_stock,
                                         'product_ids' => $product_ids_for_stock,
+                                        'products'    => $stock_lookup_products,
+                                        'origin_breakdown' => $stock_lookup_origin_breakdown,
                                 ];
 
                                 try {

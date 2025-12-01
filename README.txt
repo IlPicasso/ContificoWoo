@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.70 =
+* Registra el detalle de los IDs de producto, SKUs y cantidades solicitadas por bodega al consultar stock para devoluciones, facilitando saber qué intenta devolver el plugin.
+
 = 4.1.69 =
 * Añade una nota en la orden y un registro dedicado que indica la ubicación del log de Contífico cuando se intenta devolver stock.
 
