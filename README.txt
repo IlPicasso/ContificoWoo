@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.71 =
+* Refresca las consultas de stock directamente desde Contífico al devolver inventario y registra el mapeo de bodegas utilizado para saber qué IDs se solicitaron.
+
 = 4.1.70 =
 * Registra el detalle de los IDs de producto, SKUs y cantidades solicitadas por bodega al consultar stock para devoluciones, facilitando saber qué intenta devolver el plugin.
 

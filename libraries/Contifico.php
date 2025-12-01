@@ -562,10 +562,11 @@ class Contifico
          *
          * @param array $warehouse_codes
          * @param array $product_ids
+         * @param bool  $force_refresh Force a fresh API lookup instead of using cached stock.
          *
          * @return array<string,array>
          */
-        public function get_warehouses_stock( array $warehouse_codes, array $product_ids = [] ) : array {
+        public function get_warehouses_stock( array $warehouse_codes, array $product_ids = [], bool $force_refresh = false ) : array {
                 $stocks = [];
 
                 if ( empty( $warehouse_codes ) ) {
@@ -608,7 +609,7 @@ class Contifico
                                 continue;
                         }
 
-                        $product_stock = $this->get_product_stock_by_warehouses( $product_id );
+                        $product_stock = $this->get_product_stock_by_warehouses( $product_id, $force_refresh );
 
                         if ( empty( $product_stock ) ) {
                                 continue;

@@ -7659,6 +7659,14 @@ $filters = [
                                         ];
                                 }
 
+                                if ( ! empty( $group_items_plan ) ) {
+                                        $restore_plan_groups[] = [
+                                                'destination_context' => $group_context,
+                                                'origin_context'      => $origin_context,
+                                                'items'               => $group_items_plan,
+                                        ];
+                                }
+
                                 $origin_context = isset( $group['origin_context'] ) && is_array( $group['origin_context'] ) ? $group['origin_context'] : [];
                                 $group_origin_code = isset( $origin_context['code'] ) ? (string) $origin_context['code'] : '';
                                 $group_origin_id   = isset( $origin_context['id'] ) ? (string) $origin_context['id'] : '';
@@ -7731,22 +7739,6 @@ $filters = [
                                 );
                         }
 
-                        if ( ! empty( $restore_plan_groups ) ) {
-                                $this->log_api_transaction(
-                                        'transfer_stock_restore_plan',
-                                        [
-                                                'order_id'                => $order_id,
-                                                'trigger'                 => $trigger,
-                                                'reason'                  => $reason_label,
-                                                'default_origin_code'     => $origin_code,
-                                                'default_origin_id'       => $id_origin_warehouse,
-                                                'default_destination'     => $destination_code,
-                                                'group_count'             => count( $restore_plan_groups ),
-                                                'grouped_items'           => $restore_plan_groups,
-                                        ]
-                                );
-                        }
-
                         $product_ids_for_stock   = array_values( array_unique( $product_ids_for_stock ) );
                         $origin_codes_for_stock  = array_values( array_unique( array_filter( array_map( 'trim', $origin_codes_for_stock ) ) ) );
                         $stock_lookup_failed     = false;
@@ -7759,15 +7751,17 @@ $filters = [
 
                         if ( ! empty( $product_ids_for_stock ) && ! empty( $origin_codes_for_stock ) ) {
                                 $stock_lookup_request = [
-                                        'order_id'    => $order_id,
-                                        'warehouses'  => $origin_codes_for_stock,
-                                        'product_ids' => $product_ids_for_stock,
-                                        'products'    => $stock_lookup_products,
-                                        'origin_breakdown' => $stock_lookup_origin_breakdown,
+                                        'order_id'           => $order_id,
+                                        'warehouses'         => $origin_codes_for_stock,
+                                        'warehouse_id_map'   => $origin_code_id_map,
+                                        'product_ids'        => $product_ids_for_stock,
+                                        'products'           => $stock_lookup_products,
+                                        'origin_breakdown'   => $stock_lookup_origin_breakdown,
+                                        'force_refresh'      => true,
                                 ];
 
                                 try {
-                                        $warehouse_stock = $this->contifico->get_warehouses_stock( $origin_codes_for_stock, $product_ids_for_stock );
+                                        $warehouse_stock = $this->contifico->get_warehouses_stock( $origin_codes_for_stock, $product_ids_for_stock, true );
                                         $origin_stock    = is_array( $warehouse_stock ) ? $warehouse_stock : [];
 
                                         $this->log_api_transaction( 'transfer_stock_restore_stock_lookup', $stock_lookup_request, $origin_stock );
