@@ -45,17 +45,18 @@ class Woo_Contifico_Admin {
 	private const SYNC_DEBUG_TRANSIENT_KEY    = 'woo_contifico_sync_debug_entries';
 	private const SYNC_RESULT_TRANSIENT_KEY   = 'woo_sync_result';
 	private const MANUAL_SYNC_STATE_OPTION    = 'woo_contifico_manual_sync_state';
-	private const MANUAL_SYNC_HISTORY_OPTION  = 'woo_contifico_manual_sync_history';
-	private const INVENTORY_MOVEMENTS_STORAGE = 'woo_contifico_inventory_movements';
-        private const INVENTORY_MOVEMENTS_TRANSIENT = 'woo_contifico_inventory_movements';
-        private const INVENTORY_MOVEMENTS_MAX_ENTRIES = 250;
-        private const INVENTORY_MOVEMENTS_HISTORY_RUNS = 'woo_contifico_inventory_movements_history_runs';
-        private const INVENTORY_ALERTS_REVIEWED_AT = 'woo_contifico_inventory_alerts_reviewed_at';
-        private const MAX_INVOICE_SEQUENTIAL_RETRIES = 5;
-        private const MANUAL_SYNC_CANCEL_TRANSIENT = 'woo_contifico_manual_sync_cancel';
-        private const MANUAL_SYNC_KEEPALIVE_HOOK    = 'woo_contifico_manual_sync_keepalive';
-        private const PRODUCT_ID_META_KEY         = '_woo_contifico_product_id';
-        private const ORDER_ITEM_WAREHOUSE_META_KEY = '_woo_contifico_source_warehouse';
+private const MANUAL_SYNC_HISTORY_OPTION  = 'woo_contifico_manual_sync_history';
+private const INVENTORY_MOVEMENTS_STORAGE = 'woo_contifico_inventory_movements';
+private const INVENTORY_MOVEMENTS_TRANSIENT = 'woo_contifico_inventory_movements';
+private const INVENTORY_MOVEMENTS_MAX_ENTRIES = 250;
+private const INVENTORY_MOVEMENTS_HISTORY_RUNS = 'woo_contifico_inventory_movements_history_runs';
+private const INVENTORY_ALERTS_REVIEWED_AT = 'woo_contifico_inventory_alerts_reviewed_at';
+private const MAX_INVOICE_SEQUENTIAL_RETRIES = 5;
+private const MANUAL_SYNC_CANCEL_TRANSIENT = 'woo_contifico_manual_sync_cancel';
+private const MANUAL_SYNC_KEEPALIVE_HOOK    = 'woo_contifico_manual_sync_keepalive';
+private const PRODUCT_ID_META_KEY         = '_woo_contifico_product_id';
+private const ORDER_ITEM_WAREHOUSE_META_KEY = '_woo_contifico_source_warehouse';
+private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocations';
 
 	/**
 	 * The ID of this plugin.
@@ -2883,54 +2884,112 @@ class Woo_Contifico_Admin {
                         return;
                 }
 
-                $filtered = [];
+		$filtered = [];
 
-                foreach ( $allocations as $allocation ) {
-                        if ( empty( $allocation['code'] ) ) {
-                                continue;
-                        }
+		foreach ( $allocations as $allocation ) {
+			if ( empty( $allocation['code'] ) ) {
+				continue;
+			}
 
-                        $quantity = isset( $allocation['quantity'] ) ? (float) $allocation['quantity'] : 0.0;
+			$quantity = isset( $allocation['quantity'] ) ? (float) $allocation['quantity'] : 0.0;
 
-                        if ( $quantity <= 0.0 ) {
-                                continue;
-                        }
+			if ( $quantity <= 0.0 ) {
+				continue;
+			}
 
-                        $filtered[] = [
-                                'code'         => (string) $allocation['code'],
-                                'warehouse_id' => isset( $allocation['warehouse_id'] ) ? (string) $allocation['warehouse_id'] : '',
-                                'quantity'     => $quantity,
-                        ];
-                }
+			$filtered[] = [
+				'code'         => (string) $allocation['code'],
+				'warehouse_id' => isset( $allocation['warehouse_id'] ) ? (string) $allocation['warehouse_id'] : '',
+				'quantity'     => $quantity,
+			];
+		}
 
-                if ( empty( $filtered ) ) {
-                        return;
-                }
+		if ( empty( $filtered ) ) {
+			return;
+		}
 
-                $order_id = $order->get_id();
-                $item_id  = $item->get_id();
+		$order_id = $order->get_id();
+		$item_id  = $item->get_id();
 
-                if ( ! isset( $this->preferred_item_allocations[ $order_id ] ) ) {
-                        $this->preferred_item_allocations[ $order_id ] = [];
-                }
+		if ( ! isset( $this->preferred_item_allocations[ $order_id ] ) ) {
+			$this->preferred_item_allocations[ $order_id ] = [];
+		}
 
-                $this->preferred_item_allocations[ $order_id ][ $item_id ] = $filtered;
-        }
+		$this->preferred_item_allocations[ $order_id ][ $item_id ] = $filtered;
+
+		if ( $item_id > 0 ) {
+			$item->update_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $filtered );
+			$item->save();
+		} else {
+			$item->add_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $filtered, true );
+		}
+	}
 
         private function get_item_preferred_allocations( WC_Order $order, WC_Order_Item $item ) : array {
                 $order_id = $order->get_id();
                 $item_id  = $item->get_id();
 
-                if ( ! isset( $this->preferred_item_allocations[ $order_id ][ $item_id ] ) ) {
+                if ( isset( $this->preferred_item_allocations[ $order_id ][ $item_id ] ) ) {
+                        return $this->preferred_item_allocations[ $order_id ][ $item_id ];
+                }
+
+                $stored_allocations = $item->get_meta( self::ORDER_ITEM_ALLOCATION_META_KEY, true );
+
+                if ( empty( $stored_allocations ) ) {
+                        $refunded_item_id = (int) $item->get_meta( '_refunded_item_id', true );
+
+                        if ( $refunded_item_id > 0 ) {
+                                $refunded_item = $order->get_item( $refunded_item_id );
+
+                                if ( $refunded_item instanceof WC_Order_Item ) {
+                                        $stored_allocations = $refunded_item->get_meta( self::ORDER_ITEM_ALLOCATION_META_KEY, true );
+
+                                        if ( ! empty( $stored_allocations ) ) {
+                                                $item->add_meta_data( self::ORDER_ITEM_ALLOCATION_META_KEY, $stored_allocations, true );
+                                                $item->save();
+                                        }
+                                }
+                        }
+                }
+
+                $parsed_allocations = [];
+
+                if ( is_array( $stored_allocations ) ) {
+                        foreach ( $stored_allocations as $allocation ) {
+                                $code         = isset( $allocation['code'] ) ? (string) $allocation['code'] : '';
+                                $warehouse_id = isset( $allocation['warehouse_id'] ) ? (string) $allocation['warehouse_id'] : '';
+                                $quantity     = isset( $allocation['quantity'] ) ? (float) $allocation['quantity'] : 0.0;
+
+                                if ( '' === $code || $quantity <= 0.0 ) {
+                                        continue;
+                                }
+
+                                $parsed_allocations[] = [
+                                        'code'         => strtoupper( $code ),
+                                        'warehouse_id' => $warehouse_id,
+                                        'quantity'     => $quantity,
+                                ];
+                        }
+                }
+
+                if ( empty( $parsed_allocations ) ) {
                         return [];
                 }
 
-                return $this->preferred_item_allocations[ $order_id ][ $item_id ];
+                $this->preferred_item_allocations[ $order_id ][ $item_id ] = $parsed_allocations;
+
+                return $parsed_allocations;
         }
 
-        private function build_preferred_warehouse_allocations( int $order_id, float $quantity, array $preferred_codes, array $stock_by_warehouse ) : array {
+        private function build_preferred_warehouse_allocations( int $order_id, string $product_id, float $quantity, array $preferred_codes, array $stock_by_warehouse ) : array {
                 $allocations = [];
                 $needed      = $quantity;
+
+                $product_id = trim( $product_id );
+
+                if ( '' === $product_id ) {
+                        return [];
+                }
 
                 foreach ( $preferred_codes as $code ) {
                         $warehouse_id = (string) ( $this->contifico->get_id_bodega( $code ) ?? '' );
@@ -2944,8 +3003,8 @@ class Woo_Contifico_Admin {
                         }
 
                         $available = (float) $stock_by_warehouse[ $warehouse_id ];
-                        $allocated = isset( $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] )
-                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ]
+                        $allocated = isset( $this->preferred_warehouse_allocations[ $order_id ][ $product_id ][ $warehouse_id ] )
+                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $product_id ][ $warehouse_id ]
                                 : 0.0;
 
                         $remaining = $available - $allocated;
@@ -2966,7 +3025,7 @@ class Woo_Contifico_Admin {
                                 'quantity'     => $take,
                         ];
 
-                        $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] = $allocated + $take;
+                        $this->preferred_warehouse_allocations[ $order_id ][ $product_id ][ $warehouse_id ] = $allocated + $take;
 
                         $needed -= $take;
 
@@ -3025,6 +3084,23 @@ class Woo_Contifico_Admin {
 
                 $stored_code = (string) $item->get_meta( self::ORDER_ITEM_WAREHOUSE_META_KEY, true );
 
+                if ( '' === $stored_code ) {
+                        $refunded_item_id = (int) $item->get_meta( '_refunded_item_id', true );
+
+                        if ( $refunded_item_id > 0 ) {
+                                $refunded_item = $order->get_item( $refunded_item_id );
+
+                                if ( $refunded_item instanceof WC_Order_Item ) {
+                                        $stored_code = (string) $refunded_item->get_meta( self::ORDER_ITEM_WAREHOUSE_META_KEY, true );
+
+                                        if ( '' !== $stored_code ) {
+                                                $item->add_meta_data( self::ORDER_ITEM_WAREHOUSE_META_KEY, $stored_code, true );
+                                                $item->save();
+                                        }
+                                }
+                        }
+                }
+
                 $wc_product = $item->get_product();
 
                 if ( ! $wc_product ) {
@@ -3056,9 +3132,9 @@ class Woo_Contifico_Admin {
                         $warehouse_id = (string) ( $this->contifico->get_id_bodega( $stored_code ) ?? '' );
 
                         if ( '' !== $warehouse_id ) {
-                                $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] = (
-                                        isset( $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ] )
-                                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $warehouse_id ]
+                                $this->preferred_warehouse_allocations[ $order_id ][ $product_id ][ $warehouse_id ] = (
+                                        isset( $this->preferred_warehouse_allocations[ $order_id ][ $product_id ][ $warehouse_id ] )
+                                                ? (float) $this->preferred_warehouse_allocations[ $order_id ][ $product_id ][ $warehouse_id ]
                                                 : 0.0
                                 ) + $quantity;
 
@@ -3073,7 +3149,7 @@ class Woo_Contifico_Admin {
                 }
 
                 if ( empty( $allocations ) ) {
-                        $allocations = $this->build_preferred_warehouse_allocations( $order_id, $quantity, $preferred_codes, $stock_by_warehouse );
+                        $allocations = $this->build_preferred_warehouse_allocations( $order_id, $product_id, $quantity, $preferred_codes, $stock_by_warehouse );
                 }
 
                 if ( empty( $allocations ) ) {
@@ -3630,9 +3706,9 @@ class Woo_Contifico_Admin {
                                 continue;
                         }
 
+                        $context   = $this->resolve_order_item_location_inventory_context( $order, $item, $default_code, $default_id );
                         $allocations = $this->get_item_preferred_allocations( $order, $item );
-                        $context     = $this->resolve_order_item_location_inventory_context( $order, $item, $default_code, $default_id );
-                        $group_key   = $context['id'] ?: $context['code'];
+                        $group_key = $context['id'] ?: $context['code'];
 
                         $item_quantity = (float) $item->get_quantity();
 
