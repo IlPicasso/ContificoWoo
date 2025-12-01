@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.67 =
+* Registra las consultas de stock y las decisiones de devolución por SKU al cancelar o reembolsar para diagnosticar por qué se marca falta de stock en la bodega de facturación.
+
 = 4.1.66 =
 * Añade registros detallados para intentos de restitución sin stock o con stock insuficiente, incluyendo la bodega origen y cantidades solicitadas.
 

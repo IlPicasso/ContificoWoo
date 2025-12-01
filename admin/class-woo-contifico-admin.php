@@ -7559,15 +7559,29 @@ $filters = [
                         $stock_lookup_failed   = false;
 
                         if ( ! empty( $product_ids_for_stock ) && ! empty( $origin_codes_for_stock ) ) {
+                                $stock_lookup_request = [
+                                        'order_id'    => $order_id,
+                                        'warehouses'  => $origin_codes_for_stock,
+                                        'product_ids' => $product_ids_for_stock,
+                                ];
+
                                 try {
                                         $warehouse_stock = $this->contifico->get_warehouses_stock( $origin_codes_for_stock, $product_ids_for_stock );
                                         $origin_stock    = is_array( $warehouse_stock ) ? $warehouse_stock : [];
+
+                                        $this->log_api_transaction( 'transfer_stock_restore_stock_lookup', $stock_lookup_request, $origin_stock );
                                 } catch ( Exception $exception ) {
                                         $stock_lookup_failed = true;
                                         $order->add_order_note( sprintf(
                                                 __( '<b>Contífico:</b><br>No se pudo consultar el stock disponible en la bodega de facturación: %s', $this->plugin_name ),
                                                 $exception->getMessage()
                                         ) );
+
+                                        $this->log_api_transaction(
+                                                'transfer_stock_restore_stock_lookup_error',
+                                                $stock_lookup_request,
+                                                $exception->getMessage()
+                                        );
                                 }
                         }
 
@@ -7587,11 +7601,31 @@ $filters = [
 
                                         try {
                                                 $origin_stock[ $stock_code ] = $this->contifico->get_stock( $fallback_id );
+
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_stock_fallback',
+                                                        [
+                                                                'order_id'       => $order_id,
+                                                                'warehouse_code' => $stock_code,
+                                                                'warehouse_id'   => $fallback_id,
+                                                        ],
+                                                        $origin_stock[ $stock_code ]
+                                                );
                                         } catch ( Exception $exception ) {
                                                 $order->add_order_note( sprintf(
                                                         __( '<b>Contífico:</b><br>No se pudo consultar el stock disponible en la bodega de facturación: %s', $this->plugin_name ),
                                                         $exception->getMessage()
                                                 ) );
+
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_stock_fallback_error',
+                                                        [
+                                                                'order_id'       => $order_id,
+                                                                'warehouse_code' => $stock_code,
+                                                                'warehouse_id'   => $fallback_id,
+                                                        ],
+                                                        $exception->getMessage()
+                                                );
                                         }
                                 }
                         }
@@ -7670,7 +7704,12 @@ $filters = [
                                         $available_stock = isset( $origin_stock_for_group[ $product_id ] ) ? (float) $origin_stock_for_group[ $product_id ] : null;
                                         $origin_code_label = '' !== $group_origin_code ? $group_origin_code : $origin_code;
 
+                                        $transfer_quantity = $item_quantity;
+                                        $decision          = 'full';
+
                                         if ( null === $available_stock ) {
+                                                $decision = 'unverifiable';
+
                                                 $order->add_order_note( sprintf(
                                                         __( '<b>Contífico:</b><br>No se pudo verificar el stock del SKU %1$s en la bodega de facturación (%2$s); se omite la restitución.', $this->plugin_name ),
                                                         $sku,
@@ -7689,10 +7728,26 @@ $filters = [
                                                         ]
                                                 );
 
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_stock_check',
+                                                        [
+                                                                'order_id'           => $order_id,
+                                                                'product_id'         => $product_id,
+                                                                'sku'                => $sku,
+                                                                'origin_warehouse'   => $origin_code_label,
+                                                                'available_stock'    => null,
+                                                                'requested_quantity' => $item_quantity,
+                                                                'decision'           => $decision,
+                                                                'transfer_quantity'  => 0,
+                                                        ]
+                                                );
+
                                                 continue;
                                         }
 
                                         if ( $available_stock <= 0.0 ) {
+                                                $decision = 'no_stock';
+
                                                 $order->add_order_note( sprintf(
                                                         __( '<b>Contífico:</b><br>No hay stock disponible en la bodega de facturación (%2$s) para devolver el SKU %1$s.', $this->plugin_name ),
                                                         $sku,
@@ -7711,12 +7766,25 @@ $filters = [
                                                         ]
                                                 );
 
+                                                $this->log_api_transaction(
+                                                        'transfer_stock_restore_stock_check',
+                                                        [
+                                                                'order_id'           => $order_id,
+                                                                'product_id'         => $product_id,
+                                                                'sku'                => $sku,
+                                                                'origin_warehouse'   => $origin_code_label,
+                                                                'available_stock'    => $available_stock,
+                                                                'requested_quantity' => $item_quantity,
+                                                                'decision'           => $decision,
+                                                                'transfer_quantity'  => 0,
+                                                        ]
+                                                );
+
                                                 continue;
                                         }
 
-                                        $transfer_quantity = $item_quantity;
-
                                         if ( $available_stock < $item_quantity ) {
+                                                $decision          = 'partial';
                                                 $transfer_quantity = $available_stock;
 
                                                 $order->add_order_note( sprintf(
@@ -7739,6 +7807,20 @@ $filters = [
                                                         ]
                                                 );
                                         }
+
+                                        $this->log_api_transaction(
+                                                'transfer_stock_restore_stock_check',
+                                                [
+                                                        'order_id'           => $order_id,
+                                                        'product_id'         => $product_id,
+                                                        'sku'                => $sku,
+                                                        'origin_warehouse'   => $origin_code_label,
+                                                        'available_stock'    => $available_stock,
+                                                        'requested_quantity' => $item_quantity,
+                                                        'decision'           => $decision,
+                                                        'transfer_quantity'  => $transfer_quantity,
+                                                ]
+                                        );
 
                                         $restore_stock['detalles'][] = [
                                                 'producto_id' => $product_id,
