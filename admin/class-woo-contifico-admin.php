@@ -4977,11 +4977,17 @@ $filters = [
 
                 $entries  = $this->get_inventory_movements_storage();
                 $balances = [];
+                $allowed_contexts = [ 'transfer', 'restore' ];
 
                 foreach ( $entries as $entry ) {
+                        $context    = isset( $entry['context'] ) ? (string) $entry['context'] : '';
                         $status     = isset( $entry['status'] ) ? (string) $entry['status'] : '';
                         $event_type = isset( $entry['event_type'] ) ? (string) $entry['event_type'] : '';
                         $quantity   = (float) ( $entry['quantity'] ?? 0 );
+
+                        if ( ! in_array( $context, $allowed_contexts, true ) ) {
+                                continue;
+                        }
 
                         if ( 'success' !== $status || $quantity <= 0.0 || '' === $event_type ) {
                                 continue;
