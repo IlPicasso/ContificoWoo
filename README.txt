@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.72 =
+* Ajusta los filtros de rango de fechas en el reporte de movimientos para que devuelvan resultados cuando se consultan periodos distintos a la última sincronización.
+
 = 4.1.71 =
 * Refresca las consultas de stock directamente desde Contífico al devolver inventario y registra el mapeo de bodegas utilizado para saber qué IDs se solicitaron.
 

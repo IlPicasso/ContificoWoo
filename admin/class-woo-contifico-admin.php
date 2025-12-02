@@ -4226,6 +4226,11 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                         ? $this->get_utc_timestamp_from_local_date( $filters['end_date'] . ' 23:59:59' )
                         : null;
 
+                if ( null !== $filters['start_timestamp'] && null !== $filters['end_timestamp'] && $filters['start_timestamp'] > $filters['end_timestamp'] ) {
+                        $filters['end_timestamp'] = $filters['start_timestamp'];
+                        $filters['end_date']      = $filters['start_date'];
+                }
+
                 return $filters;
         }
 
@@ -4454,25 +4459,12 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                 foreach ( $entries as $entry ) {
                         $timestamp           = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
-                        $localized_datetime  = $this->get_localized_datetime_from_timestamp( $timestamp );
-                        $localized_timestamp = $localized_datetime instanceof DateTimeInterface ? $localized_datetime->getTimestamp() : $timestamp;
-                        $entry_date          = $localized_datetime instanceof DateTimeInterface
-                                ? $localized_datetime->format( 'Y-m-d' )
-                                : wp_date( 'Y-m-d', $timestamp, wp_timezone() );
 
-                        if ( isset( $filters['start_timestamp'] ) && null !== $filters['start_timestamp'] && $localized_timestamp < $filters['start_timestamp'] ) {
+                        if ( null !== $filters['start_timestamp'] && $timestamp < $filters['start_timestamp'] ) {
                                 continue;
                         }
 
-                        if ( isset( $filters['end_timestamp'] ) && null !== $filters['end_timestamp'] && $localized_timestamp > $filters['end_timestamp'] ) {
-                                continue;
-                        }
-
-                        if ( '' !== $filters['start_date'] && $entry_date < $filters['start_date'] ) {
-                                continue;
-                        }
-
-                        if ( '' !== $filters['end_date'] && $entry_date > $filters['end_date'] ) {
+                        if ( null !== $filters['end_timestamp'] && $timestamp > $filters['end_timestamp'] ) {
                                 continue;
                         }
 
