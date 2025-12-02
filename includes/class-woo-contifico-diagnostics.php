@@ -367,6 +367,12 @@ class Woo_Contifico_Diagnostics {
             $error_detectado[] = 'missing_category';
         }
 
+        $error_detectado = [];
+
+        if ( ! $this->has_meaningful_category( $variation, $parent ) ) {
+            $error_detectado[] = 'missing_category';
+        }
+
         return [
             'post_id'                => $variation->get_id(),
             'nombre'                 => $variation->get_name(),
