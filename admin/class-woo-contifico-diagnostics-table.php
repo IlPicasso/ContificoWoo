@@ -503,6 +503,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'missing_variations'        => __( 'Producto variable sin variaciones', 'woo-contifico' ),
             'attribute_without_values'  => __( 'Atributos sin valores', 'woo-contifico' ),
             'missing_attributes'        => __( 'Variaciones sin atributos definidos', 'woo-contifico' ),
+            'missing_category'          => __( 'Sin categoría', 'woo-contifico' ),
             'single_color_variation'    => __( 'Un único color marcado como variación', 'woo-contifico' ),
         ];
     }
@@ -638,7 +639,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
 
         if (
             array_intersect(
-                [ 'no_contifico_match', 'child_no_contifico_match', 'variation_stock_disabled', 'product_stock_disabled', 'attribute_without_values', 'missing_variations', 'missing_attributes', 'single_color_variation' ],
+                [ 'no_contifico_match', 'child_no_contifico_match', 'variation_stock_disabled', 'product_stock_disabled', 'attribute_without_values', 'missing_variations', 'missing_attributes', 'missing_category', 'single_color_variation' ],
                 $types
             )
         ) {
@@ -780,6 +781,9 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                         implode( ', ', $labels )
                     );
                     break;
+                case 'missing_category':
+                    $messages[] = __( 'El producto no tiene una categoría asignada o solo pertenece a "Sin categoría".', 'woo-contifico' );
+                    break;
             }
         }
 
@@ -832,6 +836,9 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                     break;
                 case 'single_color_variation':
                     $messages[] = __( 'Desactiva el uso para variaciones de ese color único o agrega más opciones/variaciones para que la selección sea clara.', 'woo-contifico' );
+                    break;
+                case 'missing_category':
+                    $messages[] = __( 'Asigna una categoría adecuada al producto para clasificarlo correctamente.', 'woo-contifico' );
                     break;
             }
         }
