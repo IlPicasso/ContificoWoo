@@ -505,6 +505,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'missing_attributes'        => __( 'Variaciones sin atributos definidos', 'woo-contifico' ),
             'missing_category'          => __( 'Sin categoría', 'woo-contifico' ),
             'single_color_variation'    => __( 'Un único color marcado como variación', 'woo-contifico' ),
+            'draft_status'              => __( 'Producto en borrador', 'woo-contifico' ),
         ];
     }
 
@@ -550,6 +551,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             'sync_status'            => '',
             'empty_attributes'       => [],
             'single_variation_color_attributes' => [],
+            'post_status'            => '',
         ];
 
         $entry = wp_parse_args( $entry, $defaults );
@@ -568,6 +570,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
         $entry['is_parent_placeholder']  = (bool) $entry['is_parent_placeholder'];
         $entry['empty_attributes']       = array_values( array_filter( array_map( 'sanitize_text_field', (array) $entry['empty_attributes'] ) ) );
         $entry['single_variation_color_attributes'] = array_values( array_filter( array_map( 'sanitize_text_field', (array) $entry['single_variation_color_attributes'] ) ) );
+        $entry['post_status']            = sanitize_key( $entry['post_status'] );
 
         $entry['problem_types']       = $this->detect_problem_types( $entry );
         $entry['sync_status']         = $this->determine_sync_status( $entry );
@@ -620,6 +623,10 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
             }
         }
 
+        if ( 'draft' === $entry['post_status'] ) {
+            $types[] = 'draft_status';
+        }
+
         $types = array_filter( array_map( 'sanitize_key', $types ) );
 
         return array_values( array_unique( $types ) );
@@ -639,7 +646,7 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
 
         if (
             array_intersect(
-                [ 'no_contifico_match', 'child_no_contifico_match', 'variation_stock_disabled', 'product_stock_disabled', 'attribute_without_values', 'missing_variations', 'missing_attributes', 'missing_category', 'single_color_variation' ],
+                [ 'no_contifico_match', 'child_no_contifico_match', 'variation_stock_disabled', 'product_stock_disabled', 'attribute_without_values', 'missing_variations', 'missing_attributes', 'missing_category', 'single_color_variation', 'draft_status' ],
                 $types
             )
         ) {
@@ -784,6 +791,9 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                 case 'missing_category':
                     $messages[] = __( 'El producto no tiene una categoría asignada o solo pertenece a "Sin categoría".', 'woo-contifico' );
                     break;
+                case 'draft_status':
+                    $messages[] = __( 'El producto está en estado "Borrador" y no se mostrará ni sincronizará.', 'woo-contifico' );
+                    break;
             }
         }
 
@@ -839,6 +849,9 @@ class Woo_Contifico_Diagnostics_Table extends WP_List_Table {
                     break;
                 case 'missing_category':
                     $messages[] = __( 'Asigna una categoría adecuada al producto para clasificarlo correctamente.', 'woo-contifico' );
+                    break;
+                case 'draft_status':
+                    $messages[] = __( 'Cambia el estado del producto a "Publicado" para que pueda sincronizarse.', 'woo-contifico' );
                     break;
             }
         }

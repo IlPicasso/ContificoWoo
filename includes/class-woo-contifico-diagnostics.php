@@ -273,6 +273,9 @@ class Woo_Contifico_Diagnostics {
         $managing_stock    = method_exists( $product, 'managing_stock' )
             ? (bool) $product->managing_stock()
             : (bool) $product->get_manage_stock();
+        $post_status        = method_exists( $product, 'get_status' )
+            ? (string) $product->get_status()
+            : '';
         $product_attributes = method_exists( $product, 'get_attributes' )
             ? (array) $product->get_attributes()
             : [];
@@ -320,6 +323,7 @@ class Woo_Contifico_Diagnostics {
             'is_parent_placeholder'  => false,
             'empty_attributes'       => $empty_attributes,
             'single_variation_color_attributes' => $single_color_attributes,
+            'post_status'            => $post_status,
         ];
     }
 
@@ -353,6 +357,15 @@ class Woo_Contifico_Diagnostics {
         $managing_stock = method_exists( $variation, 'managing_stock' )
             ? (bool) $variation->managing_stock()
             : (bool) $variation->get_manage_stock();
+        $post_status    = method_exists( $variation, 'get_status' )
+            ? (string) $variation->get_status()
+            : '';
+
+        $error_detectado = [];
+
+        if ( ! $this->has_meaningful_category( $variation, $parent ) ) {
+            $error_detectado[] = 'missing_category';
+        }
 
         $error_detectado = [];
 
@@ -376,6 +389,7 @@ class Woo_Contifico_Diagnostics {
                 'size_slug'     => $size_slug,
                 'inferred_size' => $inferred_size,
             ],
+            'post_status'            => $post_status,
         ];
     }
 
