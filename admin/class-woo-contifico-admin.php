@@ -48,7 +48,7 @@ class Woo_Contifico_Admin {
 private const MANUAL_SYNC_HISTORY_OPTION  = 'woo_contifico_manual_sync_history';
 private const INVENTORY_MOVEMENTS_STORAGE = 'woo_contifico_inventory_movements';
 private const INVENTORY_MOVEMENTS_TRANSIENT = 'woo_contifico_inventory_movements';
-private const INVENTORY_MOVEMENTS_MAX_ENTRIES = 250;
+    private const INVENTORY_MOVEMENTS_MAX_ENTRIES = 2000;
 private const INVENTORY_MOVEMENTS_HISTORY_RUNS = 'woo_contifico_inventory_movements_history_runs';
 private const INVENTORY_ALERTS_REVIEWED_AT = 'woo_contifico_inventory_alerts_reviewed_at';
 private const MAX_INVOICE_SEQUENTIAL_RETRIES = 5;
@@ -2337,9 +2337,17 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                        return [];
                }
 
-               if ( isset( $entry['timestamp'] ) ) {
-                       $timestamp = $this->normalize_inventory_movement_timestamp( (int) $entry['timestamp'] );
-               } else {
+               $timestamp = null;
+
+               if ( array_key_exists( 'timestamp', $entry ) ) {
+                       $parsed_timestamp = $this->parse_inventory_movement_timestamp( $entry['timestamp'] );
+
+                       if ( null !== $parsed_timestamp ) {
+                               $timestamp = $this->normalize_inventory_movement_timestamp( $parsed_timestamp );
+                       }
+               }
+
+               if ( null === $timestamp ) {
                        $timestamp = current_time( 'timestamp', true );
                }
                $event     = isset( $entry['event_type'] ) && in_array( $entry['event_type'], [ 'ingreso', 'egreso' ], true ) ? $entry['event_type'] : 'egreso';
@@ -2390,6 +2398,39 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                ];
 
                return $defaults;
+       }
+
+       /**
+        * Parse a timestamp value into a UNIX timestamp, accepting numeric strings and date strings.
+        *
+        * @since 4.1.74
+        */
+       private function parse_inventory_movement_timestamp( $value ) : ?int {
+               if ( is_numeric( $value ) ) {
+                       return (int) $value;
+               }
+
+               if ( is_string( $value ) ) {
+                       $value = trim( $value );
+
+                       if ( '' === $value ) {
+                               return null;
+                       }
+
+                       $datetime = date_create( $value, wp_timezone() );
+
+                       if ( $datetime instanceof DateTimeInterface ) {
+                               return $datetime->getTimestamp();
+                       }
+
+                       $fallback = strtotime( $value );
+
+                       if ( false !== $fallback ) {
+                               return (int) $fallback;
+                       }
+               }
+
+               return null;
        }
 
        /**

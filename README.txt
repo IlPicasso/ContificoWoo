@@ -83,6 +83,12 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.74 =
+* Normaliza las marcas de tiempo guardadas como texto en los movimientos de inventario para que los filtros por rango de fechas devuelvan los egresos/ingresos históricos.
+
+= 4.1.73 =
+* Amplía el historial de movimientos almacenados a 2000 registros para consultar egresos e ingresos en rangos de fechas más amplios.
+
 = 4.1.72 =
 * Ajusta los filtros de rango de fechas en el reporte de movimientos para que devuelvan resultados cuando se consultan periodos distintos a la última sincronización.
 * Evita que la pestaña de bodega web liste productos ajenos filtrando solo movimientos de traslado y devolución que usen la bodega de facturación.
