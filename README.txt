@@ -83,6 +83,12 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.76 =
+* Muestra en el diagnóstico los productos y variaciones que siguen en estado "Borrador" para que se publiquen antes de sincronizar.
+
+= 4.1.75 =
+* Lista en el diagnóstico los productos que no tienen categoría asignada para poder corregirlos.
+
 = 4.1.74 =
 * Normaliza las marcas de tiempo guardadas como texto en los movimientos de inventario para que los filtros por rango de fechas devuelvan los egresos/ingresos históricos.
 

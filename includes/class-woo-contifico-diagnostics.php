@@ -273,6 +273,9 @@ class Woo_Contifico_Diagnostics {
         $managing_stock    = method_exists( $product, 'managing_stock' )
             ? (bool) $product->managing_stock()
             : (bool) $product->get_manage_stock();
+        $post_status        = method_exists( $product, 'get_status' )
+            ? (string) $product->get_status()
+            : '';
         $product_attributes = method_exists( $product, 'get_attributes' )
             ? (array) $product->get_attributes()
             : [];
@@ -285,6 +288,10 @@ class Woo_Contifico_Diagnostics {
             ? $this->find_single_variation_color_attributes( $product )
             : [];
         $error_detectado  = [];
+
+        if ( ! $this->has_meaningful_category( $product ) ) {
+            $error_detectado[] = 'missing_category';
+        }
 
         if ( ! empty( $empty_attributes ) ) {
             $error_detectado[] = 'attribute_without_values';
@@ -316,6 +323,7 @@ class Woo_Contifico_Diagnostics {
             'is_parent_placeholder'  => false,
             'empty_attributes'       => $empty_attributes,
             'single_variation_color_attributes' => $single_color_attributes,
+            'post_status'            => $post_status,
         ];
     }
 
@@ -349,13 +357,22 @@ class Woo_Contifico_Diagnostics {
         $managing_stock = method_exists( $variation, 'managing_stock' )
             ? (bool) $variation->managing_stock()
             : (bool) $variation->get_manage_stock();
+        $post_status    = method_exists( $variation, 'get_status' )
+            ? (string) $variation->get_status()
+            : '';
+
+        $error_detectado = [];
+
+        if ( ! $this->has_meaningful_category( $variation, $parent ) ) {
+            $error_detectado[] = 'missing_category';
+        }
 
         return [
             'post_id'                => $variation->get_id(),
             'nombre'                 => $variation->get_name(),
             'tipo'                   => $variation->get_type(),
             'sku_detectado'          => $variation_sku,
-            'error_detectado'        => [],
+            'error_detectado'        => $error_detectado,
             'codigo_contifico'       => '',
             'coincidencias_posibles' => [],
             'parent_id'              => $parent->get_id(),
@@ -366,7 +383,60 @@ class Woo_Contifico_Diagnostics {
                 'size_slug'     => $size_slug,
                 'inferred_size' => $inferred_size,
             ],
+            'post_status'            => $post_status,
         ];
+    }
+
+    /**
+     * Determine if the product (or its parent) has at least one meaningful category.
+     *
+     * @param WC_Product      $product Product instance.
+     * @param WC_Product|null $parent  Optional. Parent product to fallback to when the current product has no categories.
+     *
+     * @return bool
+     */
+    private function has_meaningful_category( WC_Product $product, ?WC_Product $parent = null ) : bool {
+        $categories = [];
+
+        if ( method_exists( $product, 'get_category_ids' ) ) {
+            $categories = (array) $product->get_category_ids();
+        }
+
+        if ( empty( $categories ) && $parent instanceof WC_Product && method_exists( $parent, 'get_category_ids' ) ) {
+            $categories = (array) $parent->get_category_ids();
+        }
+
+        $categories = array_values( array_filter( array_map( 'absint', $categories ) ) );
+
+        if ( empty( $categories ) ) {
+            return false;
+        }
+
+        $terms = get_terms(
+            [
+                'taxonomy'   => 'product_cat',
+                'hide_empty' => false,
+                'include'    => $categories,
+            ]
+        );
+
+        if ( is_wp_error( $terms ) || empty( $terms ) ) {
+            return false;
+        }
+
+        $ignored_slugs = [ 'uncategorized', 'sin-categoria' ];
+
+        foreach ( $terms as $term ) {
+            if ( ! $term instanceof WP_Term ) {
+                continue;
+            }
+
+            if ( ! in_array( (string) $term->slug, $ignored_slugs, true ) ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
