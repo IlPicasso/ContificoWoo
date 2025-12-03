@@ -83,6 +83,12 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.78 =
+* Corrige el filtrado por rango de fechas cuando las marcas de tiempo llegan en milisegundos para que los reportes por franja devuelvan datos consistentes sin necesidad de elegir el último día.
+
+= 4.1.77 =
+* Corrige el filtrado por ubicación del reporte de movimientos al reconocer también las ubicaciones asociadas a las bodegas de origen y destino.
+
 = 4.1.76 =
 * Muestra en el diagnóstico los productos y variaciones que siguen en estado "Borrador" para que se publiquen antes de sincronizar.
 

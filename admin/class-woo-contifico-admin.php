@@ -2407,7 +2407,13 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
         */
        private function parse_inventory_movement_timestamp( $value ) : ?int {
                if ( is_numeric( $value ) ) {
-                       return (int) $value;
+                       $numeric_value = (int) $value;
+
+                       if ( $numeric_value > 20000000000 ) { // millisecond epoch safeguard (~Sat May 18 2603)
+                               return (int) round( $numeric_value / 1000 );
+                       }
+
+                       return $numeric_value;
                }
 
                if ( is_string( $value ) ) {
@@ -4681,6 +4687,19 @@ private function resolve_location_warehouse_code( string $location_id ) : string
 
                 if ( '' !== $location_label && $location_filter === $location_label ) {
                         return true;
+                }
+
+                foreach ( [ 'from', 'to' ] as $side ) {
+                        $warehouse_location_id    = isset( $entry['warehouses'][ $side ]['location_id'] ) ? (string) $entry['warehouses'][ $side ]['location_id'] : '';
+                        $warehouse_location_label = isset( $entry['warehouses'][ $side ]['location_label'] ) ? (string) $entry['warehouses'][ $side ]['location_label'] : '';
+
+                        if ( '' !== $warehouse_location_id && $location_filter === $warehouse_location_id ) {
+                                return true;
+                        }
+
+                        if ( '' !== $warehouse_location_label && $location_filter === $warehouse_location_label ) {
+                                return true;
+                        }
                 }
 
                 return false;
