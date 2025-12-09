@@ -834,6 +834,7 @@ class Woo_Contifico
         $this->loader->add_action('admin_notices', $plugin_admin, 'render_product_bulk_action_notice');
 
         # Register admin actions
+        $this->loader->add_action('admin_init', $plugin_admin, 'handle_inventory_alerts_dismissal');
         $this->loader->add_action('admin_init', $plugin_admin, 'admin_init');
         $this->loader->add_action('admin_menu', $plugin_admin, 'register_menu');
         $this->loader->add_action('admin_notices', $plugin_admin, 'admin_init_notice');

@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.79 =
+* Permite descartar las alertas recientes de inventario con un clic para que no vuelvan a mostrarse hasta que haya nuevos errores registrados.
+
 = 4.1.78 =
 * Corrige el filtrado por rango de fechas cuando las marcas de tiempo llegan en milisegundos para que los reportes por franja devuelvan datos consistentes sin necesidad de elegir el último día.
 

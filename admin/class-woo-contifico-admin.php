@@ -798,6 +798,8 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                         return;
                 }
 
+                $this->handle_inventory_alerts_dismissal();
+
                 $alerts = $this->get_recent_contifico_process_alerts();
 
                 if ( empty( $alerts ) ) {
@@ -805,8 +807,13 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                 }
 
                 $settings_url = esc_url( add_query_arg( [ 'page' => 'woo-contifico', 'tab' => 'movimientos' ], admin_url( 'admin.php' ) ) );
+                $dismiss_url  = wp_nonce_url(
+                        add_query_arg( 'woo-contifico-dismiss-inventory-alerts', 1 ),
+                        'woo-contifico-dismiss-inventory-alerts',
+                        '_wc_inv_alert_nonce'
+                );
 
-                echo '<div class="notice notice-error">';
+                echo '<div class="notice notice-error is-dismissible">';
                 echo '<p><strong>' . esc_html__( 'Contífico: se detectaron problemas recientes en procesos de inventario.', 'woo-contifico' ) . '</strong></p>';
                 echo '<ul>';
 
@@ -823,7 +830,57 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
 
                 echo '</ul>';
                 echo '<p><a class="button button-primary" href="' . $settings_url . '">' . esc_html__( 'Revisar movimientos de inventario', 'woo-contifico' ) . '</a></p>';
+                echo '<p><a class="button" href="' . esc_url( $dismiss_url ) . '">' . esc_html__( 'Ocultar alertas de inventario', 'woo-contifico' ) . '</a></p>';
                 echo '</div>';
+        }
+
+        /**
+         * Dismiss the current inventory alerts and keep them hidden until new issues appear.
+         *
+         * @return void
+         */
+        public function handle_inventory_alerts_dismissal() : void {
+
+                if ( ! isset( $_GET['woo-contifico-dismiss-inventory-alerts'] ) ) {
+                        return;
+                }
+
+                if ( ! current_user_can( 'manage_woocommerce' ) ) {
+                        return;
+                }
+
+                $nonce = isset( $_GET['_wc_inv_alert_nonce'] ) ? (string) $_GET['_wc_inv_alert_nonce'] : '';
+
+                if ( ! wp_verify_nonce( $nonce, 'woo-contifico-dismiss-inventory-alerts' ) ) {
+                        return;
+                }
+
+                $entries = $this->get_inventory_movements_storage();
+                $latest  = 0;
+
+                foreach ( $entries as $entry ) {
+                        $timestamp = isset( $entry['timestamp'] ) ? (int) $entry['timestamp'] : 0;
+
+                        if ( $timestamp > $latest ) {
+                                $latest = $timestamp;
+                        }
+                }
+
+                if ( 0 === $latest ) {
+                        $latest = current_time( 'timestamp', true );
+                }
+
+                update_option( self::INVENTORY_ALERTS_REVIEWED_AT, $latest, false );
+
+                wp_safe_redirect(
+                        remove_query_arg(
+                                [
+                                        'woo-contifico-dismiss-inventory-alerts',
+                                        '_wc_inv_alert_nonce',
+                                ]
+                        )
+                );
+                exit;
         }
 
         /**
