@@ -1037,7 +1037,7 @@ class Contifico
                 }
 
                 try {
-                        $encoded_id    = rawurlencode( $product_id );
+                        $encoded_id     = rawurlencode( $product_id );
                         $producto_stock = $this->call( "producto/{$encoded_id}/stock/" );
                 }
                 catch ( Exception $exception ) {
@@ -1052,7 +1052,13 @@ class Contifico
                                         continue;
                                 }
 
-                                $warehouse_id = isset( $warehouse_entry['bodega_id'] ) ? (string) $warehouse_entry['bodega_id'] : '';
+                                $warehouse_id = '';
+
+                                if ( isset( $warehouse_entry['bodega_id'] ) ) {
+                                        $warehouse_id = (string) $warehouse_entry['bodega_id'];
+                                } elseif ( isset( $warehouse_entry['bodega'] ) ) {
+                                        $warehouse_id = (string) $warehouse_entry['bodega'];
+                                }
 
                                 if ( '' === $warehouse_id ) {
                                         continue;
@@ -1060,20 +1066,16 @@ class Contifico
 
                                 $quantity = 0;
 
-                                if ( isset( $warehouse_entry['cantidad'] ) ) {
-                                        $quantity = $warehouse_entry['cantidad'];
+                                if ( isset( $warehouse_entry['cantidad_disponible'] ) ) {
+                                        $quantity = $warehouse_entry['cantidad_disponible'];
                                 } elseif ( isset( $warehouse_entry['cantidad_stock'] ) ) {
                                         $quantity = $warehouse_entry['cantidad_stock'];
-                                } elseif ( isset( $warehouse_entry['cantidad_disponible'] ) ) {
-                                        $quantity = $warehouse_entry['cantidad_disponible'];
+                                } elseif ( isset( $warehouse_entry['cantidad'] ) ) {
+                                        $quantity = $warehouse_entry['cantidad'];
                                 }
 
                                 $stock_by_warehouse[ $warehouse_id ] = (float) $quantity;
                         }
-                }
-
-                if ( empty( $stock_by_warehouse ) && is_array( $cached_stock ) && $force_refresh ) {
-                        $stock_by_warehouse = $cached_stock;
                 }
 
                 $this->product_stock_cache[ $product_id ] = $stock_by_warehouse;
