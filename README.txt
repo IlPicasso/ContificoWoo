@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.80 =
+* Prioriza el stock disponible (`cantidad_disponible`) por bodega al refrescar inventario en tiempo real para evitar sobreestimar existencias cuando Contífico reporta cantidades reservadas.
+
 = 4.1.79 =
 * Permite descartar las alertas recientes de inventario con un clic para que no vuelvan a mostrarse hasta que haya nuevos errores registrados.
 

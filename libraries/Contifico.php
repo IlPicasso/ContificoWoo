@@ -1060,12 +1060,12 @@ class Contifico
 
                                 $quantity = 0;
 
-                                if ( isset( $warehouse_entry['cantidad'] ) ) {
-                                        $quantity = $warehouse_entry['cantidad'];
+                                if ( isset( $warehouse_entry['cantidad_disponible'] ) ) {
+                                        $quantity = $warehouse_entry['cantidad_disponible'];
                                 } elseif ( isset( $warehouse_entry['cantidad_stock'] ) ) {
                                         $quantity = $warehouse_entry['cantidad_stock'];
-                                } elseif ( isset( $warehouse_entry['cantidad_disponible'] ) ) {
-                                        $quantity = $warehouse_entry['cantidad_disponible'];
+                                } elseif ( isset( $warehouse_entry['cantidad'] ) ) {
+                                        $quantity = $warehouse_entry['cantidad'];
                                 }
 
                                 $stock_by_warehouse[ $warehouse_id ] = (float) $quantity;
