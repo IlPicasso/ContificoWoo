@@ -83,6 +83,10 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.81 =
+* Reconoce el identificador de bodega desde los campos `bodega_id` o `bodega` en Contífico para mapear correctamente el stock por ubicación.
+* Ignora valores cacheados al forzar un refresco de inventario, de modo que las caídas de stock se reflejen aunque la llamada previa haya devuelto datos vacíos.
+
 = 4.1.80 =
 * Prioriza el stock disponible (`cantidad_disponible`) por bodega al refrescar inventario en tiempo real para evitar sobreestimar existencias cuando Contífico reporta cantidades reservadas.
 
