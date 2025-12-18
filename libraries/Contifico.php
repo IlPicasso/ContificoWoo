@@ -581,16 +581,21 @@ class Contifico
                                 continue;
                         }
 
+                        $stock_key    = (string) $warehouse_code;
                         $warehouse_id = $this->get_id_bodega( $warehouse_code );
 
+                        if ( empty( $warehouse_id ) && isset( $this->warehouses[ $warehouse_code ] ) ) {
+                                $warehouse_id = (string) $warehouse_code;
+                        }
+
                         if ( empty( $warehouse_id ) ) {
-                                $stocks[ $warehouse_code ] = [];
-                                $warehouse_ids[ $warehouse_code ] = '';
+                                $stocks[ $stock_key ] = [];
+                                $warehouse_ids[ $stock_key ] = '';
                                 continue;
                         }
 
-                        $stocks[ $warehouse_code ]         = [];
-                        $warehouse_ids[ $warehouse_code ] = (string) $warehouse_id;
+                        $stocks[ $stock_key ]         = [];
+                        $warehouse_ids[ $stock_key ] = (string) $warehouse_id;
                 }
 
                 if ( empty( $warehouse_ids ) ) {
@@ -1149,19 +1154,28 @@ class Contifico
 	 * @param string $codigo_bodega
 	 * @return string|null
 	 */
-	public function get_id_bodega(string $codigo_bodega) : ?string
-	{
+        public function get_id_bodega(string $codigo_bodega) : ?string
+        {
 
-		# Find $codigo_bodega
-		$id_bodega = null;
-		foreach ($this->warehouses as $key => $bodega) {
-			if($bodega === $codigo_bodega) {
-				$id_bodega = $key;
-				break;
-			}
-		}
+                # Find $codigo_bodega
+                $id_bodega   = null;
+                $input_value = strtoupper( trim( $codigo_bodega ) );
 
-		return $id_bodega;
+                if ( isset( $this->warehouses[ $codigo_bodega ] ) ) {
+                        return (string) $codigo_bodega;
+                }
+
+                foreach ( $this->warehouses as $key => $bodega ) {
+                        $normalized_code = strtoupper( (string) $bodega );
+                        $normalized_id   = strtoupper( (string) $key );
+
+                        if ( $normalized_code === $input_value || $normalized_id === $input_value ) {
+                                $id_bodega = (string) $key;
+                                break;
+                        }
+                }
+
+                return $id_bodega;
 
     }
 
