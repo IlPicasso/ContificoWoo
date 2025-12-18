@@ -581,16 +581,21 @@ class Contifico
                                 continue;
                         }
 
+                        $stock_key    = (string) $warehouse_code;
                         $warehouse_id = $this->get_id_bodega( $warehouse_code );
 
+                        if ( empty( $warehouse_id ) && isset( $this->warehouses[ $warehouse_code ] ) ) {
+                                $warehouse_id = (string) $warehouse_code;
+                        }
+
                         if ( empty( $warehouse_id ) ) {
-                                $stocks[ $warehouse_code ] = [];
-                                $warehouse_ids[ $warehouse_code ] = '';
+                                $stocks[ $stock_key ] = [];
+                                $warehouse_ids[ $stock_key ] = '';
                                 continue;
                         }
 
-                        $stocks[ $warehouse_code ]         = [];
-                        $warehouse_ids[ $warehouse_code ] = (string) $warehouse_id;
+                        $stocks[ $stock_key ]         = [];
+                        $warehouse_ids[ $stock_key ] = (string) $warehouse_id;
                 }
 
                 if ( empty( $warehouse_ids ) ) {
@@ -1037,7 +1042,7 @@ class Contifico
                 }
 
                 try {
-                        $encoded_id    = rawurlencode( $product_id );
+                        $encoded_id     = rawurlencode( $product_id );
                         $producto_stock = $this->call( "producto/{$encoded_id}/stock/" );
                 }
                 catch ( Exception $exception ) {
@@ -1052,28 +1057,51 @@ class Contifico
                                         continue;
                                 }
 
-                                $warehouse_id = isset( $warehouse_entry['bodega_id'] ) ? (string) $warehouse_entry['bodega_id'] : '';
+                                $warehouse_id   = '';
+                                $warehouse_code = '';
 
-                                if ( '' === $warehouse_id ) {
+                                if ( isset( $warehouse_entry['bodega_id'] ) ) {
+                                        $warehouse_id = (string) $warehouse_entry['bodega_id'];
+                                }
+
+                                if ( isset( $warehouse_entry['bodega'] ) ) {
+                                        $warehouse_code = (string) $warehouse_entry['bodega'];
+                                }
+
+                                if ( '' !== $warehouse_id && isset( $this->warehouse_labels[ $warehouse_id ] ) ) {
+                                        $warehouse_code = $warehouse_code ?: (string) $this->warehouse_labels[ $warehouse_id ]['code'];
+                                }
+
+                                if ( '' === $warehouse_id && '' !== $warehouse_code ) {
+                                        $resolved_id = $this->get_id_bodega( $warehouse_code );
+
+                                        if ( ! empty( $resolved_id ) ) {
+                                                $warehouse_id = (string) $resolved_id;
+                                        }
+                                }
+
+                                if ( '' === $warehouse_id && '' === $warehouse_code ) {
                                         continue;
                                 }
 
+                                $preferred_key = '' !== $warehouse_id ? $warehouse_id : $warehouse_code;
+
                                 $quantity = 0;
 
-                                if ( isset( $warehouse_entry['cantidad'] ) ) {
-                                        $quantity = $warehouse_entry['cantidad'];
+                                if ( isset( $warehouse_entry['cantidad_disponible'] ) ) {
+                                        $quantity = $this->normalize_warehouse_quantity( $warehouse_entry['cantidad_disponible'] );
                                 } elseif ( isset( $warehouse_entry['cantidad_stock'] ) ) {
-                                        $quantity = $warehouse_entry['cantidad_stock'];
-                                } elseif ( isset( $warehouse_entry['cantidad_disponible'] ) ) {
-                                        $quantity = $warehouse_entry['cantidad_disponible'];
+                                        $quantity = $this->normalize_warehouse_quantity( $warehouse_entry['cantidad_stock'] );
+                                } elseif ( isset( $warehouse_entry['cantidad'] ) ) {
+                                        $quantity = $this->normalize_warehouse_quantity( $warehouse_entry['cantidad'] );
                                 }
 
-                                $stock_by_warehouse[ $warehouse_id ] = (float) $quantity;
-                        }
-                }
+                                $stock_by_warehouse[ $preferred_key ] = $quantity;
 
-                if ( empty( $stock_by_warehouse ) && is_array( $cached_stock ) && $force_refresh ) {
-                        $stock_by_warehouse = $cached_stock;
+                                if ( '' !== $warehouse_id && '' !== $warehouse_code && $warehouse_id !== $warehouse_code ) {
+                                        $stock_by_warehouse[ $warehouse_code ] = $quantity;
+                                }
+                        }
                 }
 
                 $this->product_stock_cache[ $product_id ] = $stock_by_warehouse;
@@ -1085,6 +1113,39 @@ class Contifico
                 return $stock_by_warehouse;
     }
 
+        /**
+         * Normalize a warehouse quantity coming from Contífico before casting to float.
+         *
+         * Accepts numeric strings, integers, floats and decimal wrapper arrays (e.g. {"$numberDecimal": "2.0"}).
+         * Any non numeric value is treated as zero.
+         *
+         * @since 4.1.82
+         */
+        private function normalize_warehouse_quantity( $raw_quantity ) : float {
+
+                if ( is_array( $raw_quantity ) ) {
+                        if ( isset( $raw_quantity['$numberDecimal'] ) && is_numeric( $raw_quantity['$numberDecimal'] ) ) {
+                                return (float) $raw_quantity['$numberDecimal'];
+                        }
+
+                        if ( isset( $raw_quantity['value'] ) && is_numeric( $raw_quantity['value'] ) ) {
+                                return (float) $raw_quantity['value'];
+                        }
+
+                        $raw_quantity = implode( '', array_filter( array_map( 'strval', $raw_quantity ) ) );
+                }
+
+                if ( is_string( $raw_quantity ) ) {
+                        $raw_quantity = str_replace( ',', '.', trim( $raw_quantity ) );
+                }
+
+                if ( is_numeric( $raw_quantity ) ) {
+                        return (float) $raw_quantity;
+                }
+
+                return 0.0;
+        }
+
 	/**
 	 * Return the bodega object from the $codigo_bodega
 	 *
@@ -1093,19 +1154,28 @@ class Contifico
 	 * @param string $codigo_bodega
 	 * @return string|null
 	 */
-	public function get_id_bodega(string $codigo_bodega) : ?string
-	{
+        public function get_id_bodega(string $codigo_bodega) : ?string
+        {
 
-		# Find $codigo_bodega
-		$id_bodega = null;
-		foreach ($this->warehouses as $key => $bodega) {
-			if($bodega === $codigo_bodega) {
-				$id_bodega = $key;
-				break;
-			}
-		}
+                # Find $codigo_bodega
+                $id_bodega   = null;
+                $input_value = strtoupper( trim( $codigo_bodega ) );
 
-		return $id_bodega;
+                if ( isset( $this->warehouses[ $codigo_bodega ] ) ) {
+                        return (string) $codigo_bodega;
+                }
+
+                foreach ( $this->warehouses as $key => $bodega ) {
+                        $normalized_code = strtoupper( (string) $bodega );
+                        $normalized_id   = strtoupper( (string) $key );
+
+                        if ( $normalized_code === $input_value || $normalized_id === $input_value ) {
+                                $id_bodega = (string) $key;
+                                break;
+                        }
+                }
+
+                return $id_bodega;
 
     }
 
