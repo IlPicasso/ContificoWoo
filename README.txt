@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.84 =
+* Resuelve las bodegas del stock usando primero el identificador de Contífico y mapeando los códigos cuando es necesario, de modo que las cantidades se asignen a la bodega correcta en las sincronizaciones.
+
 = 4.1.83 =
 * Evita heredar el identificador de Contífico del producto padre al sincronizar variaciones, asegurando que cada talla use su propio stock por bodega.
 

@@ -1052,17 +1052,34 @@ class Contifico
                                         continue;
                                 }
 
-                                $warehouse_id = '';
+                                $warehouse_id   = '';
+                                $warehouse_code = '';
 
                                 if ( isset( $warehouse_entry['bodega_id'] ) ) {
                                         $warehouse_id = (string) $warehouse_entry['bodega_id'];
-                                } elseif ( isset( $warehouse_entry['bodega'] ) ) {
-                                        $warehouse_id = (string) $warehouse_entry['bodega'];
                                 }
 
-                                if ( '' === $warehouse_id ) {
+                                if ( isset( $warehouse_entry['bodega'] ) ) {
+                                        $warehouse_code = (string) $warehouse_entry['bodega'];
+                                }
+
+                                if ( '' !== $warehouse_id && isset( $this->warehouse_labels[ $warehouse_id ] ) ) {
+                                        $warehouse_code = $warehouse_code ?: (string) $this->warehouse_labels[ $warehouse_id ]['code'];
+                                }
+
+                                if ( '' === $warehouse_id && '' !== $warehouse_code ) {
+                                        $resolved_id = $this->get_id_bodega( $warehouse_code );
+
+                                        if ( ! empty( $resolved_id ) ) {
+                                                $warehouse_id = (string) $resolved_id;
+                                        }
+                                }
+
+                                if ( '' === $warehouse_id && '' === $warehouse_code ) {
                                         continue;
                                 }
+
+                                $preferred_key = '' !== $warehouse_id ? $warehouse_id : $warehouse_code;
 
                                 $quantity = 0;
 
@@ -1074,7 +1091,11 @@ class Contifico
                                         $quantity = $this->normalize_warehouse_quantity( $warehouse_entry['cantidad'] );
                                 }
 
-                                $stock_by_warehouse[ $warehouse_id ] = $quantity;
+                                $stock_by_warehouse[ $preferred_key ] = $quantity;
+
+                                if ( '' !== $warehouse_id && '' !== $warehouse_code && $warehouse_id !== $warehouse_code ) {
+                                        $stock_by_warehouse[ $warehouse_code ] = $quantity;
+                                }
                         }
                 }
 
