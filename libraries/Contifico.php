@@ -1037,7 +1037,7 @@ class Contifico
                 }
 
                 try {
-                        $encoded_id    = rawurlencode( $product_id );
+                        $encoded_id     = rawurlencode( $product_id );
                         $producto_stock = $this->call( "producto/{$encoded_id}/stock/" );
                 }
                 catch ( Exception $exception ) {
@@ -1052,7 +1052,13 @@ class Contifico
                                         continue;
                                 }
 
-                                $warehouse_id = isset( $warehouse_entry['bodega_id'] ) ? (string) $warehouse_entry['bodega_id'] : '';
+                                $warehouse_id = '';
+
+                                if ( isset( $warehouse_entry['bodega_id'] ) ) {
+                                        $warehouse_id = (string) $warehouse_entry['bodega_id'];
+                                } elseif ( isset( $warehouse_entry['bodega'] ) ) {
+                                        $warehouse_id = (string) $warehouse_entry['bodega'];
+                                }
 
                                 if ( '' === $warehouse_id ) {
                                         continue;
@@ -1060,20 +1066,16 @@ class Contifico
 
                                 $quantity = 0;
 
-                                if ( isset( $warehouse_entry['cantidad'] ) ) {
-                                        $quantity = $warehouse_entry['cantidad'];
+                                if ( isset( $warehouse_entry['cantidad_disponible'] ) ) {
+                                        $quantity = $this->normalize_warehouse_quantity( $warehouse_entry['cantidad_disponible'] );
                                 } elseif ( isset( $warehouse_entry['cantidad_stock'] ) ) {
-                                        $quantity = $warehouse_entry['cantidad_stock'];
-                                } elseif ( isset( $warehouse_entry['cantidad_disponible'] ) ) {
-                                        $quantity = $warehouse_entry['cantidad_disponible'];
+                                        $quantity = $this->normalize_warehouse_quantity( $warehouse_entry['cantidad_stock'] );
+                                } elseif ( isset( $warehouse_entry['cantidad'] ) ) {
+                                        $quantity = $this->normalize_warehouse_quantity( $warehouse_entry['cantidad'] );
                                 }
 
-                                $stock_by_warehouse[ $warehouse_id ] = (float) $quantity;
+                                $stock_by_warehouse[ $warehouse_id ] = $quantity;
                         }
-                }
-
-                if ( empty( $stock_by_warehouse ) && is_array( $cached_stock ) && $force_refresh ) {
-                        $stock_by_warehouse = $cached_stock;
                 }
 
                 $this->product_stock_cache[ $product_id ] = $stock_by_warehouse;
@@ -1084,6 +1086,39 @@ class Contifico
 
                 return $stock_by_warehouse;
     }
+
+        /**
+         * Normalize a warehouse quantity coming from Contífico before casting to float.
+         *
+         * Accepts numeric strings, integers, floats and decimal wrapper arrays (e.g. {"$numberDecimal": "2.0"}).
+         * Any non numeric value is treated as zero.
+         *
+         * @since 4.1.82
+         */
+        private function normalize_warehouse_quantity( $raw_quantity ) : float {
+
+                if ( is_array( $raw_quantity ) ) {
+                        if ( isset( $raw_quantity['$numberDecimal'] ) && is_numeric( $raw_quantity['$numberDecimal'] ) ) {
+                                return (float) $raw_quantity['$numberDecimal'];
+                        }
+
+                        if ( isset( $raw_quantity['value'] ) && is_numeric( $raw_quantity['value'] ) ) {
+                                return (float) $raw_quantity['value'];
+                        }
+
+                        $raw_quantity = implode( '', array_filter( array_map( 'strval', $raw_quantity ) ) );
+                }
+
+                if ( is_string( $raw_quantity ) ) {
+                        $raw_quantity = str_replace( ',', '.', trim( $raw_quantity ) );
+                }
+
+                if ( is_numeric( $raw_quantity ) ) {
+                        return (float) $raw_quantity;
+                }
+
+                return 0.0;
+        }
 
 	/**
 	 * Return the bodega object from the $codigo_bodega
