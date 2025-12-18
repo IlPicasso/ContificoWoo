@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.83 =
+* Evita heredar el identificador de Contífico del producto padre al sincronizar variaciones, asegurando que cada talla use su propio stock por bodega.
+
 = 4.1.82 =
 * Normaliza los valores de stock recibidos por bodega (cadenas, enteros o envoltorios decimales) antes de convertirlos a número para reflejar el inventario real reportado por Contífico.
 
