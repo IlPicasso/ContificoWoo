@@ -6416,25 +6416,29 @@ $filters = [
                                         $warehouse_code = (string) $warehouse_code;
                                         $quantity       = null;
 
-                                        if ( isset( $location_stock[ $location_id ][ $product_cache_key ] ) ) {
-                                                $quantity = (int) $location_stock[ $location_id ][ $product_cache_key ];
+                                if ( isset( $location_stock[ $location_id ][ $product_cache_key ] ) ) {
+                                        $quantity = (int) $location_stock[ $location_id ][ $product_cache_key ];
+                                }
+
+                                if ( null === $quantity ) {
+                                        if ( ! array_key_exists( $warehouse_code, $warehouse_id_cache ) ) {
+                                                $warehouse_id_cache[ $warehouse_code ] = (string) ( $this->contifico->get_id_bodega( $warehouse_code ) ?? '' );
                                         }
 
-                                        if ( null === $quantity ) {
-                                                if ( ! array_key_exists( $warehouse_code, $warehouse_id_cache ) ) {
-                                                        $warehouse_id_cache[ $warehouse_code ] = (string) ( $this->contifico->get_id_bodega( $warehouse_code ) ?? '' );
-                                                }
+                                        $warehouse_id = $warehouse_id_cache[ $warehouse_code ];
 
-                                                $warehouse_id = $warehouse_id_cache[ $warehouse_code ];
-
-                                                if ( '' !== $warehouse_id && isset( $stock_by_warehouse[ $warehouse_id ] ) ) {
-                                                        $quantity = (int) $stock_by_warehouse[ $warehouse_id ];
-                                                }
+                                        if ( '' !== $warehouse_id && isset( $stock_by_warehouse[ $warehouse_id ] ) ) {
+                                                $quantity = (int) $stock_by_warehouse[ $warehouse_id ];
                                         }
 
-                                        if ( null === $quantity ) {
-                                                $quantity = 0;
+                                        if ( null === $quantity && '' !== $warehouse_code && isset( $stock_by_warehouse[ $warehouse_code ] ) ) {
+                                                $quantity = (int) $stock_by_warehouse[ $warehouse_code ];
                                         }
+                                }
+
+                                if ( null === $quantity ) {
+                                        $quantity = 0;
+                                }
 
                                         $location_stock[ $location_id ][ $product_cache_key ] = $quantity;
                                         $global_quantity                                      += $quantity;
@@ -6447,8 +6451,18 @@ $filters = [
                                 $new_stock = $global_quantity;
                         }
 
-                        if ( empty( $location_map ) && '' !== $default_warehouse_id && isset( $stock_by_warehouse[ $default_warehouse_id ] ) ) {
-                                $new_stock = (int) $stock_by_warehouse[ $default_warehouse_id ];
+                        if ( empty( $location_map ) && '' !== $default_warehouse_id ) {
+                                if ( isset( $stock_by_warehouse[ $default_warehouse_id ] ) ) {
+                                        $new_stock = (int) $stock_by_warehouse[ $default_warehouse_id ];
+                                }
+
+                                if ( 0 === $new_stock && isset( $warehouses_map[ $default_warehouse_id ] ) ) {
+                                        $default_warehouse_code = (string) $warehouses_map[ $default_warehouse_id ];
+
+                                        if ( '' !== $default_warehouse_code && isset( $stock_by_warehouse[ $default_warehouse_code ] ) ) {
+                                                $new_stock = (int) $stock_by_warehouse[ $default_warehouse_code ];
+                                        }
+                                }
                         }
 
                         if ( $old_stock !== $new_stock ) {
