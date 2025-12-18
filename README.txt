@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.82 =
+* Normaliza los valores de stock recibidos por bodega (cadenas, enteros o envoltorios decimales) antes de convertirlos a número para reflejar el inventario real reportado por Contífico.
+
 = 4.1.81 =
 * Reconoce el identificador de bodega desde los campos `bodega_id` o `bodega` en Contífico para mapear correctamente el stock por ubicación.
 * Ignora valores cacheados al forzar un refresco de inventario, de modo que las caídas de stock se reflejen aunque la llamada previa haya devuelto datos vacíos.

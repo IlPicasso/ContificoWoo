@@ -9,7 +9,7 @@
  * Plugin Name:       Woocommerce - Facturación Electrónica - Contífico
  * Plugin URI:        https://github.com/IlPicasso/ContificoWoo
  * Description:       Integración simple de facturación electrónica para woocommerce a través del servicio de Contífico. Servicio solo válido en Ecuador
- * Version:           4.1.81
+ * Version:           4.1.82
  * Author:            IlPicasso
  * Author URI:        https://github.com/IlPicasso
  * License:           GPL-2.0+
