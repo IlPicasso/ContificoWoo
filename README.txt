@@ -83,6 +83,10 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.85 =
+* Reconoce las bodegas configuradas aunque se ingrese su identificador en lugar del código y usa esa referencia para leer el stock directamente de Contífico sin descartar cantidades válidas.
+* Ajusta la sincronización por ubicaciones para reutilizar el stock ya descargado cuando se configuraron bodegas por identificador, evitando que WooCommerce muestre inventarios vacíos.
+
 = 4.1.84 =
 * Resuelve las bodegas del stock usando primero el identificador de Contífico y mapeando los códigos cuando es necesario, de modo que las cantidades se asignen a la bodega correcta en las sincronizaciones.
 

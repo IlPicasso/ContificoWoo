@@ -6429,6 +6429,8 @@ $filters = [
 
                                                 if ( '' !== $warehouse_id && isset( $stock_by_warehouse[ $warehouse_id ] ) ) {
                                                         $quantity = (int) $stock_by_warehouse[ $warehouse_id ];
+                                                } elseif ( '' === $warehouse_id && isset( $stock_by_warehouse[ $warehouse_code ] ) ) {
+                                                        $quantity = (int) $stock_by_warehouse[ $warehouse_code ];
                                                 }
                                         }
 
