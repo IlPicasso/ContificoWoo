@@ -5593,7 +5593,10 @@ $filters = [
                                                 continue;
                                         }
 
-                                        $stored_contifico_id = $this->resolve_contifico_product_identifier( $resolved_product );
+                                        $stored_contifico_id = $this->resolve_contifico_product_identifier(
+                                                $resolved_product,
+                                                ! $resolved_product->is_type( 'variation' )
+                                        );
 
                                         if ( '' !== $stored_contifico_id && isset( $products_by_id[ $stored_contifico_id ] ) ) {
                                                 $contifico_product = $products_by_id[ $stored_contifico_id ];
@@ -5687,7 +5690,10 @@ $filters = [
                                         $effective_id           = $contifico_id;
                                         $effective_sku          = $contifico_sku;
 
-                                        $stored_contifico_id = $this->resolve_contifico_product_identifier( $resolved_product );
+                                        $stored_contifico_id = $this->resolve_contifico_product_identifier(
+                                                $resolved_product,
+                                                ! $resolved_product->is_type( 'variation' )
+                                        );
 
                                         if ( '' !== $stored_contifico_id && isset( $products_by_id[ $stored_contifico_id ] ) ) {
                                                 $effective_product_data = $products_by_id[ $stored_contifico_id ];
@@ -5985,7 +5991,10 @@ $filters = [
 
                 $woocommerce_sku = (string) $resolved_product->get_sku();
 
-                $contifico_id  = $this->resolve_contifico_product_identifier( $resolved_product );
+                $contifico_id  = $this->resolve_contifico_product_identifier(
+                        $resolved_product,
+                        ! $resolved_product->is_type( 'variation' )
+                );
                 $contifico_product = [];
 
                 if ( '' !== $contifico_id ) {
@@ -6100,7 +6109,10 @@ $filters = [
                                                 $contifico_id      = isset( $contifico_product['codigo'] ) ? (string) $contifico_product['codigo'] : $contifico_id;
                                                 $contifico_sku     = isset( $contifico_product['sku'] ) ? (string) $contifico_product['sku'] : $contifico_sku;
                                         } else {
-                                                $stored_contifico_id = $this->resolve_contifico_product_identifier( $resolved_product );
+                                                $stored_contifico_id = $this->resolve_contifico_product_identifier(
+                                                        $resolved_product,
+                                                        ! $resolved_product->is_type( 'variation' )
+                                                );
 
                                                 if ( '' !== $stored_contifico_id ) {
                                                         $contifico_id = $stored_contifico_id;
@@ -6634,7 +6646,10 @@ $filters = [
          */
         private function get_contifico_product_data_for_product( $product, string $sku, bool $force_refresh = false ) {
 
-                $contifico_id = $this->resolve_contifico_product_identifier( $product );
+                $contifico_id = $this->resolve_contifico_product_identifier(
+                        $product,
+                        ! ( is_a( $product, 'WC_Product' ) && $product->is_type( 'variation' ) )
+                );
 
                 if ( '' !== $contifico_id ) {
                         $product_data = $this->get_contifico_product_data_by_id( $contifico_id, $force_refresh );
@@ -6650,15 +6665,17 @@ $filters = [
         /**
          * Retrieve the Contífico identifier stored on a WooCommerce product entry.
          *
-         * Uses the variation parent identifier if the variation does not store its own value.
+         * Uses the variation parent identifier if the variation does not store its own value
+         * and inheritance is allowed.
          *
          * @since 4.2.1
          *
          * @param WC_Product|mixed $product
+         * @param bool             $inherit_from_parent Whether to read the parent identifier for variations.
          *
          * @return string
          */
-        private function resolve_contifico_product_identifier( $product ) : string {
+        private function resolve_contifico_product_identifier( $product, bool $inherit_from_parent = true ) : string {
 
                 if ( ! $product || ! is_a( $product, 'WC_Product' ) ) {
                         return '';
@@ -6670,7 +6687,7 @@ $filters = [
                         return $contifico_id;
                 }
 
-                if ( ! $product->is_type( 'variation' ) ) {
+                if ( ! $inherit_from_parent || ! $product->is_type( 'variation' ) ) {
                         return '';
                 }
 
@@ -7135,7 +7152,7 @@ $filters = [
                                 continue;
                         }
 
-                        $variation_identifier = $this->resolve_contifico_product_identifier( $variation );
+                        $variation_identifier = $this->resolve_contifico_product_identifier( $variation, false );
 
                         if ( '' !== $variation_identifier ) {
                                 $variation_data = $this->get_contifico_product_data_by_id( $variation_identifier, $force_refresh );

@@ -83,6 +83,22 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.84 =
+* Resuelve las bodegas del stock usando primero el identificador de Contífico y mapeando los códigos cuando es necesario, de modo que las cantidades se asignen a la bodega correcta en las sincronizaciones.
+
+= 4.1.83 =
+* Evita heredar el identificador de Contífico del producto padre al sincronizar variaciones, asegurando que cada talla use su propio stock por bodega.
+
+= 4.1.82 =
+* Normaliza los valores de stock recibidos por bodega (cadenas, enteros o envoltorios decimales) antes de convertirlos a número para reflejar el inventario real reportado por Contífico.
+
+= 4.1.81 =
+* Reconoce el identificador de bodega desde los campos `bodega_id` o `bodega` en Contífico para mapear correctamente el stock por ubicación.
+* Ignora valores cacheados al forzar un refresco de inventario, de modo que las caídas de stock se reflejen aunque la llamada previa haya devuelto datos vacíos.
+
+= 4.1.80 =
+* Prioriza el stock disponible (`cantidad_disponible`) por bodega al refrescar inventario en tiempo real para evitar sobreestimar existencias cuando Contífico reporta cantidades reservadas.
+
 = 4.1.79 =
 * Permite descartar las alertas recientes de inventario con un clic para que no vuelvan a mostrarse hasta que haya nuevos errores registrados.
 
