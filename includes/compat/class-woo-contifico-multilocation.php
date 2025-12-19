@@ -604,9 +604,9 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
      */
     protected function get_supported_taxonomies() : array {
         return [
-            'multiloca_location',
-            'locations-lite',
             'locations',
+            'locations-lite',
+            'multiloca_location',
         ];
     }
 

@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.95 =
+* Se prioriza la taxonomía `locations` de MultiLoca al resolver ubicaciones para evitar usar términos legados (`locations-lite`) al escribir el stock por bodega.
+
 = 4.1.94 =
 * Se remapea el ID de ubicación cuando MultiLoca migró de `locations-lite` a `locations`, para asegurar que el stock por bodega se guarda en el término correcto.
 
