@@ -657,6 +657,14 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
 
         if ( function_exists( 'multiloca_link_location_to_product_if_exists' ) ) {
             multiloca_link_location_to_product_if_exists( $product_id, $meta_location_id );
+
+            if ( $product->is_type( 'variation' ) ) {
+                $parent_id = $product->get_parent_id();
+
+                if ( $parent_id ) {
+                    multiloca_link_location_to_product_if_exists( $parent_id, $meta_location_id );
+                }
+            }
         }
 
         update_post_meta( $product_id, $meta_key, $quantity );
@@ -1185,6 +1193,7 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
             'MultiLoca_Lite',
             'MultiLoca',
             'Multiloca_Lite_Plugin',
+            'Multiloca_Lite_Taxonomy',
         ];
 
         foreach ( $possible_classes as $class_name ) {
