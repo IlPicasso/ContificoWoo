@@ -6385,6 +6385,8 @@ $filters = [
                         true
                 );
 
+                $product_cache_key = isset( $product_entry['id'] ) ? (string) $product_entry['id'] : '';
+
                 $location_summary = $this->build_single_product_location_summary(
                         $location_map,
                         $location_stock,

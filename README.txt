@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.98 =
+* Se corrige la sincronización individual para evitar errores al mostrar el detalle de bodegas cuando no existe el identificador interno del producto.
+
 = 4.1.97 =
 * Se incluye el detalle de stock por bodega al sincronizar un producto individual desde el backend para facilitar la revisión de MultiLoca.
 
