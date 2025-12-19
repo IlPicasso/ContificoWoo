@@ -655,7 +655,15 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
 
         $meta_key = sprintf( 'wcmlim_stock_at_%s', $meta_location_id );
 
+        if ( function_exists( 'multiloca_link_location_to_product_if_exists' ) ) {
+            multiloca_link_location_to_product_if_exists( $product_id, $meta_location_id );
+        }
+
         update_post_meta( $product_id, $meta_key, $quantity );
+
+        if ( function_exists( 'wcmlim_calculate_and_update_total_stock' ) ) {
+            wcmlim_calculate_and_update_total_stock( $product_id );
+        }
 
         return true;
     }
