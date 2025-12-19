@@ -83,6 +83,24 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.90 =
+* Se actualiza la sincronización por bodega para recalcular disponibilidad y stock por ubicación en MultiLoca Lite.
+
+= 4.1.89 =
+* Se refuerza la detección de MultiLoca Lite y se enlazan ubicaciones en productos variables para asegurar el stock por bodega.
+
+= 4.1.88 =
+* Se enlazan las ubicaciones de MultiLoca y se recalcula el total al sincronizar stock por bodega para asegurar que se reflejen las existencias por ubicación.
+
+= 4.1.87 =
+* Se agrega compatibilidad con la taxonomía `locations` de MultiLoca Lite para sincronizar correctamente el inventario por bodega.
+
+= 4.1.86 =
+* Se mejora la sincronización individual de productos variables para actualizar todas las variaciones y mostrar el resumen por talla.
+
+= 4.1.85 =
+* Corrige la sincronización individual de stock usando el código de bodega cuando el identificador de Contífico no está presente en la respuesta de inventario.
+
 = 4.1.84 =
 * Resuelve las bodegas del stock usando primero el identificador de Contífico y mapeando los códigos cuando es necesario, de modo que las cantidades se asignen a la bodega correcta en las sincronizaciones.
 
