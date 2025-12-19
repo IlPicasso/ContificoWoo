@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.97 =
+* Se incluye el detalle de stock por bodega al sincronizar un producto individual desde el backend para facilitar la revisión de MultiLoca.
+
 = 4.1.96 =
 * Se actualizan todas las claves de stock por ubicación que coincidan con los IDs, *slug* o nombre de MultiLoca, asegurando que las bodegas se registren aunque existan taxonomías legadas o migradas.
 
