@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.96 =
+* Se actualizan todas las claves de stock por ubicación que coincidan con los IDs, *slug* o nombre de MultiLoca, asegurando que las bodegas se registren aunque existan taxonomías legadas o migradas.
+
 = 4.1.95 =
 * Se prioriza la taxonomía `locations` de MultiLoca al resolver ubicaciones para evitar usar términos legados (`locations-lite`) al escribir el stock por bodega.
 

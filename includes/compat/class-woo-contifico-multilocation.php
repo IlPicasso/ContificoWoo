@@ -631,9 +631,10 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
      * @return bool
      */
     protected function update_stock_via_post_meta( int $product_id, $location_id, float $quantity ) : bool {
-        $meta_location_id = $this->normalize_location_meta_id( $location_id );
+        $primary_location_id = $this->normalize_location_meta_id( $location_id );
+        $meta_location_ids   = $this->resolve_location_meta_ids_for_update( $location_id, $primary_location_id );
 
-        if ( '' === $meta_location_id ) {
+        if ( empty( $meta_location_ids ) ) {
             return false;
         }
 
@@ -653,28 +654,31 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
             $quantity = (float) $quantity;
         }
 
-        $meta_key = sprintf( 'wcmlim_stock_at_%s', $meta_location_id );
+        foreach ( $meta_location_ids as $meta_location_id ) {
+            $meta_key = sprintf( 'wcmlim_stock_at_%s', $meta_location_id );
+            update_post_meta( $product_id, $meta_key, $quantity );
+        }
 
-        if ( function_exists( 'multiloca_link_location_to_product_if_exists' ) ) {
-            multiloca_link_location_to_product_if_exists( $product_id, $meta_location_id );
+        $link_location_id = '' !== $primary_location_id ? $primary_location_id : (string) $meta_location_ids[0];
+
+        if ( '' !== $link_location_id && function_exists( 'multiloca_link_location_to_product_if_exists' ) ) {
+            multiloca_link_location_to_product_if_exists( $product_id, $link_location_id );
 
             if ( $product->is_type( 'variation' ) ) {
                 $parent_id = $product->get_parent_id();
 
                 if ( $parent_id ) {
-                    multiloca_link_location_to_product_if_exists( $parent_id, $meta_location_id );
+                    multiloca_link_location_to_product_if_exists( $parent_id, $link_location_id );
                 }
             }
         }
 
-        update_post_meta( $product_id, $meta_key, $quantity );
-
-        if ( function_exists( 'manage_stock' ) ) {
-            manage_stock( $product, $meta_location_id, $quantity );
+        if ( '' !== $link_location_id && function_exists( 'manage_stock' ) ) {
+            manage_stock( $product, $link_location_id, $quantity );
         }
 
-        if ( function_exists( 'update_availability' ) ) {
-            update_availability( $product, $meta_location_id, $quantity );
+        if ( '' !== $link_location_id && function_exists( 'update_availability' ) ) {
+            update_availability( $product, $link_location_id, $quantity );
         }
 
         if ( function_exists( 'wcmlim_calculate_and_update_total_stock' ) ) {
@@ -806,6 +810,94 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
         }
 
         return '';
+    }
+
+    /**
+     * Resolve all possible location meta identifiers to update for a location.
+     *
+     * @param mixed  $location_id Raw location identifier.
+     * @param string $primary_id  Primary resolved identifier, if any.
+     *
+     * @return array
+     */
+    protected function resolve_location_meta_ids_for_update( $location_id, string $primary_id = '' ) : array {
+        $location_id = trim( (string) $location_id );
+
+        if ( '' === $location_id ) {
+            return [];
+        }
+
+        $meta_ids = [];
+
+        if ( '' !== $primary_id ) {
+            $meta_ids[] = $primary_id;
+        }
+
+        $slugs = [];
+        $names = [];
+
+        if ( ctype_digit( $location_id ) ) {
+            $term_id = (int) $location_id;
+
+            foreach ( $this->get_supported_taxonomies() as $taxonomy ) {
+                if ( ! taxonomy_exists( $taxonomy ) ) {
+                    continue;
+                }
+
+                $term = get_term( $term_id, $taxonomy );
+
+                if ( ! $term || is_wp_error( $term ) || ! isset( $term->term_id ) ) {
+                    continue;
+                }
+
+                $meta_ids[] = (string) $term->term_id;
+
+                if ( isset( $term->slug ) && '' !== $term->slug ) {
+                    $slugs[] = (string) $term->slug;
+                }
+
+                if ( isset( $term->name ) && '' !== $term->name ) {
+                    $names[] = (string) $term->name;
+                }
+            }
+        }
+
+        $slug_candidate = sanitize_title( $location_id );
+
+        if ( '' !== $slug_candidate ) {
+            $slugs[] = $slug_candidate;
+        }
+
+        $names[] = $location_id;
+
+        $slugs = array_values( array_unique( array_filter( $slugs, 'strlen' ) ) );
+        $names = array_values( array_unique( array_filter( $names, 'strlen' ) ) );
+
+        foreach ( $this->get_supported_taxonomies() as $taxonomy ) {
+            if ( ! taxonomy_exists( $taxonomy ) ) {
+                continue;
+            }
+
+            foreach ( $slugs as $slug ) {
+                $term = get_term_by( 'slug', $slug, $taxonomy );
+
+                if ( $term && ! is_wp_error( $term ) && isset( $term->term_id ) ) {
+                    $meta_ids[] = (string) $term->term_id;
+                }
+            }
+
+            foreach ( $names as $name ) {
+                $term = get_term_by( 'name', $name, $taxonomy );
+
+                if ( $term && ! is_wp_error( $term ) && isset( $term->term_id ) ) {
+                    $meta_ids[] = (string) $term->term_id;
+                }
+            }
+        }
+
+        $meta_ids = array_values( array_unique( array_filter( $meta_ids, 'strlen' ) ) );
+
+        return $meta_ids;
     }
 
     /**
