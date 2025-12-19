@@ -100,6 +100,9 @@
                         const missingIdentifier = $field.data( 'missing-identifier' )
                                 || $field.attr( 'data-missing-identifier' )
                                 || fallbackMissingId;
+                        const syncVariationsAttr = $field.data( 'sync-variations' )
+                                || $field.attr( 'data-sync-variations' )
+                                || '';
                         const genericError      = $field.data( 'generic-error' )
                                 || $field.attr( 'data-generic-error' )
                                 || genericErrorMessage;
@@ -129,6 +132,10 @@
 
                         if ( sku ) {
                                 requestData.sku = sku;
+                        }
+
+                        if ( String( syncVariationsAttr ).trim() !== '' ) {
+                                requestData.sync_variations = true;
                         }
 
                         if ( ! requestData.product_id && ! sku ) {

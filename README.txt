@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.86 =
+* Se mejora la sincronización individual de productos variables para actualizar todas las variaciones y mostrar el resumen por talla.
+
 = 4.1.85 =
 * Corrige la sincronización individual de stock usando el código de bodega cuando el identificador de Contífico no está presente en la respuesta de inventario.
 * Reconoce las bodegas configuradas aunque se ingrese su identificador en lugar del código y usa esa referencia para leer el stock directamente de Contífico sin descartar cantidades válidas.
