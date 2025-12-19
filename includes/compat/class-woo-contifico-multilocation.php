@@ -604,9 +604,9 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
      */
     protected function get_supported_taxonomies() : array {
         return [
-            'multiloca_location',
-            'locations-lite',
             'locations',
+            'locations-lite',
+            'multiloca_location',
         ];
     }
 
@@ -712,16 +712,62 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
             return $this->location_meta_id_cache[ $location_id ];
         }
 
-        $numeric = preg_replace( '/[^0-9]/', '', $location_id );
+        if ( ctype_digit( $location_id ) ) {
+            $term_id          = (int) $location_id;
+            $primary_taxonomy = taxonomy_exists( 'locations' ) ? 'locations' : '';
 
-        if ( '' !== $numeric ) {
-            return $this->location_meta_id_cache[ $location_id ] = $numeric;
+            if ( $primary_taxonomy ) {
+                $primary_term = get_term( $term_id, $primary_taxonomy );
+
+                if ( $primary_term && ! is_wp_error( $primary_term ) ) {
+                    return $this->location_meta_id_cache[ $location_id ] = (string) $term_id;
+                }
+            }
+
+            if ( $primary_taxonomy ) {
+                foreach ( $this->get_supported_taxonomies() as $taxonomy ) {
+                    if ( $taxonomy === $primary_taxonomy || ! taxonomy_exists( $taxonomy ) ) {
+                        continue;
+                    }
+
+                    $term = get_term( $term_id, $taxonomy );
+
+                    if ( ! $term || is_wp_error( $term ) ) {
+                        continue;
+                    }
+
+                    $slug = isset( $term->slug ) ? (string) $term->slug : '';
+                    $name = isset( $term->name ) ? (string) $term->name : '';
+
+                    if ( '' !== $slug ) {
+                        $resolved = get_term_by( 'slug', $slug, $primary_taxonomy );
+
+                        if ( $resolved && ! is_wp_error( $resolved ) && isset( $resolved->term_id ) ) {
+                            return $this->location_meta_id_cache[ $location_id ] = (string) $resolved->term_id;
+                        }
+                    }
+
+                    if ( '' !== $name ) {
+                        $resolved = get_term_by( 'name', $name, $primary_taxonomy );
+
+                        if ( $resolved && ! is_wp_error( $resolved ) && isset( $resolved->term_id ) ) {
+                            return $this->location_meta_id_cache[ $location_id ] = (string) $resolved->term_id;
+                        }
+                    }
+                }
+            }
         }
 
         $resolved = $this->resolve_location_meta_id_from_taxonomies( $location_id );
 
         if ( '' !== $resolved ) {
             return $this->location_meta_id_cache[ $location_id ] = $resolved;
+        }
+
+        $numeric = preg_replace( '/[^0-9]/', '', $location_id );
+
+        if ( '' !== $numeric ) {
+            return $this->location_meta_id_cache[ $location_id ] = $numeric;
         }
 
         $normalized = preg_replace( '/[^A-Za-z0-9_-]/', '', $location_id );
@@ -1035,7 +1081,9 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
         if ( function_exists( 'multiloca_lite_update_stock' ) ) {
             $result = multiloca_lite_update_stock( $product_id, $location_id, $quantity );
             if ( null !== $result ) {
-                return (bool) $result;
+                if ( (bool) $result ) {
+                    return true;
+                }
             }
         }
 
@@ -1044,13 +1092,17 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
             if ( is_callable( [ $inventory, 'update_stock' ] ) ) {
                 $result = call_user_func( [ $inventory, 'update_stock' ], $product_id, $location_id, $quantity );
                 if ( null !== $result ) {
-                    return (bool) $result;
+                    if ( (bool) $result ) {
+                        return true;
+                    }
                 }
             }
             if ( is_callable( [ $inventory, 'set_stock' ] ) ) {
                 $result = call_user_func( [ $inventory, 'set_stock' ], $product_id, $location_id, $quantity );
                 if ( null !== $result ) {
-                    return (bool) $result;
+                    if ( (bool) $result ) {
+                        return true;
+                    }
                 }
             }
         }
@@ -1058,7 +1110,9 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
         if ( is_object( $this->instance ) && is_callable( [ $this->instance, 'update_stock' ] ) ) {
             $result = call_user_func( [ $this->instance, 'update_stock' ], $product_id, $location_id, $quantity );
             if ( null !== $result ) {
-                return (bool) $result;
+                if ( (bool) $result ) {
+                    return true;
+                }
             }
         }
 
