@@ -59,21 +59,17 @@
                         return fallback;
                 }
 
-                function renderSingleSyncResult( $container, data ) {
-                        const changes             = data.changes || {};
-                        const changeMessages      = [];
-                        const separator           = messages.changeSeparator || '→';
-                        const noValue             = messages.noValue || 'N/D';
-                        const noIdentifier        = messages.noIdentifier || 'Sin identificador registrado.';
-                        const detailSummaryLabel  = messages.changeDetailSummary || 'Detalle sincronizado:';
-                        const detailJoiner        = messages.changeDetailJoiner || ' · ';
-                        const changeDetails       = [];
-                        const previousStock       = ( typeof changes.previous_stock === 'number' ) ? changes.previous_stock : null;
-                        const newStock            = ( typeof changes.new_stock === 'number' ) ? changes.new_stock : null;
-                        const previousPrice       = ( typeof changes.previous_price === 'number' ) ? changes.previous_price : null;
-                        const newPrice            = ( typeof changes.new_price === 'number' ) ? changes.new_price : null;
-                        const previousIdentifier  = changes.previous_identifier ? String( changes.previous_identifier ) : '';
-                        const newIdentifier       = changes.new_identifier ? String( changes.new_identifier ) : '';
+                function buildChangeDetails( changes ) {
+                        const separator          = messages.changeSeparator || '→';
+                        const noValue            = messages.noValue || 'N/D';
+                        const noIdentifier       = messages.noIdentifier || 'Sin identificador registrado.';
+                        const previousStock      = ( typeof changes.previous_stock === 'number' ) ? changes.previous_stock : null;
+                        const newStock           = ( typeof changes.new_stock === 'number' ) ? changes.new_stock : null;
+                        const previousPrice      = ( typeof changes.previous_price === 'number' ) ? changes.previous_price : null;
+                        const newPrice           = ( typeof changes.new_price === 'number' ) ? changes.new_price : null;
+                        const previousIdentifier = changes.previous_identifier ? String( changes.previous_identifier ) : '';
+                        const newIdentifier      = changes.new_identifier ? String( changes.new_identifier ) : '';
+                        const changeDetails      = [];
 
                         if ( previousStock !== null || newStock !== null ) {
                                 changeDetails.push( {
@@ -99,7 +95,11 @@
                                 } );
                         }
 
-                        $container.removeClass( 'error success' ).empty();
+                        return changeDetails;
+                }
+
+                function buildChangeMessages( changes ) {
+                        const changeMessages = [];
 
                         if ( changes.stock_updated ) {
                                 changeMessages.push( messages.stockUpdated || 'Inventario actualizado.' );
@@ -120,6 +120,109 @@
                         if ( changeMessages.length === 0 ) {
                                 changeMessages.push( messages.noChanges || 'Sin cambios en inventario ni precio.' );
                         }
+
+                        return changeMessages;
+                }
+
+                function renderMultipleSyncResult( $container, data ) {
+                        const items            = Array.isArray( data.items ) ? data.items : [];
+                        const summary          = data.summary || {};
+                        const detailJoiner     = messages.changeDetailJoiner || ' · ';
+                        const detailSummaryLabel = messages.changeDetailSummary || 'Detalle sincronizado:';
+                        const headingLabel     = messages.variationsHeading || 'Detalle por variación';
+                        const variationLabel   = messages.variationLabel || 'Variación';
+
+                        $container.removeClass( 'error success' ).empty();
+
+                        if ( data.message ) {
+                                $container.append( $( '<p />' ).addClass( 'woo-contifico-sync-result-message' ).text( data.message ) );
+                        }
+
+                        const summaryParts = [];
+                        const totalCount = ( typeof summary.total === 'number' ) ? summary.total : items.length;
+
+                        if ( typeof totalCount === 'number' ) {
+                                summaryParts.push( ( messages.variationsCountLabel || 'Variaciones sincronizadas' ) + ': ' + totalCount );
+                        }
+
+                        if ( typeof summary.updated === 'number' ) {
+                                summaryParts.push( ( messages.variationsUpdatedLabel || 'Actualizadas' ) + ': ' + summary.updated );
+                        }
+
+                        if ( typeof summary.outofstock === 'number' ) {
+                                summaryParts.push( ( messages.variationsOutOfStockLabel || 'Sin stock' ) + ': ' + summary.outofstock );
+                        }
+
+                        if ( typeof summary.errors === 'number' ) {
+                                summaryParts.push( ( messages.variationsErrorLabel || 'Errores' ) + ': ' + summary.errors );
+                        }
+
+                        if ( summaryParts.length > 0 ) {
+                                $container.append(
+                                        $( '<p />' )
+                                                .addClass( 'woo-contifico-sync-result-summary' )
+                                                .text( summaryParts.join( detailJoiner ) )
+                                );
+                        }
+
+                        if ( items.length > 0 ) {
+                                $container.append(
+                                        $( '<p />' )
+                                                .addClass( 'woo-contifico-sync-result-heading' )
+                                                .text( headingLabel )
+                                );
+
+                                const $detailsList = $( '<ul />' ).addClass( 'woo-contifico-sync-result-list' );
+
+                                items.forEach( function( item ) {
+                                        const skuLabelValue = item.woocommerce_sku || item.contifico_sku || item.contifico_id || item.woocommerce_product || '';
+                                        const changes = item.changes || {};
+                                        const detailItems = buildChangeDetails( changes );
+                                        const detailText = detailItems.map( function( detail ) {
+                                                return detail.label + ': ' + detail.value;
+                                        } ).join( detailJoiner );
+                                        const itemMessages = item.error ? [ item.error ] : buildChangeMessages( changes );
+                                        const messageParts = [];
+
+                                        if ( item.message ) {
+                                                messageParts.push( item.message );
+                                        }
+
+                                        messageParts.push( itemMessages.join( ' ' ) );
+
+                                        if ( detailItems.length > 0 ) {
+                                                messageParts.push( detailSummaryLabel + ' ' + detailText );
+                                        }
+
+                                        const $item = $( '<li />' );
+                                        $item.append(
+                                                $( '<span />' )
+                                                        .addClass( 'woo-contifico-sync-detail-label' )
+                                                        .text( variationLabel + ': ' + skuLabelValue + ' ' )
+                                        );
+                                        $item.append( document.createTextNode( messageParts.join( ' ' ) ) );
+                                        $detailsList.append( $item );
+                                } );
+
+                                $container.append( $detailsList );
+                        }
+
+                        $container.addClass( 'success' ).show();
+                }
+
+                function renderSingleSyncResult( $container, data ) {
+                        if ( Array.isArray( data.items ) && data.items.length > 0 ) {
+                                renderMultipleSyncResult( $container, data );
+                                return;
+                        }
+
+                        const changes            = data.changes || {};
+                        const detailSummaryLabel = messages.changeDetailSummary || 'Detalle sincronizado:';
+                        const detailJoiner       = messages.changeDetailJoiner || ' · ';
+                        const changeDetails      = buildChangeDetails( changes );
+                        const changeMessages     = buildChangeMessages( changes );
+
+                        $container.removeClass( 'error success' ).empty();
 
                         if ( data.message ) {
                                 $container.append( $( '<p />' ).addClass( 'woo-contifico-sync-result-message' ).text( data.message ) );

@@ -305,6 +305,12 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                                 'noValue'            => __( 'N/D', 'woo-contifico' ),
                                 'changeSeparator'    => __( '→', 'woo-contifico' ),
                                 'changesHeading'     => __( 'Detalle de cambios', 'woo-contifico' ),
+                                'variationsHeading'  => __( 'Detalle por variación', 'woo-contifico' ),
+                                'variationLabel'     => __( 'Variación', 'woo-contifico' ),
+                                'variationsCountLabel' => __( 'Variaciones sincronizadas', 'woo-contifico' ),
+                                'variationsUpdatedLabel' => __( 'Actualizadas', 'woo-contifico' ),
+                                'variationsOutOfStockLabel' => __( 'Sin stock', 'woo-contifico' ),
+                                'variationsErrorLabel' => __( 'Errores', 'woo-contifico' ),
                                 'syncing'            => __( 'Sincronizando producto…', 'woo-contifico' ),
                                 'genericError'       => __( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' ),
                                 'missingSku'         => __( 'Debes proporcionar un SKU para iniciar la sincronización.', 'woo-contifico' ),
@@ -419,19 +425,23 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                         return;
                 }
 
-                $contifico_id         = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
-                $product_sku          = (string) $product->get_sku();
-                $generic_error        = __( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' );
-                $missing_identifier   = __( 'No hay identificador de Contífico guardado.', 'woo-contifico' );
-                $sync_button_label    = __( 'Sincronizar con Contífico', 'woo-contifico' );
-                $page_reload_message  = __( 'Actualizando la página para reflejar los cambios…', 'woo-contifico' );
-                $page_reload_delay_ms = 2000;
+                $contifico_id          = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
+                $product_sku           = (string) $product->get_sku();
+                $sync_variations       = $product->is_type( 'variable' );
+                $generic_error         = __( 'No fue posible sincronizar el producto. Intenta nuevamente.', 'woo-contifico' );
+                $missing_identifier    = __( 'No hay identificador de Contífico guardado.', 'woo-contifico' );
+                $sync_button_label     = __( 'Sincronizar con Contífico', 'woo-contifico' );
+                $page_reload_message   = __( 'Actualizando la página para reflejar los cambios…', 'woo-contifico' );
+                $page_reload_delay_ms  = 2000;
 
                 echo '<div class="options_group woo-contifico-product-id-field"';
                 echo ' data-product-id="' . esc_attr( (string) $product->get_id() ) . '"';
                 echo ' data-product-sku="' . esc_attr( $product_sku ) . '"';
                 echo ' data-generic-error="' . esc_attr( $generic_error ) . '"';
                 echo ' data-missing-identifier="' . esc_attr( $missing_identifier ) . '"';
+                if ( $sync_variations ) {
+                        echo ' data-sync-variations="1"';
+                }
                 echo ' data-reload-on-success="1"';
                 echo ' data-reload-delay="' . esc_attr( (string) $page_reload_delay_ms ) . '"';
                 echo ' data-reload-message="' . esc_attr( $page_reload_message ) . '"';
@@ -5364,8 +5374,9 @@ $filters = [
 
                 $sku        = isset( $_POST['sku'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['sku'] ) ) : '';
                 $product_id = isset( $_POST['product_id'] ) ? absint( wp_unslash( $_POST['product_id'] ) ) : 0;
-                $skip_movement_log = false;
+                $skip_movement_log          = false;
                 $reset_identifier_on_mismatch = false;
+                $sync_variations            = false;
 
                 if ( isset( $_POST['skip_inventory_movement'] ) ) {
                         $skip_movement_log = wc_string_to_bool( wp_unslash( $_POST['skip_inventory_movement'] ) );
@@ -5373,6 +5384,10 @@ $filters = [
 
                 if ( isset( $_POST['reset_identifier_on_mismatch'] ) ) {
                         $reset_identifier_on_mismatch = wc_string_to_bool( wp_unslash( $_POST['reset_identifier_on_mismatch'] ) );
+                }
+
+                if ( isset( $_POST['sync_variations'] ) ) {
+                        $sync_variations = wc_string_to_bool( wp_unslash( $_POST['sync_variations'] ) );
                 }
 
                 if ( $product_id <= 0 && '' === $sku ) {
@@ -5386,7 +5401,13 @@ $filters = [
 
                 try {
                         if ( $product_id > 0 ) {
-                                $result = $this->sync_single_product_by_product_id( $product_id, $sku, ! $skip_movement_log, $reset_identifier_on_mismatch );
+                                $result = $this->sync_single_product_by_product_id(
+                                        $product_id,
+                                        $sku,
+                                        ! $skip_movement_log,
+                                        $reset_identifier_on_mismatch,
+                                        $sync_variations
+                                );
                         } else {
                                 $result = $this->sync_single_product_by_sku( $sku, ! $skip_movement_log, $reset_identifier_on_mismatch );
                         }
@@ -5483,26 +5504,23 @@ $filters = [
                                 $debug_log_entries = [];
                         }
 
-                        if ( $manage_stock ) {
-                                if (
-                                        $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
-                                        && $this->woo_contifico->multilocation->is_active()
-                                ) {
-                                        $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
+                if ( $manage_stock ) {
+                        if ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) {
+                                $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
 
-                                        if ( is_array( $configured_locations ) ) {
-                                                foreach ( $configured_locations as $location_id => $warehouse_code ) {
-                                                        $code = (string) $warehouse_code;
+                                if ( is_array( $configured_locations ) ) {
+                                        foreach ( $configured_locations as $location_id => $warehouse_code ) {
+                                                $code = (string) $warehouse_code;
 
-                                                        if ( '' === $code ) {
-                                                                continue;
-                                                        }
-
-                                                        $location_map[ (string) $location_id ] = $code;
+                                                if ( '' === $code ) {
+                                                        continue;
                                                 }
+
+                                                $location_map[ (string) $location_id ] = $code;
                                         }
                                 }
                         }
+                }
 
                         # Get products of this batch
                         $fetched_products = $this->contifico->fetch_products( $step, $batch_size );
@@ -5891,7 +5909,13 @@ $filters = [
          * @return array
          * @throws Exception
          */
-        private function sync_single_product_by_product_id( int $product_id, string $fallback_sku = '', bool $log_inventory_movement = true, bool $reset_identifier_on_mismatch = false ) : array {
+        private function sync_single_product_by_product_id(
+                int $product_id,
+                string $fallback_sku = '',
+                bool $log_inventory_movement = true,
+                bool $reset_identifier_on_mismatch = false,
+                bool $sync_variations = false
+        ) : array {
 
                 if ( $product_id <= 0 ) {
                         throw new Exception( __( 'No se indicó un producto válido para sincronizar.', 'woo-contifico' ) );
@@ -5915,7 +5939,126 @@ $filters = [
                         $lookup_sku = (string) $wc_product->get_sku();
                 }
 
+                if ( $sync_variations && $wc_product->is_type( 'variable' ) ) {
+                        return $this->sync_variable_product_variations(
+                                $wc_product,
+                                $environment,
+                                $log_inventory_movement,
+                                $reset_identifier_on_mismatch
+                        );
+                }
+
                 return $this->execute_single_product_sync( $wc_product, $environment, $lookup_sku, $log_inventory_movement, $reset_identifier_on_mismatch );
+        }
+
+        /**
+         * Synchronize all variations for a variable product.
+         *
+         * @since 4.1.86
+         *
+         * @param WC_Product $parent_product
+         * @param array      $environment
+         * @param bool       $log_inventory_movement
+         * @param bool       $reset_identifier_on_mismatch
+         *
+         * @return array
+         * @throws Exception
+         */
+        private function sync_variable_product_variations(
+                $parent_product,
+                array $environment,
+                bool $log_inventory_movement = true,
+                bool $reset_identifier_on_mismatch = false
+        ) : array {
+
+                if ( ! $parent_product || ! is_a( $parent_product, 'WC_Product' ) || ! $parent_product->is_type( 'variable' ) ) {
+                        throw new Exception( __( 'El producto no es variable o no se pudo cargar.', 'woo-contifico' ) );
+                }
+
+                $variation_ids = (array) $parent_product->get_children();
+
+                if ( empty( $variation_ids ) ) {
+                        throw new Exception( __( 'No se encontraron variaciones para sincronizar.', 'woo-contifico' ) );
+                }
+
+                $items   = [];
+                $summary = [
+                        'total'     => 0,
+                        'updated'   => 0,
+                        'outofstock'=> 0,
+                        'errors'    => 0,
+                ];
+                $result  = [
+                        'found'      => 0,
+                        'updated'    => 0,
+                        'outofstock' => 0,
+                ];
+
+                foreach ( $variation_ids as $variation_id ) {
+                        $variation = wc_get_product( $variation_id );
+
+                        if ( ! $variation || ! is_a( $variation, 'WC_Product' ) ) {
+                                continue;
+                        }
+
+                        $summary['total']++;
+                        $variation_sku = (string) $variation->get_sku();
+
+                        try {
+                                $item = $this->execute_single_product_sync(
+                                        $variation,
+                                        $environment,
+                                        $variation_sku,
+                                        $log_inventory_movement,
+                                        $reset_identifier_on_mismatch
+                                );
+
+                                $items[] = $item;
+
+                                $item_result = isset( $item['result'] ) && is_array( $item['result'] ) ? $item['result'] : [];
+                                $result['found']      += isset( $item_result['found'] ) ? (int) $item_result['found'] : 0;
+                                $result['updated']    += isset( $item_result['updated'] ) ? (int) $item_result['updated'] : 0;
+                                $result['outofstock'] += isset( $item_result['outofstock'] ) ? (int) $item_result['outofstock'] : 0;
+
+                                if ( ! empty( $item['changes']['stock_updated'] ) || ! empty( $item['changes']['price_updated'] ) ) {
+                                        $summary['updated']++;
+                                }
+
+                                if ( ! empty( $item['changes']['outofstock'] ) ) {
+                                        $summary['outofstock']++;
+                                }
+                        }
+                        catch ( Exception $exception ) {
+                                $summary['errors']++;
+
+                                $items[] = [
+                                        'message'             => __( 'No se pudo sincronizar la variación.', 'woo-contifico' ),
+                                        'error'               => $exception->getMessage(),
+                                        'contifico_id'         => (string) $variation->get_meta( self::PRODUCT_ID_META_KEY, true ),
+                                        'contifico_sku'        => $variation_sku,
+                                        'woocommerce_sku'      => $variation_sku,
+                                        'woocommerce_product'  => $variation->get_id(),
+                                        'changes'              => [],
+                                ];
+                        }
+                }
+
+                $message = sprintf(
+                        /* translators: 1: total variations, 2: errors */
+                        __( 'Sincronización de variaciones finalizada. Variaciones sincronizadas: %1$d. Errores: %2$d.', 'woo-contifico' ),
+                        (int) $summary['total'],
+                        (int) $summary['errors']
+                );
+
+                return [
+                        'message'             => $message,
+                        'woocommerce_product' => $parent_product->get_id(),
+                        'woocommerce_sku'     => (string) $parent_product->get_sku(),
+                        'contifico_id'        => (string) $parent_product->get_meta( self::PRODUCT_ID_META_KEY, true ),
+                        'items'               => $items,
+                        'summary'             => $summary,
+                        'result'              => $result,
+                ];
         }
 
         /**
@@ -5934,10 +6077,7 @@ $filters = [
                 $location_map   = [];
 
                 if ( $manage_stock ) {
-                        if (
-                                $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
-                                && $this->woo_contifico->multilocation->is_active()
-                        ) {
+                        if ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) {
                                 $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
 
                                 if ( is_array( $configured_locations ) ) {
@@ -6416,25 +6556,29 @@ $filters = [
                                         $warehouse_code = (string) $warehouse_code;
                                         $quantity       = null;
 
-                                        if ( isset( $location_stock[ $location_id ][ $product_cache_key ] ) ) {
-                                                $quantity = (int) $location_stock[ $location_id ][ $product_cache_key ];
+                                if ( isset( $location_stock[ $location_id ][ $product_cache_key ] ) ) {
+                                        $quantity = (int) $location_stock[ $location_id ][ $product_cache_key ];
+                                }
+
+                                if ( null === $quantity ) {
+                                        if ( ! array_key_exists( $warehouse_code, $warehouse_id_cache ) ) {
+                                                $warehouse_id_cache[ $warehouse_code ] = (string) ( $this->contifico->get_id_bodega( $warehouse_code ) ?? '' );
                                         }
 
-                                        if ( null === $quantity ) {
-                                                if ( ! array_key_exists( $warehouse_code, $warehouse_id_cache ) ) {
-                                                        $warehouse_id_cache[ $warehouse_code ] = (string) ( $this->contifico->get_id_bodega( $warehouse_code ) ?? '' );
-                                                }
+                                        $warehouse_id = $warehouse_id_cache[ $warehouse_code ];
 
-                                                $warehouse_id = $warehouse_id_cache[ $warehouse_code ];
-
-                                                if ( '' !== $warehouse_id && isset( $stock_by_warehouse[ $warehouse_id ] ) ) {
-                                                        $quantity = (int) $stock_by_warehouse[ $warehouse_id ];
-                                                }
+                                        if ( '' !== $warehouse_id && isset( $stock_by_warehouse[ $warehouse_id ] ) ) {
+                                                $quantity = (int) $stock_by_warehouse[ $warehouse_id ];
                                         }
 
-                                        if ( null === $quantity ) {
-                                                $quantity = 0;
+                                        if ( null === $quantity && '' !== $warehouse_code && isset( $stock_by_warehouse[ $warehouse_code ] ) ) {
+                                                $quantity = (int) $stock_by_warehouse[ $warehouse_code ];
                                         }
+                                }
+
+                                if ( null === $quantity ) {
+                                        $quantity = 0;
+                                }
 
                                         $location_stock[ $location_id ][ $product_cache_key ] = $quantity;
                                         $global_quantity                                      += $quantity;
@@ -6447,8 +6591,18 @@ $filters = [
                                 $new_stock = $global_quantity;
                         }
 
-                        if ( empty( $location_map ) && '' !== $default_warehouse_id && isset( $stock_by_warehouse[ $default_warehouse_id ] ) ) {
-                                $new_stock = (int) $stock_by_warehouse[ $default_warehouse_id ];
+                        if ( empty( $location_map ) && '' !== $default_warehouse_id ) {
+                                if ( isset( $stock_by_warehouse[ $default_warehouse_id ] ) ) {
+                                        $new_stock = (int) $stock_by_warehouse[ $default_warehouse_id ];
+                                }
+
+                                if ( 0 === $new_stock && isset( $warehouses_map[ $default_warehouse_id ] ) ) {
+                                        $default_warehouse_code = (string) $warehouses_map[ $default_warehouse_id ];
+
+                                        if ( '' !== $default_warehouse_code && isset( $stock_by_warehouse[ $default_warehouse_code ] ) ) {
+                                                $new_stock = (int) $stock_by_warehouse[ $default_warehouse_code ];
+                                        }
+                                }
                         }
 
                         if ( $old_stock !== $new_stock ) {
