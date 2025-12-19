@@ -606,6 +606,7 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
         return [
             'multiloca_location',
             'locations-lite',
+            'locations',
         ];
     }
 
