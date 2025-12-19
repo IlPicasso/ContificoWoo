@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.91 =
+* Se fuerza el uso del mapeo de ubicaciones configurado y se habilitan actualizaciones de MultiLoca aunque no se detecte la instancia, para sincronizar stock por bodega.
+
 = 4.1.90 =
 * Se actualiza la sincronización por bodega para recalcular disponibilidad y stock por ubicación en MultiLoca Lite.
 

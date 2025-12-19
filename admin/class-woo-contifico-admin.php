@@ -5504,26 +5504,23 @@ $filters = [
                                 $debug_log_entries = [];
                         }
 
-                        if ( $manage_stock ) {
-                                if (
-                                        $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
-                                        && $this->woo_contifico->multilocation->is_active()
-                                ) {
-                                        $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
+                if ( $manage_stock ) {
+                        if ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) {
+                                $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
 
-                                        if ( is_array( $configured_locations ) ) {
-                                                foreach ( $configured_locations as $location_id => $warehouse_code ) {
-                                                        $code = (string) $warehouse_code;
+                                if ( is_array( $configured_locations ) ) {
+                                        foreach ( $configured_locations as $location_id => $warehouse_code ) {
+                                                $code = (string) $warehouse_code;
 
-                                                        if ( '' === $code ) {
-                                                                continue;
-                                                        }
-
-                                                        $location_map[ (string) $location_id ] = $code;
+                                                if ( '' === $code ) {
+                                                        continue;
                                                 }
+
+                                                $location_map[ (string) $location_id ] = $code;
                                         }
                                 }
                         }
+                }
 
                         # Get products of this batch
                         $fetched_products = $this->contifico->fetch_products( $step, $batch_size );
@@ -6080,10 +6077,7 @@ $filters = [
                 $location_map   = [];
 
                 if ( $manage_stock ) {
-                        if (
-                                $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
-                                && $this->woo_contifico->multilocation->is_active()
-                        ) {
+                        if ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) {
                                 $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
 
                                 if ( is_array( $configured_locations ) ) {

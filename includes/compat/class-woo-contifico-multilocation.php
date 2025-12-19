@@ -1026,7 +1026,7 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
      * @return bool
      */
     public function update_stock( int $product_id, $location_id, $quantity ) : bool {
-        if ( ! $this->is_active() ) {
+        if ( ! $this->should_allow_stock_updates() ) {
             return false;
         }
 
@@ -1084,7 +1084,7 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
      * @return bool
      */
     public function update_location_stock( $product, $location_id, $quantity ) : bool {
-        if ( ! $this->is_active() ) {
+        if ( ! $this->should_allow_stock_updates() ) {
             return false;
         }
 
@@ -1232,5 +1232,36 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
         }
 
         return null;
+    }
+
+    /**
+     * Determine if we should attempt stock updates even if the plugin instance is not detected.
+     *
+     * @return bool
+     */
+    protected function should_allow_stock_updates() : bool {
+        if ( $this->is_active() ) {
+            return true;
+        }
+
+        if ( function_exists( 'multiloca_link_location_to_product_if_exists' ) ) {
+            return true;
+        }
+
+        if ( function_exists( 'wcmlim_calculate_and_update_total_stock' ) ) {
+            return true;
+        }
+
+        if ( function_exists( 'manage_stock' ) || function_exists( 'update_availability' ) ) {
+            return true;
+        }
+
+        foreach ( $this->get_supported_taxonomies() as $taxonomy ) {
+            if ( taxonomy_exists( $taxonomy ) ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
