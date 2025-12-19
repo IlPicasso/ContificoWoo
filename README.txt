@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.94 =
+* Se remapea el ID de ubicación cuando MultiLoca migró de `locations-lite` a `locations`, para asegurar que el stock por bodega se guarda en el término correcto.
+
 = 4.1.93 =
 * Se corrige la normalización del identificador de ubicación para resolver primero por taxonomías de MultiLoca cuando el slug contiene dígitos, evitando escribir el stock en metadatos con IDs incorrectos.
 

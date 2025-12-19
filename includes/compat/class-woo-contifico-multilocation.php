@@ -713,7 +713,49 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
         }
 
         if ( ctype_digit( $location_id ) ) {
-            return $this->location_meta_id_cache[ $location_id ] = $location_id;
+            $term_id          = (int) $location_id;
+            $primary_taxonomy = taxonomy_exists( 'locations' ) ? 'locations' : '';
+
+            if ( $primary_taxonomy ) {
+                $primary_term = get_term( $term_id, $primary_taxonomy );
+
+                if ( $primary_term && ! is_wp_error( $primary_term ) ) {
+                    return $this->location_meta_id_cache[ $location_id ] = (string) $term_id;
+                }
+            }
+
+            if ( $primary_taxonomy ) {
+                foreach ( $this->get_supported_taxonomies() as $taxonomy ) {
+                    if ( $taxonomy === $primary_taxonomy || ! taxonomy_exists( $taxonomy ) ) {
+                        continue;
+                    }
+
+                    $term = get_term( $term_id, $taxonomy );
+
+                    if ( ! $term || is_wp_error( $term ) ) {
+                        continue;
+                    }
+
+                    $slug = isset( $term->slug ) ? (string) $term->slug : '';
+                    $name = isset( $term->name ) ? (string) $term->name : '';
+
+                    if ( '' !== $slug ) {
+                        $resolved = get_term_by( 'slug', $slug, $primary_taxonomy );
+
+                        if ( $resolved && ! is_wp_error( $resolved ) && isset( $resolved->term_id ) ) {
+                            return $this->location_meta_id_cache[ $location_id ] = (string) $resolved->term_id;
+                        }
+                    }
+
+                    if ( '' !== $name ) {
+                        $resolved = get_term_by( 'name', $name, $primary_taxonomy );
+
+                        if ( $resolved && ! is_wp_error( $resolved ) && isset( $resolved->term_id ) ) {
+                            return $this->location_meta_id_cache[ $location_id ] = (string) $resolved->term_id;
+                        }
+                    }
+                }
+            }
         }
 
         $resolved = $this->resolve_location_meta_id_from_taxonomies( $location_id );
