@@ -669,6 +669,14 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
 
         update_post_meta( $product_id, $meta_key, $quantity );
 
+        if ( function_exists( 'manage_stock' ) ) {
+            manage_stock( $product, $meta_location_id, $quantity );
+        }
+
+        if ( function_exists( 'update_availability' ) ) {
+            update_availability( $product, $meta_location_id, $quantity );
+        }
+
         if ( function_exists( 'wcmlim_calculate_and_update_total_stock' ) ) {
             wcmlim_calculate_and_update_total_stock( $product_id );
         }

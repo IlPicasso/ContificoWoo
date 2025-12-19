@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.90 =
+* Se actualiza la sincronización por bodega para recalcular disponibilidad y stock por ubicación en MultiLoca Lite.
+
 = 4.1.89 =
 * Se refuerza la detección de MultiLoca Lite y se enlazan ubicaciones en productos variables para asegurar el stock por bodega.
 
