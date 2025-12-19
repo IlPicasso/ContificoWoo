@@ -712,16 +712,20 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
             return $this->location_meta_id_cache[ $location_id ];
         }
 
-        $numeric = preg_replace( '/[^0-9]/', '', $location_id );
-
-        if ( '' !== $numeric ) {
-            return $this->location_meta_id_cache[ $location_id ] = $numeric;
+        if ( ctype_digit( $location_id ) ) {
+            return $this->location_meta_id_cache[ $location_id ] = $location_id;
         }
 
         $resolved = $this->resolve_location_meta_id_from_taxonomies( $location_id );
 
         if ( '' !== $resolved ) {
             return $this->location_meta_id_cache[ $location_id ] = $resolved;
+        }
+
+        $numeric = preg_replace( '/[^0-9]/', '', $location_id );
+
+        if ( '' !== $numeric ) {
+            return $this->location_meta_id_cache[ $location_id ] = $numeric;
         }
 
         $normalized = preg_replace( '/[^A-Za-z0-9_-]/', '', $location_id );
