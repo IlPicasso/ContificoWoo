@@ -1035,7 +1035,9 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
         if ( function_exists( 'multiloca_lite_update_stock' ) ) {
             $result = multiloca_lite_update_stock( $product_id, $location_id, $quantity );
             if ( null !== $result ) {
-                return (bool) $result;
+                if ( (bool) $result ) {
+                    return true;
+                }
             }
         }
 
@@ -1044,13 +1046,17 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
             if ( is_callable( [ $inventory, 'update_stock' ] ) ) {
                 $result = call_user_func( [ $inventory, 'update_stock' ], $product_id, $location_id, $quantity );
                 if ( null !== $result ) {
-                    return (bool) $result;
+                    if ( (bool) $result ) {
+                        return true;
+                    }
                 }
             }
             if ( is_callable( [ $inventory, 'set_stock' ] ) ) {
                 $result = call_user_func( [ $inventory, 'set_stock' ], $product_id, $location_id, $quantity );
                 if ( null !== $result ) {
-                    return (bool) $result;
+                    if ( (bool) $result ) {
+                        return true;
+                    }
                 }
             }
         }
@@ -1058,7 +1064,9 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
         if ( is_object( $this->instance ) && is_callable( [ $this->instance, 'update_stock' ] ) ) {
             $result = call_user_func( [ $this->instance, 'update_stock' ], $product_id, $location_id, $quantity );
             if ( null !== $result ) {
-                return (bool) $result;
+                if ( (bool) $result ) {
+                    return true;
+                }
             }
         }
 
