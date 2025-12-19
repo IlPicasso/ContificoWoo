@@ -6385,6 +6385,12 @@ $filters = [
                         true
                 );
 
+                $location_summary = $this->build_single_product_location_summary(
+                        $location_map,
+                        $location_stock,
+                        $product_cache_key
+                );
+
                 if ( $log_inventory_movement ) {
                         $movement_entry = $this->build_manual_sync_inventory_movement_entry( $product_entry, $changes, 'product' );
 
@@ -6417,7 +6423,57 @@ $filters = [
                         'result'              => $result,
                         'stock_quantity'      => $resolved_product->get_manage_stock() ? (int) $resolved_product->get_stock_quantity() : null,
                         'price'               => (float) $resolved_product->get_price(),
+                        'location_stock'      => $location_summary,
                 ];
+        }
+
+        /**
+         * Build a per-location stock summary for a single product sync.
+         *
+         * @param array  $location_map   Mapping of location IDs to warehouse codes.
+         * @param array  $location_stock Stock values indexed by location and product ID.
+         * @param string $product_id     Contífico product identifier.
+         *
+         * @return array
+         */
+        private function build_single_product_location_summary( array $location_map, array $location_stock, string $product_id ) : array {
+                if ( '' === $product_id || empty( $location_map ) ) {
+                        return [];
+                }
+
+                $summary = [];
+
+                foreach ( $location_map as $location_id => $warehouse_code ) {
+                        $location_id    = (string) $location_id;
+                        $warehouse_code = (string) $warehouse_code;
+                        $quantity       = 0;
+
+                        if ( isset( $location_stock[ $location_id ][ $product_id ] ) ) {
+                                $quantity = (int) $location_stock[ $location_id ][ $product_id ];
+                        }
+
+                        $label = $location_id;
+
+                        if (
+                                $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
+                                && method_exists( $this->woo_contifico->multilocation, 'get_location_label' )
+                        ) {
+                                $location_label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
+
+                                if ( '' !== $location_label ) {
+                                        $label = $location_label;
+                                }
+                        }
+
+                        $summary[] = [
+                                'location_id'    => $location_id,
+                                'location_label' => $label,
+                                'warehouse_code' => $warehouse_code,
+                                'quantity'       => $quantity,
+                        ];
+                }
+
+                return $summary;
         }
 
         /**
