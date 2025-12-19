@@ -83,6 +83,27 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.98 =
+* Se corrige la sincronización individual para evitar errores al mostrar el detalle de bodegas cuando no existe el identificador interno del producto.
+
+= 4.1.97 =
+* Se incluye el detalle de stock por bodega al sincronizar un producto individual desde el backend para facilitar la revisión de MultiLoca.
+
+= 4.1.96 =
+* Se actualizan todas las claves de stock por ubicación que coincidan con los IDs, *slug* o nombre de MultiLoca, asegurando que las bodegas se registren aunque existan taxonomías legadas o migradas.
+
+= 4.1.95 =
+* Se prioriza la taxonomía `locations` de MultiLoca al resolver ubicaciones para evitar usar términos legados (`locations-lite`) al escribir el stock por bodega.
+
+= 4.1.94 =
+* Se remapea el ID de ubicación cuando MultiLoca migró de `locations-lite` a `locations`, para asegurar que el stock por bodega se guarda en el término correcto.
+
+= 4.1.93 =
+* Se corrige la normalización del identificador de ubicación para resolver primero por taxonomías de MultiLoca cuando el slug contiene dígitos, evitando escribir el stock en metadatos con IDs incorrectos.
+
+= 4.1.92 =
+* Se permite que la sincronización de stock por ubicación haga fallback a los metadatos cuando las nuevas funciones de MultiLoca no confirman la actualización, evitando que se queden sin stock por bodega.
+
 = 4.1.91 =
 * Se fuerza el uso del mapeo de ubicaciones configurado y se habilitan actualizaciones de MultiLoca aunque no se detecte la instancia, para sincronizar stock por bodega.
 
