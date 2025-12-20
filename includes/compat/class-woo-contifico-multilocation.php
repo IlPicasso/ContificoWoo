@@ -40,6 +40,13 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
     protected $manual_locations = [];
 
     /**
+     * Locations managed directly by the Woo Contifico integration.
+     *
+     * @var array
+     */
+    protected $custom_locations = [];
+
+    /**
      * Cache of the resolved locations list.
      *
      * @var array|null
@@ -110,6 +117,10 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
      */
     protected function determine_is_active() : bool {
         if ( $this->manual_activation ) {
+            return true;
+        }
+
+        if ( ! empty( $this->custom_locations ) ) {
             return true;
         }
 
@@ -235,6 +246,22 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
     }
 
     /**
+     * Receive the locations stored by the integration settings.
+     *
+     * @param array $locations
+     */
+    public function set_custom_locations( array $locations ) : void {
+        $this->custom_locations = $locations;
+        $this->locations_cache        = null;
+        $this->location_meta_id_cache = [];
+
+        if ( ! empty( $this->custom_locations ) ) {
+            $this->manual_activation = true;
+            $this->is_active         = true;
+        }
+    }
+
+    /**
      * Retrieve all registered locations from MultiLoca.
      *
      * @return array
@@ -301,6 +328,10 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
             return $this->locations_cache = $locations;
         }
 
+        if ( ! empty( $this->custom_locations ) ) {
+            return $this->locations_cache = $this->custom_locations;
+        }
+
         if ( $this->manual_activation && ! empty( $this->manual_locations ) ) {
             return $this->locations_cache = $this->manual_locations;
         }
@@ -345,6 +376,39 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
         }
 
         return '';
+    }
+
+    /**
+     * Build a list of locations ready for select fields.
+     *
+     * @since 4.2.0
+     *
+     * @return array
+     */
+    public function get_locations_for_select() : array {
+        $locations = $this->get_locations();
+        $options   = [];
+
+        foreach ( $locations as $location_key => $entry ) {
+            $id = $this->extract_location_identifier_from_entry( $entry );
+            if ( '' === $id ) {
+                $id = trim( (string) $location_key );
+            }
+
+            if ( '' === $id ) {
+                continue;
+            }
+
+            $label = $this->extract_location_label_from_entry( $entry );
+
+            if ( '' === $label ) {
+                $label = $id;
+            }
+
+            $options[ $id ] = $label;
+        }
+
+        return $options;
     }
 
     /**

@@ -1012,6 +1012,62 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                                 $value = esc_textarea( (string) $value );
                                 $field = "<textarea name='{$name}' id='{$key}' rows='{$rows}' cols='{$cols}' class='textarea'>{$value}</textarea>";
                                 break;
+                        case 'multiloca_locations_manager':
+                                $locations   = is_array( $value ) ? $value : [];
+                                $rows        = [];
+                                $row_index   = 0;
+                                $field_label = __( 'Identificador', $this->plugin_name );
+                                $name_label  = __( 'Nombre', $this->plugin_name );
+                                $remove_label = __( 'Eliminar', $this->plugin_name );
+                                $add_label    = __( 'Añadir ubicación', $this->plugin_name );
+
+                                foreach ( $locations as $entry ) {
+                                        $location_id   = '';
+                                        $location_name = '';
+
+                                        if ( is_array( $entry ) ) {
+                                                $location_id   = $entry['id'] ?? '';
+                                                $location_name = $entry['name'] ?? '';
+                                        } elseif ( is_object( $entry ) ) {
+                                                $location_id   = $entry->id ?? '';
+                                                $location_name = $entry->name ?? '';
+                                        } elseif ( is_string( $entry ) ) {
+                                                $location_id   = $entry;
+                                                $location_name = $entry;
+                                        }
+
+                                        $rows[] = [
+                                                'id'   => (string) $location_id,
+                                                'name' => (string) $location_name,
+                                        ];
+                                }
+
+                                if ( empty( $rows ) ) {
+                                        $rows[] = [ 'id' => '', 'name' => '' ];
+                                }
+
+                                $field  = '<div class="woo-contifico-location-manager" data-base-name="' . esc_attr( $name ) . '" data-next-index="' . esc_attr( (string) count( $rows ) ) . '">';
+                                $field .= '<table class="widefat woo-contifico-location-table"><thead><tr>';
+                                $field .= '<th>' . esc_html( $field_label ) . '</th>';
+                                $field .= '<th>' . esc_html( $name_label ) . '</th>';
+                                $field .= '<th></th>';
+                                $field .= '</tr></thead><tbody>';
+
+                                foreach ( $rows as $row ) {
+                                        $row_id   = esc_attr( $row['id'] );
+                                        $row_name = esc_attr( $row['name'] );
+                                        $field   .= '<tr class="woo-contifico-location-row">';
+                                        $field   .= '<td><input type="text" class="regular-text" name="' . esc_attr( "{$name}[{$row_index}][id]" ) . '" value="' . $row_id . '" /></td>';
+                                        $field   .= '<td><input type="text" class="regular-text" name="' . esc_attr( "{$name}[{$row_index}][name]" ) . '" value="' . $row_name . '" /></td>';
+                                        $field   .= '<td><button type="button" class="button link-delete woo-contifico-location-remove">' . esc_html( $remove_label ) . '</button></td>';
+                                        $field   .= '</tr>';
+                                        $row_index++;
+                                }
+
+                                $field .= '</tbody></table>';
+                                $field .= '<p><button type="button" class="button woo-contifico-location-add">' . esc_html( $add_label ) . '</button></p>';
+                                $field .= '</div>';
+                                break;
                         case 'title':
                                 $field = "&nbsp;";
                                 break;
@@ -8577,6 +8633,40 @@ $filters = [
                         $input['multiloca_manual_locations'] = sanitize_textarea_field( (string) $input['multiloca_manual_locations'] );
                 } else {
                         $input['multiloca_manual_locations'] = '';
+                }
+
+                if ( isset( $input['multiloca_custom_locations'] ) && is_array( $input['multiloca_custom_locations'] ) ) {
+                        $custom_locations = [];
+
+                        foreach ( $input['multiloca_custom_locations'] as $entry ) {
+                                if ( ! is_array( $entry ) ) {
+                                        continue;
+                                }
+
+                                $location_id   = sanitize_text_field( (string) ( $entry['id'] ?? '' ) );
+                                $location_name = sanitize_text_field( (string) ( $entry['name'] ?? '' ) );
+
+                                if ( '' === $location_id && '' !== $location_name ) {
+                                        $location_id = sanitize_title( $location_name );
+                                }
+
+                                if ( '' === $location_id ) {
+                                        continue;
+                                }
+
+                                if ( '' === $location_name ) {
+                                        $location_name = $location_id;
+                                }
+
+                                $custom_locations[ $location_id ] = [
+                                        'id'   => $location_id,
+                                        'name' => $location_name,
+                                ];
+                        }
+
+                        $input['multiloca_custom_locations'] = array_values( $custom_locations );
+                } else {
+                        $input['multiloca_custom_locations'] = [];
                 }
 
                 # Re Schedule cron
