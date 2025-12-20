@@ -52,6 +52,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.2.11 =
+* Se abortan solicitudes de stock anteriores al cambiar variaciones rápidamente.
+
 = 4.2.10 =
 * Se elimina la validación duplicada de "Gestionar inventario" al sincronizar variaciones.
 

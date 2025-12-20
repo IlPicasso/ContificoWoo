@@ -167,6 +167,7 @@
     };
 
     let refreshSequence = 0;
+    let refreshAbortController = null;
 
     const refreshStock = ( productId, sku ) => {
       if ( ! productId && ! sku ) {
@@ -177,6 +178,15 @@
       const currentSequence = refreshSequence;
 
       const requestData = buildRequestData( productId, sku );
+      const supportsAbortController = typeof AbortController !== 'undefined';
+
+      if ( supportsAbortController ) {
+        if ( refreshAbortController ) {
+          refreshAbortController.abort();
+        }
+
+        refreshAbortController = new AbortController();
+      }
 
       const stockNode = resolveStockNode();
 
@@ -192,7 +202,8 @@
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
         },
-        body: requestData.toString()
+        body: requestData.toString(),
+        signal: refreshAbortController ? refreshAbortController.signal : undefined
       } )
         .then( ( response ) => response.json() )
         .then( ( response ) => {
@@ -221,7 +232,11 @@
 
           renderError( errorMessage );
         } )
-        .catch( () => {
+        .catch( ( error ) => {
+          if ( error && error.name === 'AbortError' ) {
+            return;
+          }
+
           renderError();
         } );
     };
