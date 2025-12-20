@@ -66,7 +66,7 @@
       }
 
       if ( visibleWarehouseCodes.length === 0 ) {
-        return entries;
+        return [];
       }
 
       return entries.filter( ( entry ) => {

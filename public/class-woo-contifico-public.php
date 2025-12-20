@@ -287,7 +287,9 @@ class Woo_Contifico_Public {
 		$raw_codes = $this->woo_contifico->settings['bodegas_items'] ?? '';
 
 		if ( is_array( $raw_codes ) ) {
-			$raw_codes = implode( PHP_EOL, $raw_codes );
+			$keys = array_keys( $raw_codes );
+			$is_assoc = array_keys( $keys ) !== $keys;
+			$raw_codes = $is_assoc ? implode( PHP_EOL, $keys ) : implode( PHP_EOL, $raw_codes );
 		}
 
 		$raw_codes = trim( (string) $raw_codes );
