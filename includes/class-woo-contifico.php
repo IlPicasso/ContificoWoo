@@ -76,14 +76,6 @@ class Woo_Contifico
      */
     public $settings_fields;
 
-    /**
-     * MultiLoca compatibility handler.
-     *
-     * @since    3.5.0
-     * @access   public
-     * @var      Woo_Contifico_MultiLocation_Compatibility|null
-     */
-    public $multilocation;
 
     /**
      * Define the core functionality of the plugin.
@@ -103,12 +95,6 @@ class Woo_Contifico
             $this->version = '1.0.0';
         }
         $this->plugin_name = 'woo-contifico';
-
-        if ( ! class_exists( 'Woo_Contifico_MultiLocation_Compatibility' ) ) {
-            require_once WOO_CONTIFICO_PATH . 'includes/compat/class-woo-contifico-multilocation.php';
-        }
-
-        $this->multilocation = new Woo_Contifico_MultiLocation_Compatibility();
 
         if ( $load ) {
             $this->load_dependencies();
@@ -144,50 +130,6 @@ class Woo_Contifico
 
         $setting_status[] = [ 'settings_status' => $result ];
         $this->settings = call_user_func_array('array_merge', array_values($setting_status));
-
-        if ( ! isset( $this->settings['multiloca_locations'] ) || ! is_array( $this->settings['multiloca_locations'] ) ) {
-            $this->settings['multiloca_locations'] = [];
-        }
-
-        if ( ! isset( $this->settings['multiloca_manual_enable'] ) ) {
-            $this->settings['multiloca_manual_enable'] = false;
-        } else {
-            $this->settings['multiloca_manual_enable'] = (bool) $this->settings['multiloca_manual_enable'];
-        }
-
-        if ( ! isset( $this->settings['multiloca_manual_locations'] ) ) {
-            $this->settings['multiloca_manual_locations'] = '';
-        } else {
-            $this->settings['multiloca_manual_locations'] = (string) $this->settings['multiloca_manual_locations'];
-        }
-
-        if ( ! isset( $this->settings['multiloca_custom_locations'] ) || ! is_array( $this->settings['multiloca_custom_locations'] ) ) {
-            $this->settings['multiloca_custom_locations'] = [];
-        }
-
-        $manual_locations = [];
-
-        if ( ! empty( $this->settings['multiloca_manual_locations'] ) ) {
-            $manual_locations = $this->parse_manual_multiloca_locations( $this->settings['multiloca_manual_locations'] );
-        }
-
-        $custom_locations = $this->parse_custom_multiloca_locations( $this->settings['multiloca_custom_locations'] );
-
-        if ( $this->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) {
-            if ( method_exists( $this->multilocation, 'set_manual_activation' ) ) {
-                $this->multilocation->set_manual_activation(
-                    (bool) $this->settings['multiloca_manual_enable'] || ! empty( $custom_locations )
-                );
-            }
-
-            if ( method_exists( $this->multilocation, 'set_manual_locations' ) ) {
-                $this->multilocation->set_manual_locations( $manual_locations );
-            }
-
-            if ( method_exists( $this->multilocation, 'set_custom_locations' ) ) {
-                $this->multilocation->set_custom_locations( $custom_locations );
-            }
-        }
 
         # Back compatibility, use old api configuration
             if( isset($this->settings['ambiente']) ) {
@@ -390,7 +332,7 @@ class Woo_Contifico
                         [
                                 'id' => 'bodega',
                                 'label' => __('Bodega principal', $this->plugin_name),
-                                'description' => __('<br>Código de la bodega desde donde se sincroniza el inventario.<br> Si se usan dos bodegas, esta será la bodega de inventario.', $this->plugin_name),
+                                'description' => __('<br>Código de la bodega desde donde se sincroniza el inventario. Usa el código que aparece en Contífico → Inventario → Bodegas.<br> Si se usan dos bodegas, esta será la bodega de inventario.', $this->plugin_name),
                                 'required' => true,
                                 'type' => 'text',
                                 'size' => 10
@@ -398,7 +340,7 @@ class Woo_Contifico
                         [
                                 'id' => 'bodega_secundaria',
                                 'label' => __('Bodega secundaria', $this->plugin_name),
-                                'description' => __('<br>Se utilizará como respaldo cuando la bodega principal no tenga stock disponible al trasladar pedidos.', $this->plugin_name),
+                                'description' => __('<br>Código de la bodega secundaria según Contífico. Se utilizará como respaldo cuando la bodega principal no tenga stock disponible al trasladar pedidos.', $this->plugin_name),
                                 'required' => false,
                                 'type' => 'text',
                                 'size' => 10
@@ -406,7 +348,7 @@ class Woo_Contifico
                         [
                                 'id' => 'bodega_terciaria',
                                 'label' => __('Bodega terciaria', $this->plugin_name),
-                                'description' => __('<br>Se utilizará como tercera opción para completar pedidos cuando la bodega principal y la secundaria no tengan stock.', $this->plugin_name),
+                                'description' => __('<br>Código de la bodega terciaria en Contífico. Se utilizará como tercera opción para completar pedidos cuando la bodega principal y la secundaria no tengan stock.', $this->plugin_name),
                                 'required' => false,
                                 'type' => 'text',
                                 'size' => 10
@@ -414,7 +356,7 @@ class Woo_Contifico
                         [
                                 'id' => 'bodega_facturacion',
                                 'label' => __('Bodega de facturación', $this->plugin_name),
-                                'description' => __('<br><b>Dejar en blanco si no se usarán dos bodegas (Bodega de inventario y bodega de facturación)</b><br>Código de la bodega asociada con el API de Contífico a donde se traslada el producto al realizar un pedido en WooCommerce y desde donde se reduce el inventario al emitir la factura o pre factura', $this->plugin_name),
+                                'description' => __('<br><b>Dejar en blanco si no se usarán dos bodegas (Bodega de inventario y bodega de facturación)</b><br>Código de la bodega asociada con el API de Contífico a donde se traslada el producto al realizar un pedido en WooCommerce y desde donde se reduce el inventario al emitir la factura o pre factura.', $this->plugin_name),
                                 'required' => false,
                                 'type' => 'text',
                                 'size' => 10
@@ -422,37 +364,10 @@ class Woo_Contifico
                         [
                                 'id' => 'bodega_facturacion_label',
                                 'label' => __('Nombre amigable de la bodega de facturación', $this->plugin_name),
-                                'description' => __('<br>Etiqueta opcional que se mostrará en los PDFs y mensajes cuando se use la bodega de facturación (por ejemplo, "Bodega WEB"), útil si no está asociada a una ubicación de MultiLoca.', $this->plugin_name),
+                                'description' => __('<br>Etiqueta opcional que se mostrará en los PDFs y mensajes cuando se use la bodega de facturación (por ejemplo, "Bodega WEB").', $this->plugin_name),
                                 'required' => false,
                                 'type' => 'text',
                                 'size' => 30
-                        ],
-                        [
-                                'id' => 'multiloca_manual_enable',
-                                'label' => __('Activar compatibilidad MultiLoca manualmente', $this->plugin_name),
-                                'description' => __('Marca esta casilla para mostrar el mapeo de ubicaciones aunque el plugin no se detecte automáticamente.', $this->plugin_name),
-                                'required' => false,
-                                'type' => 'check',
-                        ],
-                        [
-                                'id' => 'multiloca_manual_locations',
-                                'label' => __('Ubicaciones MultiLoca manuales', $this->plugin_name),
-                                'description' => __('Ingresa un ID por línea o en el formato <code>ID|Nombre</code>. Solo se utiliza cuando la compatibilidad manual está activa.', $this->plugin_name),
-                                'required' => false,
-                                'type' => 'textarea',
-                                'rows' => 5,
-                        ],
-                        [
-                                'id' => 'multiloca_custom_locations_title',
-                                'type' => 'title',
-                                'label' => __('<h3>Ubicaciones personalizadas</h3>', $this->plugin_name),
-                        ],
-                        [
-                                'id' => 'multiloca_custom_locations',
-                                'label' => __( 'Ubicaciones disponibles', $this->plugin_name ),
-                                'description' => __( 'Agrega las ubicaciones que quieras usar cuando no exista el plugin MultiLoca. El identificador se usa en el checkout y en el mapeo de bodegas.', $this->plugin_name ),
-                                'required' => false,
-                                'type' => 'multiloca_locations_manager',
                         ],
 
                 ]
@@ -601,188 +516,6 @@ class Woo_Contifico
             ],
         ];
 
-        if (
-            $this->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
-            && $this->multilocation->is_active()
-        ) {
-            $locations = $this->multilocation->get_locations();
-
-            if ( ! empty( $locations ) ) {
-                $multiloca_fields   = [];
-                $multiloca_fields[] = [
-                    'id'          => 'multiloca_locations_title',
-                    'type'        => 'title',
-                    'label'       => __('<h3>Compatibilidad MultiLoca</h3>', $this->plugin_name),
-                    'description' => __( 'Asigna la bodega de Contífico correspondiente a cada ubicación gestionada por MultiLoca.', $this->plugin_name ),
-                ];
-
-                foreach ( $locations as $location_id => $location ) {
-                    list( $normalized_id, $location_name ) = $this->prepare_multiloca_location_data( $location_id, $location );
-
-                    $multiloca_fields[] = [
-                        'id'                    => sprintf( 'multiloca_location_%s', $normalized_id ),
-                        'label'                 => sprintf(
-                            /* translators: %s: MultiLoca location name */
-                            __( 'Bodega para %s', $this->plugin_name ),
-                            $location_name
-                        ),
-                        'description'           => '',
-                        'required'              => false,
-                        'type'                  => 'select',
-                        'options'               => [],
-                        'custom_name'           => sprintf(
-                            'woo_contifico_integration_settings[multiloca_locations][%s]',
-                            $normalized_id
-                        ),
-                        'value_key'             => [ 'multiloca_locations', $normalized_id ],
-                        'multiloca_location_id' => $normalized_id,
-                    ];
-                }
-
-                $this->settings_fields['woo_contifico_integration']['fields'] = array_merge(
-                    $this->settings_fields['woo_contifico_integration']['fields'],
-                    $multiloca_fields
-                );
-            } elseif ( $this->settings['multiloca_manual_enable'] ) {
-                $this->settings_fields['woo_contifico_integration']['fields'][] = [
-                    'id'          => 'multiloca_manual_notice',
-                    'type'        => 'title',
-                    'label'       => __('<p><em>Agrega las ubicaciones manuales para habilitar el mapeo con Contífico.</em></p>', $this->plugin_name),
-                ];
-            }
-        }
-    }
-
-    /**
-     * Normalize the MultiLoca location data to a simple array with ID and name.
-     *
-     * @param string|int $location_id Default location identifier.
-     * @param mixed      $location    Location payload from MultiLoca.
-     *
-     * @return array
-     */
-    private function prepare_multiloca_location_data( $location_id, $location ) : array {
-        $id   = $location_id;
-        $name = '';
-
-        if ( is_array( $location ) ) {
-            $id   = $location['id'] ?? $location['location_id'] ?? $location_id;
-            $name = $location['name'] ?? $location['title'] ?? $location['slug'] ?? '';
-        } elseif ( is_object( $location ) ) {
-            $id   = $location->id ?? $location->location_id ?? $location->ID ?? $location_id;
-            $name = $location->name ?? $location->title ?? $location->post_title ?? '';
-        } elseif ( is_string( $location ) ) {
-            $name = $location;
-        }
-
-        $id   = wp_strip_all_tags( (string) $id );
-        $name = wp_strip_all_tags( trim( (string) $name ) );
-
-        if ( '' === $name ) {
-            $name = sprintf( __( 'Ubicación #%s', $this->plugin_name ), $id );
-        }
-
-        return [ $id, $name ];
-    }
-
-    /**
-     * Convert the manual locations input into a normalized array.
-     *
-     * @param string $raw_locations
-     *
-     * @return array
-     */
-    private function parse_manual_multiloca_locations( string $raw_locations ) : array {
-        $lines     = preg_split( '/[\r\n]+/', $raw_locations );
-        $locations = [];
-
-        if ( ! is_array( $lines ) ) {
-            return $locations;
-        }
-
-        foreach ( $lines as $line ) {
-            $line = trim( (string) $line );
-
-            if ( '' === $line ) {
-                continue;
-            }
-
-            $id   = $line;
-            $name = '';
-
-            if ( false !== strpos( $line, '|' ) ) {
-                list( $id, $name ) = array_map( 'trim', explode( '|', $line, 2 ) );
-            } elseif ( false !== strpos( $line, ':' ) ) {
-                list( $id, $name ) = array_map( 'trim', explode( ':', $line, 2 ) );
-            }
-
-            $id   = wp_strip_all_tags( (string) $id );
-            $name = wp_strip_all_tags( (string) $name );
-
-            if ( '' === $id ) {
-                continue;
-            }
-
-            if ( '' === $name ) {
-                $name = $id;
-            }
-
-            $locations[ $id ] = [
-                'id'   => $id,
-                'name' => $name,
-            ];
-        }
-
-        return $locations;
-    }
-
-    /**
-     * Normalize custom MultiLoca locations saved in the integration settings.
-     *
-     * @param array $raw_locations
-     *
-     * @return array
-     */
-    private function parse_custom_multiloca_locations( array $raw_locations ) : array {
-        $locations = [];
-
-        foreach ( $raw_locations as $index => $entry ) {
-            $id   = '';
-            $name = '';
-
-            if ( is_array( $entry ) ) {
-                $id   = $entry['id'] ?? $entry['location_id'] ?? $index;
-                $name = $entry['name'] ?? $entry['title'] ?? '';
-            } elseif ( is_object( $entry ) ) {
-                $id   = $entry->id ?? $entry->location_id ?? $index;
-                $name = $entry->name ?? $entry->title ?? '';
-            } elseif ( is_string( $entry ) ) {
-                $id   = $entry;
-                $name = $entry;
-            }
-
-            $id   = wp_strip_all_tags( trim( (string) $id ) );
-            $name = wp_strip_all_tags( trim( (string) $name ) );
-
-            if ( '' === $id && '' !== $name ) {
-                $id = sanitize_title( $name );
-            }
-
-            if ( '' === $id ) {
-                continue;
-            }
-
-            if ( '' === $name ) {
-                $name = $id;
-            }
-
-            $locations[ $id ] = [
-                'id'   => $id,
-                'name' => $name,
-            ];
-        }
-
-        return $locations;
     }
 
     /**
@@ -1011,11 +744,8 @@ class Woo_Contifico
 	    $this->loader->add_action('woocommerce_checkout_process', $plugin_public, 'validate_user_account_data');
 	    $this->loader->add_action('woocommerce_save_account_details_errors', $plugin_public, 'validate_user_account_data');
 
-# Update order metadata
-$this->loader->add_action('woocommerce_checkout_update_order_meta', $plugin_public, 'checkout_update_order_meta');
-
-# Capture MultiLoca location per order item
-$this->loader->add_action('woocommerce_checkout_create_order_line_item', $plugin_public, 'capture_order_item_location_meta', 20, 4);
+            # Update order metadata
+            $this->loader->add_action('woocommerce_checkout_update_order_meta', $plugin_public, 'checkout_update_order_meta');
 
 	    # Display tax fields on account page
 	    $this->loader->add_action('woocommerce_edit_account_form', $plugin_public, 'print_user_frontend_fields');

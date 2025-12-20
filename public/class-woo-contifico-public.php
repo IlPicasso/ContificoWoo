@@ -271,61 +271,6 @@ class Woo_Contifico_Public {
 		$fields                     = $this->woo_contifico->get_account_fields( true );
 		$checkout_fields['billing'] = array_merge( $checkout_fields['billing'], $fields );
 
-		$checkout_fields = $this->maybe_add_multiloca_location_field( $checkout_fields );
-
-		return $checkout_fields;
-	}
-
-	/**
-	 * Optionally inject a location selector in checkout.
-	 *
-	 * @since 4.2.0
-	 *
-	 * @param array $checkout_fields
-	 *
-	 * @return array
-	 */
-	private function maybe_add_multiloca_location_field( array $checkout_fields ) : array {
-		if ( ! ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) ) {
-			return $checkout_fields;
-		}
-
-		if ( ! $this->woo_contifico->multilocation->is_active() ) {
-			return $checkout_fields;
-		}
-
-		$options = [];
-
-		if ( method_exists( $this->woo_contifico->multilocation, 'get_locations_for_select' ) ) {
-			$options = (array) $this->woo_contifico->multilocation->get_locations_for_select();
-		}
-
-		if ( empty( $options ) ) {
-			return $checkout_fields;
-		}
-
-		$should_show = apply_filters( 'woo_contifico_show_checkout_location_selector', true, $options );
-
-		if ( ! $should_show ) {
-			return $checkout_fields;
-		}
-
-		if ( ! isset( $checkout_fields['order'] ) || ! is_array( $checkout_fields['order'] ) ) {
-			$checkout_fields['order'] = [];
-		}
-
-		$checkout_fields['order']['multiloca_location'] = [
-			'type'     => 'select',
-			'label'    => __( 'Ubicación', $this->plugin_name ),
-			'required' => false,
-			'class'    => [ 'form-row-wide' ],
-			'options'  => array_merge(
-				[ '' => __( 'Selecciona una ubicación', $this->plugin_name ) ],
-				$options
-			),
-			'priority' => 120,
-		];
-
 		return $checkout_fields;
 	}
 
@@ -419,8 +364,6 @@ class Woo_Contifico_Public {
 		$tax_type      = sanitize_text_field( $_POST['tax_type'] ?? '' );
 		$tax_id        = sanitize_text_field( $_POST['tax_id'] ?? '' );
 		$taxpayer_type = sanitize_text_field( $_POST['taxpayer_type'] ?? '' );
-		$location_id   = sanitize_text_field( $_POST['multiloca_location'] ?? '' );
-
                 if ( ! empty( $tax_id ) ) {
                         $order = wc_get_order( $order_id );
                         if ( ! $order ) {
@@ -442,44 +385,6 @@ class Woo_Contifico_Public {
                                 update_user_meta( $user_id, 'taxpayer_type', $taxpayer_type );
                         }
                 }
-
-		if ( '' !== $location_id ) {
-			$order = wc_get_order( $order_id );
-
-			if ( ! $order ) {
-				return;
-			}
-
-			$order->update_meta_data( '_multiloca_location', $location_id );
-			$order->save();
-		}
-	}
-
-	/**
-	 * Persist the MultiLoca location associated with each order item.
-	 *
-	 * @since 4.4.0
-	 */
-	public function capture_order_item_location_meta( $item, $cart_item_key, $values, $order ) {
-		if ( ! ( $item instanceof WC_Order_Item ) ) {
-			return;
-		}
-
-		$order_instance = $order instanceof WC_Order ? $order : ( method_exists( $item, 'get_order' ) ? $item->get_order() : null );
-
-		if ( ! ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) ) {
-			return;
-		}
-
-		if ( ! $this->woo_contifico->multilocation->is_active() ) {
-			return;
-		}
-
-		if ( ! method_exists( $this->woo_contifico->multilocation, 'store_order_item_location_from_checkout_values' ) ) {
-			return;
-		}
-
-		$this->woo_contifico->multilocation->store_order_item_location_from_checkout_values( $item, (array) $values, $order_instance );
 	}
 
 	/**
