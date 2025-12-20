@@ -135,9 +135,7 @@
 
         const locationCell = document.createElement( 'td' );
         const label = entry.location_label || entry.locationLabel || entry.location_id || entry.locationId || '';
-        const extraLabel = entry.warehouse_code || entry.warehouseCode || '';
-        const fullLabel = extraLabel ? `${ label } (${ extraLabel })` : label;
-        locationCell.textContent = fullLabel;
+        locationCell.textContent = label;
 
         const quantityCell = document.createElement( 'td' );
         const quantity = entry.quantity ?? '';
@@ -168,10 +166,15 @@
       return requestData;
     };
 
+    let refreshSequence = 0;
+
     const refreshStock = ( productId, sku ) => {
       if ( ! productId && ! sku ) {
         return;
       }
+
+      refreshSequence += 1;
+      const currentSequence = refreshSequence;
 
       const requestData = buildRequestData( productId, sku );
 
@@ -193,6 +196,10 @@
       } )
         .then( ( response ) => response.json() )
         .then( ( response ) => {
+          if ( currentSequence !== refreshSequence ) {
+            return;
+          }
+
           if ( response && response.success && response.data ) {
             const data = response.data;
 

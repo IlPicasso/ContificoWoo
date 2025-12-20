@@ -52,6 +52,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.2.8 =
+* Se muestra solo el nombre amigable en el listado de stock por bodega y se evita sobrescribir con respuestas AJAX antiguas.
+
 = 4.2.7 =
 * Se evita el listado duplicado de bodegas al construir el detalle por bodega en el frontend.
 
