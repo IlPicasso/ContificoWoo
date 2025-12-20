@@ -190,6 +190,19 @@ class Woo_Contifico_Public {
                 );
 
 		$stock_selector = apply_filters( 'woo_contifico_product_stock_selector', '.summary .stock', $product );
+		$location_selector = apply_filters(
+			'woo_contifico_product_stock_location_selector',
+			'.woo-contifico-location-stock',
+			$product
+		);
+		$visible_warehouse_codes = apply_filters(
+			'woo_contifico_visible_warehouse_codes',
+			$this->get_item_visible_warehouse_codes(),
+			$product
+		);
+		if ( ! is_array( $visible_warehouse_codes ) ) {
+			$visible_warehouse_codes = [];
+		}
 
 		wp_localize_script(
 			"{$this->plugin_name}-product-stock",
@@ -202,13 +215,18 @@ class Woo_Contifico_Public {
 				'manageStock'  => $this->product_supports_stock_refresh( $product ),
 				'selectors'    => [
 					'stockNode' => $stock_selector,
+					'locationNode' => $location_selector,
 				],
+				'visibleWarehouseCodes' => array_values( $visible_warehouse_codes ),
 				'messages'     => [
 					'syncing'             => __( 'Actualizando inventario…', 'woo-contifico' ),
 					'error'               => __( 'No fue posible actualizar el inventario en este momento.', 'woo-contifico' ),
 					'inStock'             => __( 'Hay existencias', 'woo-contifico' ),
 					'inStockWithQuantity' => __( 'Hay existencias (%d disponibles)', 'woo-contifico' ),
 					'outOfStock'          => __( 'Agotado', 'woo-contifico' ),
+					'locationStockTitle'  => __( 'Existencias por bodega', 'woo-contifico' ),
+					'locationStockLocation' => __( 'Bodega', 'woo-contifico' ),
+					'locationStockQuantity' => __( 'Disponible', 'woo-contifico' ),
 				],
 			]
 		);
@@ -256,6 +274,39 @@ class Woo_Contifico_Public {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Retrieve the registered warehouse codes that should be shown in items.
+	 *
+	 * @since 4.2.4
+	 *
+	 * @return string[]
+	 */
+	private function get_item_visible_warehouse_codes() : array {
+		$raw_codes = $this->woo_contifico->settings['bodegas_items'] ?? '';
+
+		if ( is_array( $raw_codes ) ) {
+			$keys = array_keys( $raw_codes );
+			$is_assoc = array_keys( $keys ) !== $keys;
+			$raw_codes = $is_assoc ? implode( PHP_EOL, $keys ) : implode( PHP_EOL, $raw_codes );
+		}
+
+		$raw_codes = trim( (string) $raw_codes );
+
+		if ( '' === $raw_codes ) {
+			return [];
+		}
+
+		$codes = preg_split( '/[\s,;]+/', $raw_codes, -1, PREG_SPLIT_NO_EMPTY );
+		$codes = array_map( 'trim', $codes );
+		$codes = array_filter( $codes, static function( $code ) {
+			return '' !== $code;
+		} );
+		$codes = array_map( 'strtoupper', $codes );
+		$codes = array_values( array_unique( $codes ) );
+
+		return $codes;
 	}
 
 	/**
