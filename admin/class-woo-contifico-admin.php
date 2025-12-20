@@ -2871,6 +2871,37 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
         }
 
         /**
+         * Retrieve the registered warehouse codes that should be shown in items.
+         *
+         * @since 4.2.3
+         *
+         * @return string[]
+         */
+        private function get_item_visible_warehouse_codes() : array {
+                $raw_codes = $this->woo_contifico->settings['bodegas_items'] ?? '';
+
+                if ( is_array( $raw_codes ) ) {
+                        $raw_codes = implode( PHP_EOL, $raw_codes );
+                }
+
+                $raw_codes = trim( (string) $raw_codes );
+
+                if ( '' === $raw_codes ) {
+                        return [];
+                }
+
+                $codes = preg_split( '/[\s,;]+/', $raw_codes, -1, PREG_SPLIT_NO_EMPTY );
+                $codes = array_map( 'trim', $codes );
+                $codes = array_filter( $codes, static function( $code ) {
+                        return '' !== $code;
+                } );
+                $codes = array_map( 'strtoupper', $codes );
+                $codes = array_values( array_unique( $codes ) );
+
+                return $codes;
+        }
+
+        /**
          * Retrieve and cache the stock by warehouse for a Contífico product ID.
          *
          * @since 4.4.0
@@ -6150,12 +6181,27 @@ $filters = [
                         return [];
                 }
 
+                $visible_codes = $this->get_item_visible_warehouse_codes();
+                $apply_filter  = ! empty( $visible_codes );
+
                 $summary = [];
 
                 foreach ( $stock_by_warehouse as $warehouse_id => $quantity ) {
                         $warehouse_id   = (string) $warehouse_id;
                         $warehouse_code = isset( $warehouses_map[ $warehouse_id ] ) ? (string) $warehouses_map[ $warehouse_id ] : $warehouse_id;
                         $extra_label    = '' !== $warehouse_id && $warehouse_code !== $warehouse_id ? $warehouse_id : '';
+
+                        if ( $apply_filter ) {
+                                $normalized_id   = strtoupper( $warehouse_id );
+                                $normalized_code = strtoupper( $warehouse_code );
+
+                                if (
+                                        ! in_array( $normalized_id, $visible_codes, true )
+                                        && ! in_array( $normalized_code, $visible_codes, true )
+                                ) {
+                                        continue;
+                                }
+                        }
 
                         $summary[] = [
                                 'location_id'    => $warehouse_id,
@@ -6381,9 +6427,24 @@ $filters = [
 
                 $sku = (string) $product->get_sku();
                 $warehouse_stock_summary = [];
+                $visible_codes = $this->get_item_visible_warehouse_codes();
+                $apply_filter  = ! empty( $visible_codes );
 
                 foreach ( $stock_by_warehouse as $warehouse_id => $quantity ) {
                         $warehouse_code = isset( $warehouses_map[ $warehouse_id ] ) ? (string) $warehouses_map[ $warehouse_id ] : (string) $warehouse_id;
+
+                        if ( $apply_filter ) {
+                                $normalized_id   = strtoupper( (string) $warehouse_id );
+                                $normalized_code = strtoupper( $warehouse_code );
+
+                                if (
+                                        ! in_array( $normalized_id, $visible_codes, true )
+                                        && ! in_array( $normalized_code, $visible_codes, true )
+                                ) {
+                                        continue;
+                                }
+                        }
+
                         $warehouse_stock_summary[ $warehouse_code ] = (float) $quantity;
                 }
 

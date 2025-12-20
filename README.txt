@@ -27,6 +27,7 @@ Para agregar y gestionar bodegas de Contífico en ContificoWoo:
    - **Bodega secundaria/terciaria**: bodegas de respaldo si necesitas cubrir pedidos con stock alternativo.
    - **Bodega de facturación**: bodega donde se descuenta el inventario al emitir la factura o pre factura (opcional).
    - **Nombre amigable de la bodega de facturación**: etiqueta que aparecerá en PDFs y mensajes (opcional).
+   - **Bodegas visibles en ítems**: códigos que quieres mostrar en los reportes de stock por bodega.
 3. Guarda los cambios.
 4. Asegúrate de que WooCommerce tenga habilitada la gestión de inventario (*WooCommerce → Ajustes → Productos → Inventario → Habilitar la gestión de inventario*).
 
@@ -51,8 +52,8 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
-= 4.2.2 =
-* Se elimina la compatibilidad con plugins de ubicaciones externas.
-* Se actualiza la documentación sobre la configuración de bodegas de Contífico.
+= 4.2.3 =
+* Se agrega la configuración de bodegas visibles en los ítems de stock por bodega.
+* Se filtra el stock por bodega para mostrar solo las bodegas registradas.
 
 * Historial anterior disponible en el repositorio.
