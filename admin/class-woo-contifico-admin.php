@@ -6264,12 +6264,38 @@ $filters = [
                 if ( ! is_array( $friendly_labels ) ) {
                         $friendly_labels = [];
                 }
+                $warehouse_code_to_id = [];
+                foreach ( $warehouses_map as $warehouse_map_id => $warehouse_map_code ) {
+                        $warehouse_map_code = strtoupper( (string) $warehouse_map_code );
+                        if ( '' === $warehouse_map_code ) {
+                                continue;
+                        }
+                        $warehouse_code_to_id[ $warehouse_map_code ] = (string) $warehouse_map_id;
+                }
 
                 $summary = [];
+                $summary_by_id = [];
 
                 foreach ( $stock_by_warehouse as $warehouse_id => $quantity ) {
-                        $warehouse_id   = (string) $warehouse_id;
-                        $warehouse_code = isset( $warehouses_map[ $warehouse_id ] ) ? (string) $warehouses_map[ $warehouse_id ] : $warehouse_id;
+                        $warehouse_key  = (string) $warehouse_id;
+                        $warehouse_id   = $warehouse_key;
+
+                        if ( ! isset( $warehouses_map[ $warehouse_id ] ) ) {
+                                $warehouse_key_upper = strtoupper( $warehouse_key );
+                                if ( isset( $warehouse_code_to_id[ $warehouse_key_upper ] ) ) {
+                                        $warehouse_id = $warehouse_code_to_id[ $warehouse_key_upper ];
+                                }
+                        }
+
+                        if ( '' === $warehouse_id ) {
+                                continue;
+                        }
+
+                        if ( isset( $summary_by_id[ $warehouse_id ] ) ) {
+                                continue;
+                        }
+
+                        $warehouse_code = isset( $warehouses_map[ $warehouse_id ] ) ? (string) $warehouses_map[ $warehouse_id ] : $warehouse_key;
                         $extra_label    = '' !== $warehouse_id && $warehouse_code !== $warehouse_id ? $warehouse_id : '';
 
                         if ( $apply_filter ) {
@@ -6292,12 +6318,16 @@ $filters = [
                                 $friendly_label = $warehouse_code;
                         }
 
-                        $summary[] = [
+                        $summary_by_id[ $warehouse_id ] = [
                                 'location_id'    => $warehouse_id,
                                 'location_label' => $friendly_label,
                                 'warehouse_code' => $extra_label,
                                 'quantity'       => (float) $quantity,
                         ];
+                }
+
+                if ( ! empty( $summary_by_id ) ) {
+                        $summary = array_values( $summary_by_id );
                 }
 
                 return $summary;

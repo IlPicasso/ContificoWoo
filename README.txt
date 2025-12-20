@@ -52,6 +52,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.2.7 =
+* Se evita el listado duplicado de bodegas al construir el detalle por bodega en el frontend.
+
 = 4.2.6 =
 * Se añade un selector de bodegas en Configuración para elegir bodegas visibles y definir nombres amigables.
 
