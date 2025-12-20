@@ -973,6 +973,81 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                         case 'title':
                                 $field = "&nbsp;";
                                 break;
+                        case 'warehouse_selector':
+                                $this->contifico->fetch_warehouses();
+                                $warehouses_map = $this->contifico->get_warehouses_map();
+                                $labels_map = get_option( 'woo_contifico_warehouse_labels', [] );
+                                if ( ! is_array( $labels_map ) ) {
+                                        $labels_map = [];
+                                }
+
+                                $selected_codes = $this->get_item_visible_warehouse_codes();
+                                $selected_codes = array_map( 'strtoupper', $selected_codes );
+                                $selected_codes = array_values( array_unique( $selected_codes ) );
+
+                                $friendly_labels = $this->woo_contifico->settings['bodegas_items_labels'] ?? [];
+                                if ( ! is_array( $friendly_labels ) ) {
+                                        $friendly_labels = [];
+                                }
+
+                                if ( empty( $warehouses_map ) ) {
+                                        $field = "<em>" . esc_html__( 'No se encontraron bodegas en Contífico. Verifica la conexión e intenta nuevamente.', 'woo-contifico' ) . "</em>";
+                                        break;
+                                }
+
+                                $rows = [];
+                                foreach ( $warehouses_map as $warehouse_id => $warehouse_code ) {
+                                        $warehouse_id = (string) $warehouse_id;
+                                        $warehouse_code = strtoupper( (string) $warehouse_code );
+                                        $label = '';
+
+                                        if ( isset( $labels_map[ $warehouse_id ]['label'] ) ) {
+                                                $label = (string) $labels_map[ $warehouse_id ]['label'];
+                                        }
+
+                                        $is_checked = in_array( $warehouse_code, $selected_codes, true );
+                                        $checked_attr = checked( $is_checked, true, false );
+
+                                        $friendly_label_value = isset( $friendly_labels[ $warehouse_code ] )
+                                                ? (string) $friendly_labels[ $warehouse_code ]
+                                                : '';
+
+                                        $checkbox_name = "{$name}[]";
+                                        $label_name = "{$args['setting_name']}[bodegas_items_labels][{$warehouse_code}]";
+                                        $checkbox_id = "{$key}_{$warehouse_code}";
+
+                                        $rows[] = [
+                                                'code' => $warehouse_code,
+                                                'label' => $label,
+                                                'checkbox' => "<input type='checkbox' name='{$checkbox_name}' id='{$checkbox_id}' value='{$warehouse_code}' {$checked_attr} />",
+                                                'friendly' => "<input type='text' class='input-text' name='{$label_name}' value='" . esc_attr( $friendly_label_value ) . "' size='30' />",
+                                        ];
+                                }
+
+                                usort( $rows, static function( $left, $right ) {
+                                        return strcmp( $left['code'], $right['code'] );
+                                } );
+
+                                $table = "<table class='widefat striped'><thead><tr>";
+                                $table .= '<th>' . esc_html__( 'Mostrar', 'woo-contifico' ) . '</th>';
+                                $table .= '<th>' . esc_html__( 'Código', 'woo-contifico' ) . '</th>';
+                                $table .= '<th>' . esc_html__( 'Nombre en Contífico', 'woo-contifico' ) . '</th>';
+                                $table .= '<th>' . esc_html__( 'Nombre amigable', 'woo-contifico' ) . '</th>';
+                                $table .= '</tr></thead><tbody>';
+
+                                foreach ( $rows as $row ) {
+                                        $table .= '<tr>';
+                                        $table .= "<td>{$row['checkbox']}</td>";
+                                        $table .= '<td>' . esc_html( $row['code'] ) . '</td>';
+                                        $table .= '<td>' . esc_html( $row['label'] ) . '</td>';
+                                        $table .= "<td>{$row['friendly']}</td>";
+                                        $table .= '</tr>';
+                                }
+
+                                $table .= '</tbody></table>';
+
+                                $field = $table;
+                                break;
                 }
 
                 $desc = empty( $args['description'] ) ? '' : "<span>{$args['description']}</span>";
@@ -2881,7 +2956,9 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                 $raw_codes = $this->woo_contifico->settings['bodegas_items'] ?? '';
 
                 if ( is_array( $raw_codes ) ) {
-                        $raw_codes = implode( PHP_EOL, $raw_codes );
+                        $keys = array_keys( $raw_codes );
+                        $is_assoc = array_keys( $keys ) !== $keys;
+                        $raw_codes = $is_assoc ? implode( PHP_EOL, $keys ) : implode( PHP_EOL, $raw_codes );
                 }
 
                 $raw_codes = trim( (string) $raw_codes );
@@ -6183,13 +6260,42 @@ $filters = [
 
                 $visible_codes = $this->get_item_visible_warehouse_codes();
                 $apply_filter  = ! empty( $visible_codes );
+                $friendly_labels = $this->woo_contifico->settings['bodegas_items_labels'] ?? [];
+                if ( ! is_array( $friendly_labels ) ) {
+                        $friendly_labels = [];
+                }
+                $warehouse_code_to_id = [];
+                foreach ( $warehouses_map as $warehouse_map_id => $warehouse_map_code ) {
+                        $warehouse_map_code = strtoupper( (string) $warehouse_map_code );
+                        if ( '' === $warehouse_map_code ) {
+                                continue;
+                        }
+                        $warehouse_code_to_id[ $warehouse_map_code ] = (string) $warehouse_map_id;
+                }
 
                 $summary = [];
+                $summary_by_id = [];
 
                 foreach ( $stock_by_warehouse as $warehouse_id => $quantity ) {
-                        $warehouse_id   = (string) $warehouse_id;
-                        $warehouse_code = isset( $warehouses_map[ $warehouse_id ] ) ? (string) $warehouses_map[ $warehouse_id ] : $warehouse_id;
-                        $extra_label    = '' !== $warehouse_id && $warehouse_code !== $warehouse_id ? $warehouse_id : '';
+                        $warehouse_key  = (string) $warehouse_id;
+                        $warehouse_id   = $warehouse_key;
+
+                        if ( ! isset( $warehouses_map[ $warehouse_id ] ) ) {
+                                $warehouse_key_upper = strtoupper( $warehouse_key );
+                                if ( isset( $warehouse_code_to_id[ $warehouse_key_upper ] ) ) {
+                                        $warehouse_id = $warehouse_code_to_id[ $warehouse_key_upper ];
+                                }
+                        }
+
+                        if ( '' === $warehouse_id ) {
+                                continue;
+                        }
+
+                        if ( isset( $summary_by_id[ $warehouse_id ] ) ) {
+                                continue;
+                        }
+
+                        $warehouse_code = isset( $warehouses_map[ $warehouse_id ] ) ? (string) $warehouses_map[ $warehouse_id ] : $warehouse_key;
 
                         if ( $apply_filter ) {
                                 $normalized_id   = strtoupper( $warehouse_id );
@@ -6203,12 +6309,24 @@ $filters = [
                                 }
                         }
 
-                        $summary[] = [
+                        $friendly_label = '';
+                        if ( '' !== $warehouse_code && isset( $friendly_labels[ strtoupper( $warehouse_code ) ] ) ) {
+                                $friendly_label = (string) $friendly_labels[ strtoupper( $warehouse_code ) ];
+                        }
+                        if ( '' === $friendly_label && '' !== $warehouse_code ) {
+                                $friendly_label = $warehouse_code;
+                        }
+
+                        $summary_by_id[ $warehouse_id ] = [
                                 'location_id'    => $warehouse_id,
-                                'location_label' => $warehouse_code,
-                                'warehouse_code' => $extra_label,
+                                'location_label' => $friendly_label,
+                                'warehouse_code' => $warehouse_code,
                                 'quantity'       => (float) $quantity,
                         ];
+                }
+
+                if ( ! empty( $summary_by_id ) ) {
+                        $summary = array_values( $summary_by_id );
                 }
 
                 return $summary;
