@@ -52,6 +52,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.2.10 =
+* Se elimina la validación duplicada de "Gestionar inventario" al sincronizar variaciones.
+
 = 4.2.9 =
 * Se vuelve a incluir el código de bodega en el payload para filtrar correctamente las variaciones sin mostrar el ID en el frontend.
 
