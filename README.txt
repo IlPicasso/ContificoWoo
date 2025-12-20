@@ -83,6 +83,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.1.99 =
+* Se asegura que el resumen por bodega en la sincronización individual lea los metadatos de stock aunque no exista el mapeo de ubicaciones, para visualizar cómo quedan las cantidades registradas.
+
 = 4.1.98 =
 * Se corrige la sincronización individual para evitar errores al mostrar el detalle de bodegas cuando no existe el identificador interno del producto.
 

@@ -6388,6 +6388,7 @@ $filters = [
                 $product_cache_key = isset( $product_entry['id'] ) ? (string) $product_entry['id'] : '';
 
                 $location_summary = $this->build_single_product_location_summary(
+                        $resolved_product,
                         $location_map,
                         $location_stock,
                         $product_cache_key
@@ -6432,26 +6433,33 @@ $filters = [
         /**
          * Build a per-location stock summary for a single product sync.
          *
-         * @param array  $location_map   Mapping of location IDs to warehouse codes.
-         * @param array  $location_stock Stock values indexed by location and product ID.
-         * @param string $product_id     Contífico product identifier.
+         * @param WC_Product $product        WooCommerce product instance.
+         * @param array      $location_map   Mapping of location IDs to warehouse codes.
+         * @param array      $location_stock Stock values indexed by location and product ID.
+         * @param string     $product_id     Contífico product identifier.
          *
          * @return array
          */
-        private function build_single_product_location_summary( array $location_map, array $location_stock, string $product_id ) : array {
-                if ( '' === $product_id || empty( $location_map ) ) {
+        private function build_single_product_location_summary( $product, array $location_map, array $location_stock, string $product_id ) : array {
+                if ( ! is_object( $product ) || ! is_a( $product, 'WC_Product' ) ) {
                         return [];
                 }
 
                 $summary = [];
+                $product_meta_id = $product->get_id();
 
                 foreach ( $location_map as $location_id => $warehouse_code ) {
                         $location_id    = (string) $location_id;
                         $warehouse_code = (string) $warehouse_code;
                         $quantity       = 0;
 
-                        if ( isset( $location_stock[ $location_id ][ $product_id ] ) ) {
+                        if ( '' !== $product_id && isset( $location_stock[ $location_id ][ $product_id ] ) ) {
                                 $quantity = (int) $location_stock[ $location_id ][ $product_id ];
+                        } else {
+                                $meta_value = get_post_meta( $product_meta_id, sprintf( 'wcmlim_stock_at_%s', $location_id ), true );
+                                if ( '' !== $meta_value ) {
+                                        $quantity = (int) $meta_value;
+                                }
                         }
 
                         $label = $location_id;
@@ -6473,6 +6481,54 @@ $filters = [
                                 'warehouse_code' => $warehouse_code,
                                 'quantity'       => $quantity,
                         ];
+                }
+
+                if (
+                        empty( $summary )
+                        && $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
+                        && method_exists( $this->woo_contifico->multilocation, 'get_locations' )
+                ) {
+                        $locations = $this->woo_contifico->multilocation->get_locations();
+
+                        foreach ( $locations as $location_key => $location_entry ) {
+                                $location_id = is_string( $location_key ) || is_int( $location_key )
+                                        ? (string) $location_key
+                                        : '';
+
+                                if ( '' === $location_id ) {
+                                        if ( is_array( $location_entry ) ) {
+                                                $location_id = (string) ( $location_entry['id'] ?? $location_entry['location_id'] ?? '' );
+                                        } elseif ( is_object( $location_entry ) ) {
+                                                $location_id = (string) ( $location_entry->id ?? $location_entry->location_id ?? $location_entry->ID ?? '' );
+                                        } else {
+                                                $location_id = (string) $location_entry;
+                                        }
+                                }
+
+                                if ( '' === $location_id ) {
+                                        continue;
+                                }
+
+                                $label = '';
+
+                                if ( is_array( $location_entry ) ) {
+                                        $label = (string) ( $location_entry['name'] ?? $location_entry['title'] ?? $location_entry['slug'] ?? '' );
+                                } elseif ( is_object( $location_entry ) ) {
+                                        $label = (string) ( $location_entry->name ?? $location_entry->title ?? $location_entry->post_title ?? '' );
+                                } elseif ( is_string( $location_entry ) ) {
+                                        $label = $location_entry;
+                                }
+
+                                $meta_value = get_post_meta( $product_meta_id, sprintf( 'wcmlim_stock_at_%s', $location_id ), true );
+                                $quantity = '' !== $meta_value ? (int) $meta_value : 0;
+
+                                $summary[] = [
+                                        'location_id'    => (string) $location_id,
+                                        'location_label' => '' !== $label ? $label : (string) $location_id,
+                                        'warehouse_code' => '',
+                                        'quantity'       => $quantity,
+                                ];
+                        }
                 }
 
                 return $summary;
