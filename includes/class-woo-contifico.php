@@ -372,11 +372,9 @@ class Woo_Contifico
                         [
                                 'id' => 'bodegas_items',
                                 'label' => __('Bodegas visibles en ítems', $this->plugin_name),
-                                'description' => __('<br>Códigos de bodegas de Contífico que se mostrarán en los ítems. Separa cada código con coma o salto de línea. Deja en blanco para mostrar todas.', $this->plugin_name),
+                                'description' => __('<br>Selecciona las bodegas de Contífico que se mostrarán en los ítems y, si lo deseas, asigna un nombre amigable para el frontend. Si no seleccionas bodegas no se mostrará el stock por bodega.', $this->plugin_name),
                                 'required' => false,
-                                'type' => 'textarea',
-                                'rows' => 3,
-                                'cols' => 30,
+                                'type' => 'warehouse_selector',
                         ],
 
                 ]
