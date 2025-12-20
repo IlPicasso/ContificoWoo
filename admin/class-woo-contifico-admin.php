@@ -4266,8 +4266,12 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                         return '';
                 }
 
-                if ( ! $this->woo_contifico->multilocation->is_active() ) {
-                        return '';
+                if ( method_exists( $this->woo_contifico->multilocation, 'get_locations' ) ) {
+                        $available_locations = $this->woo_contifico->multilocation->get_locations();
+
+                        if ( empty( $available_locations ) ) {
+                                return '';
+                        }
                 }
 
                 $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];

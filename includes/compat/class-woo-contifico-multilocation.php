@@ -267,12 +267,23 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
      * @return array
      */
     public function get_locations() : array {
-        if ( ! $this->is_active() ) {
-            return [];
-        }
-
         if ( is_array( $this->locations_cache ) ) {
             return $this->locations_cache;
+        }
+
+        $has_functions  = $this->has_multiloca_function_sources();
+        $has_taxonomies = $this->has_multiloca_taxonomy_sources();
+        $has_instance   = $this->has_multiloca_instance_sources();
+
+        if ( ! $has_functions && ! $has_taxonomies && ! $has_instance ) {
+            $internal_locations = $this->get_internal_locations_repository();
+            if ( ! empty( $internal_locations ) ) {
+                return $this->locations_cache = $internal_locations;
+            }
+        }
+
+        if ( ! $this->is_active() ) {
+            return $this->locations_cache = [];
         }
 
         $function_sources = [
@@ -328,15 +339,8 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
             return $this->locations_cache = $locations;
         }
 
-        if ( ! empty( $this->custom_locations ) ) {
-            return $this->locations_cache = $this->custom_locations;
-        }
-
-        if ( $this->manual_activation && ! empty( $this->manual_locations ) ) {
-            return $this->locations_cache = $this->manual_locations;
-        }
-
-        $this->locations_cache = [];
+        $internal_locations = $this->get_internal_locations_repository();
+        $this->locations_cache = $internal_locations;
 
         return $this->locations_cache;
     }
@@ -1302,14 +1306,20 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
             return false;
         }
 
-        $updated = $this->update_stock( $product->get_id(), $location_id, $quantity );
+        $resolved_location_id = $this->resolve_location_identifier_from_repository( $location_id );
+
+        if ( '' === $resolved_location_id ) {
+            return false;
+        }
+
+        $updated = $this->update_stock( $product->get_id(), $resolved_location_id, $quantity );
 
         if ( ! $updated ) {
             return false;
         }
 
         if ( $product->is_type( 'variation' ) ) {
-            $this->sync_parent_location_stock( $product, $location_id );
+            $this->sync_parent_location_stock( $product, $resolved_location_id );
         }
 
         return true;
@@ -1454,6 +1464,10 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
             return true;
         }
 
+        if ( $this->has_internal_locations() ) {
+            return true;
+        }
+
         if ( function_exists( 'multiloca_link_location_to_product_if_exists' ) ) {
             return true;
         }
@@ -1473,5 +1487,136 @@ private const ORDER_ITEM_LOCATION_META_KEY = '_woo_contifico_multiloca_location'
         }
 
         return false;
+    }
+
+    /**
+     * Check if helper functions from MultiLoca are available.
+     *
+     * @return bool
+     */
+    protected function has_multiloca_function_sources() : bool {
+        $helper_functions = [
+            'multiloca_lite_get_locations',
+            'multiloca_get_locations',
+            'multiloca_lite_update_stock',
+            'multiloca_update_stock',
+        ];
+
+        foreach ( $helper_functions as $function_name ) {
+            if ( function_exists( $function_name ) ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if MultiLoca taxonomies are registered.
+     *
+     * @return bool
+     */
+    protected function has_multiloca_taxonomy_sources() : bool {
+        foreach ( $this->get_supported_taxonomies() as $taxonomy ) {
+            if ( taxonomy_exists( $taxonomy ) ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if MultiLoca exposes a usable instance or post type.
+     *
+     * @return bool
+     */
+    protected function has_multiloca_instance_sources() : bool {
+        if ( is_object( $this->instance ) ) {
+            return true;
+        }
+
+        foreach ( $this->get_supported_post_types() as $post_type ) {
+            if ( post_type_exists( $post_type ) ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Return the internal locations stored by the integration.
+     *
+     * @return array
+     */
+    protected function get_internal_locations_repository() : array {
+        $locations = [];
+
+        if ( $this->manual_activation && ! empty( $this->manual_locations ) ) {
+            $locations = $this->manual_locations;
+        }
+
+        if ( ! empty( $this->custom_locations ) ) {
+            $locations = array_replace( $locations, $this->custom_locations );
+        }
+
+        return $locations;
+    }
+
+    /**
+     * Determine if internal locations exist.
+     *
+     * @return bool
+     */
+    protected function has_internal_locations() : bool {
+        return ! empty( $this->get_internal_locations_repository() );
+    }
+
+    /**
+     * Resolve a location identifier using the current locations repository.
+     *
+     * @param mixed $location_id Raw location identifier.
+     *
+     * @return string
+     */
+    protected function resolve_location_identifier_from_repository( $location_id ) : string {
+        $location_id = trim( (string) $location_id );
+
+        if ( '' === $location_id ) {
+            return '';
+        }
+
+        $locations = $this->get_locations();
+
+        if ( empty( $locations ) ) {
+            return $location_id;
+        }
+
+        if ( isset( $locations[ $location_id ] ) ) {
+            $resolved = $this->extract_location_identifier_from_entry( $locations[ $location_id ] );
+            if ( '' !== $resolved ) {
+                return $resolved;
+            }
+
+            return $location_id;
+        }
+
+        $normalized = sanitize_title( $location_id );
+
+        foreach ( $locations as $entry_key => $entry ) {
+            $entry_id = $this->extract_location_identifier_from_entry( $entry );
+            $label    = $this->extract_location_label_from_entry( $entry );
+
+            if ( '' !== $entry_id && $entry_id === $location_id ) {
+                return $entry_id;
+            }
+
+            if ( '' !== $label && '' !== $normalized && sanitize_title( $label ) === $normalized ) {
+                return '' !== $entry_id ? $entry_id : (string) $entry_key;
+            }
+        }
+
+        return $location_id;
     }
 }
