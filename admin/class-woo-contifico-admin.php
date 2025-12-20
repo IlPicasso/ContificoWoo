@@ -6296,7 +6296,6 @@ $filters = [
                         }
 
                         $warehouse_code = isset( $warehouses_map[ $warehouse_id ] ) ? (string) $warehouses_map[ $warehouse_id ] : $warehouse_key;
-                        $extra_label    = '' !== $warehouse_id && $warehouse_code !== $warehouse_id ? $warehouse_id : '';
 
                         if ( $apply_filter ) {
                                 $normalized_id   = strtoupper( $warehouse_id );
@@ -6321,7 +6320,7 @@ $filters = [
                         $summary_by_id[ $warehouse_id ] = [
                                 'location_id'    => $warehouse_id,
                                 'location_label' => $friendly_label,
-                                'warehouse_code' => $extra_label,
+                                'warehouse_code' => $warehouse_code,
                                 'quantity'       => (float) $quantity,
                         ];
                 }
