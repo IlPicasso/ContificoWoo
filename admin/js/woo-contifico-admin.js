@@ -306,6 +306,33 @@
                                 $container.append( $changeList );
                         }
 
+                        if ( Array.isArray( data.location_stock ) && data.location_stock.length > 0 ) {
+                                $container.append(
+                                        $( '<p />' )
+                                                .addClass( 'woo-contifico-sync-result-heading' )
+                                                .text( messages.locationStockHeading || 'Stock por bodega' )
+                                );
+
+                                const $locationList = $( '<ul />' ).addClass( 'woo-contifico-sync-location-list' );
+
+                                data.location_stock.forEach( function( entry ) {
+                                        const locationLabel = entry.location_label || entry.location_id || '';
+                                        const quantity = ( typeof entry.quantity === 'number' ) ? entry.quantity : 0;
+                                        const warehouseCode = entry.warehouse_code ? ( ' (' + entry.warehouse_code + ')' ) : '';
+                                        const $item = $( '<li />' );
+
+                                        $item.append(
+                                                $( '<span />' )
+                                                        .addClass( 'woo-contifico-sync-detail-label' )
+                                                        .text( locationLabel + warehouseCode + ': ' )
+                                        );
+                                        $item.append( document.createTextNode( quantity ) );
+                                        $locationList.append( $item );
+                                } );
+
+                                $container.append( $locationList );
+                        }
+
                         $container.addClass( 'success' ).show();
                 }
 
