@@ -369,6 +369,15 @@ class Woo_Contifico
                                 'type' => 'text',
                                 'size' => 30
                         ],
+                        [
+                                'id' => 'bodegas_items',
+                                'label' => __('Bodegas visibles en ítems', $this->plugin_name),
+                                'description' => __('<br>Códigos de bodegas de Contífico que se mostrarán en los ítems. Separa cada código con coma o salto de línea. Deja en blanco para mostrar todas.', $this->plugin_name),
+                                'required' => false,
+                                'type' => 'textarea',
+                                'rows' => 3,
+                                'cols' => 30,
+                        ],
 
                 ]
             ],

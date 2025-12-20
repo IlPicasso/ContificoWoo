@@ -52,6 +52,7 @@ class Woo_Contifico_Activator {
 			            'shipping_code'    => '',
 			            'sync_price'       => false,
 			            'bodega'           => '',
+			            'bodegas_items'    => '',
 			            'actualizar_stock' => 'daily',
 			            'batch_size'       => 200,
 		            ]
