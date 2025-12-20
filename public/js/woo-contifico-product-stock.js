@@ -24,9 +24,131 @@
 
     const selectors = config.selectors || {};
     const stockSelector = selectors.stockNode || '.summary .stock';
+    const locationSelector = selectors.locationNode || '.woo-contifico-location-stock';
     const messages = config.messages || {};
+    const visibleWarehouseCodes = Array.isArray( config.visibleWarehouseCodes )
+      ? config.visibleWarehouseCodes.map( ( code ) => String( code ).trim().toUpperCase() ).filter( ( code ) => code )
+      : [];
 
     const resolveStockNode = () => document.querySelector( stockSelector ) || document.querySelector( '.summary .stock' );
+    const resolveLocationNode = () => document.querySelector( locationSelector );
+
+    const ensureLocationNode = () => {
+      let locationNode = resolveLocationNode();
+
+      if ( locationNode ) {
+        return locationNode;
+      }
+
+      const stockNode = resolveStockNode();
+
+      if ( ! stockNode ) {
+        return null;
+      }
+
+      locationNode = document.createElement( 'div' );
+      locationNode.classList.add( 'woo-contifico-location-stock' );
+
+      if ( locationSelector && locationSelector.startsWith( '#' ) ) {
+        locationNode.id = locationSelector.substring( 1 );
+      } else if ( locationSelector && locationSelector.startsWith( '.' ) ) {
+        locationNode.classList.add( locationSelector.substring( 1 ) );
+      }
+
+      stockNode.insertAdjacentElement( 'afterend', locationNode );
+
+      return locationNode;
+    };
+
+    const filterLocationStockEntries = ( entries ) => {
+      if ( ! Array.isArray( entries ) ) {
+        return [];
+      }
+
+      if ( visibleWarehouseCodes.length === 0 ) {
+        return [];
+      }
+
+      return entries.filter( ( entry ) => {
+        if ( ! entry ) {
+          return false;
+        }
+
+        const locationId = entry.location_id || entry.locationId || '';
+        const locationLabel = entry.location_label || entry.locationLabel || '';
+        const warehouseCode = entry.warehouse_code || entry.warehouseCode || '';
+
+        const normalizedValues = [ locationId, locationLabel, warehouseCode ]
+          .map( ( value ) => String( value ).trim().toUpperCase() )
+          .filter( ( value ) => value );
+
+        return normalizedValues.some( ( value ) => visibleWarehouseCodes.includes( value ) );
+      } );
+    };
+
+    const renderLocationStock = ( entries ) => {
+      const filteredEntries = filterLocationStockEntries( entries );
+      const locationNode = ensureLocationNode();
+
+      if ( ! locationNode ) {
+        return;
+      }
+
+      if ( filteredEntries.length === 0 ) {
+        locationNode.textContent = '';
+        locationNode.hidden = true;
+        return;
+      }
+
+      locationNode.hidden = false;
+      locationNode.textContent = '';
+
+      const title = messages.locationStockTitle || 'Existencias por bodega';
+      const quantityLabel = messages.locationStockQuantity || 'Disponible';
+
+      const titleElement = document.createElement( 'p' );
+      titleElement.classList.add( 'woo-contifico-location-stock-title' );
+      titleElement.textContent = title;
+      locationNode.appendChild( titleElement );
+
+      const table = document.createElement( 'table' );
+      table.classList.add( 'woo-contifico-location-stock-table' );
+
+      const thead = document.createElement( 'thead' );
+      const headerRow = document.createElement( 'tr' );
+
+      const locationHeader = document.createElement( 'th' );
+      locationHeader.textContent = messages.locationStockLocation || 'Bodega';
+      headerRow.appendChild( locationHeader );
+
+      const quantityHeader = document.createElement( 'th' );
+      quantityHeader.textContent = quantityLabel;
+      headerRow.appendChild( quantityHeader );
+
+      thead.appendChild( headerRow );
+      table.appendChild( thead );
+
+      const tbody = document.createElement( 'tbody' );
+
+      filteredEntries.forEach( ( entry ) => {
+        const row = document.createElement( 'tr' );
+
+        const locationCell = document.createElement( 'td' );
+        const label = entry.location_label || entry.locationLabel || entry.location_id || entry.locationId || '';
+        locationCell.textContent = label;
+
+        const quantityCell = document.createElement( 'td' );
+        const quantity = entry.quantity ?? '';
+        quantityCell.textContent = String( quantity );
+
+        row.appendChild( locationCell );
+        row.appendChild( quantityCell );
+        tbody.appendChild( row );
+      } );
+
+      table.appendChild( tbody );
+      locationNode.appendChild( table );
+    };
 
     const buildRequestData = ( productId, sku ) => {
       const requestData = new URLSearchParams();
@@ -44,10 +166,15 @@
       return requestData;
     };
 
+    let refreshSequence = 0;
+
     const refreshStock = ( productId, sku ) => {
       if ( ! productId && ! sku ) {
         return;
       }
+
+      refreshSequence += 1;
+      const currentSequence = refreshSequence;
 
       const requestData = buildRequestData( productId, sku );
 
@@ -69,11 +196,19 @@
       } )
         .then( ( response ) => response.json() )
         .then( ( response ) => {
+          if ( currentSequence !== refreshSequence ) {
+            return;
+          }
+
           if ( response && response.success && response.data ) {
             const data = response.data;
 
             if ( typeof data.stock_quantity === 'number' ) {
               updateStockNode( data.stock_quantity );
+            }
+
+            if ( Array.isArray( data.location_stock ) ) {
+              renderLocationStock( data.location_stock );
             }
 
             return;
