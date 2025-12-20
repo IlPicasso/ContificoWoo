@@ -52,6 +52,10 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.2.4 =
+* Se muestra el detalle de stock por bodega en la página de producto.
+* Se añade un selector configurable para el bloque de bodegas y se filtra el render con las bodegas visibles.
+
 = 4.2.3 =
 * Se agrega la configuración de bodegas visibles en los ítems de stock por bodega.
 * Se filtra el stock por bodega para mostrar solo las bodegas registradas.
