@@ -660,48 +660,6 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
         */
        public function admin_init() {
 
-                if (
-                        $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
-                        && $this->woo_contifico->multilocation->is_active()
-                ) {
-                        $warehouse_options = [
-                                '' => __( 'Seleccione una bodega', $this->plugin_name ),
-                        ];
-
-                        try {
-                                $this->contifico->fetch_warehouses();
-                        }
-                        catch ( Exception $exception ) {
-                                add_settings_error(
-                                        'woo_contifico_settings',
-                                        'warehouses_fetch_error',
-                                        sprintf(
-                                                /* translators: %s: error message */
-                                                __( 'No se pudo actualizar la lista de bodegas de Contífico: %s', $this->plugin_name ),
-                                                $exception->getMessage()
-                                        )
-                                );
-                        }
-
-                        $warehouses = (array) get_option( 'woo_contifico_warehouses', [] );
-
-                        foreach ( $warehouses as $warehouse_id => $warehouse_code ) {
-                                $code  = (string) $warehouse_code;
-                                $label = $code;
-                                if ( '' !== (string) $warehouse_id ) {
-                                        $label = sprintf( '%s (%s)', $code, $warehouse_id );
-                                }
-                                $warehouse_options[ $code ] = $label;
-                        }
-
-                        foreach ( $this->woo_contifico->settings_fields['woo_contifico_integration']['fields'] as &$field ) {
-                                if ( isset( $field['multiloca_location_id'] ) ) {
-                                        $field['options'] = $warehouse_options;
-                                }
-                        }
-                        unset( $field );
-                }
-
                 # Register plugin settings
                 foreach ( $this->woo_contifico->settings_fields as $index => $section ) {
                         add_settings_section( $index, $section['name'], [ $this, 'show_settings_section' ], "{$index}_settings" );
@@ -1011,62 +969,6 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                                 $cols  = isset( $args['cols'] ) ? (int) $args['cols'] : 50;
                                 $value = esc_textarea( (string) $value );
                                 $field = "<textarea name='{$name}' id='{$key}' rows='{$rows}' cols='{$cols}' class='textarea'>{$value}</textarea>";
-                                break;
-                        case 'multiloca_locations_manager':
-                                $locations   = is_array( $value ) ? $value : [];
-                                $rows        = [];
-                                $row_index   = 0;
-                                $field_label = __( 'Identificador', $this->plugin_name );
-                                $name_label  = __( 'Nombre', $this->plugin_name );
-                                $remove_label = __( 'Eliminar', $this->plugin_name );
-                                $add_label    = __( 'Añadir ubicación', $this->plugin_name );
-
-                                foreach ( $locations as $entry ) {
-                                        $location_id   = '';
-                                        $location_name = '';
-
-                                        if ( is_array( $entry ) ) {
-                                                $location_id   = $entry['id'] ?? '';
-                                                $location_name = $entry['name'] ?? '';
-                                        } elseif ( is_object( $entry ) ) {
-                                                $location_id   = $entry->id ?? '';
-                                                $location_name = $entry->name ?? '';
-                                        } elseif ( is_string( $entry ) ) {
-                                                $location_id   = $entry;
-                                                $location_name = $entry;
-                                        }
-
-                                        $rows[] = [
-                                                'id'   => (string) $location_id,
-                                                'name' => (string) $location_name,
-                                        ];
-                                }
-
-                                if ( empty( $rows ) ) {
-                                        $rows[] = [ 'id' => '', 'name' => '' ];
-                                }
-
-                                $field  = '<div class="woo-contifico-location-manager" data-base-name="' . esc_attr( $name ) . '" data-next-index="' . esc_attr( (string) count( $rows ) ) . '">';
-                                $field .= '<table class="widefat woo-contifico-location-table"><thead><tr>';
-                                $field .= '<th>' . esc_html( $field_label ) . '</th>';
-                                $field .= '<th>' . esc_html( $name_label ) . '</th>';
-                                $field .= '<th></th>';
-                                $field .= '</tr></thead><tbody>';
-
-                                foreach ( $rows as $row ) {
-                                        $row_id   = esc_attr( $row['id'] );
-                                        $row_name = esc_attr( $row['name'] );
-                                        $field   .= '<tr class="woo-contifico-location-row">';
-                                        $field   .= '<td><input type="text" class="regular-text" name="' . esc_attr( "{$name}[{$row_index}][id]" ) . '" value="' . $row_id . '" /></td>';
-                                        $field   .= '<td><input type="text" class="regular-text" name="' . esc_attr( "{$name}[{$row_index}][name]" ) . '" value="' . $row_name . '" /></td>';
-                                        $field   .= '<td><button type="button" class="button link-delete woo-contifico-location-remove">' . esc_html( $remove_label ) . '</button></td>';
-                                        $field   .= '</tr>';
-                                        $row_index++;
-                                }
-
-                                $field .= '</tbody></table>';
-                                $field .= '<p><button type="button" class="button woo-contifico-location-add">' . esc_html( $add_label ) . '</button></p>';
-                                $field .= '</div>';
                                 break;
                         case 'title':
                                 $field = "&nbsp;";
@@ -2857,27 +2759,18 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
         }
 
         /**
-         * Resolve the Contífico warehouse context for an order based on its MultiLoca location.
+         * Resolve the Contífico warehouse context for an order.
          *
          * @since 4.4.0
          *
-         * @param WC_Order $order            Order instance.
-         * @param string   $default_code     Default warehouse code configured in the settings.
-         * @param string   $default_id       Contífico identifier for the default warehouse.
+         * @param WC_Order $order        Order instance.
+         * @param string   $default_code Default warehouse code configured in the settings.
+         * @param string   $default_id   Contífico identifier for the default warehouse.
          *
          * @return array{id:string,code:string,label:string,location_id:string,location_label:string,mapped:bool}
          */
         private function resolve_order_location_inventory_context( WC_Order $order, string $default_code, string $default_id ) : array {
-                $location_id = '';
-
-                if (
-                        $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
-                        && $this->woo_contifico->multilocation->is_active()
-                ) {
-                        $location_id = (string) $this->woo_contifico->multilocation->get_order_location( $order );
-                }
-
-                return $this->resolve_location_inventory_context_from_identifier( $location_id, $default_code, $default_id );
+                return $this->build_default_inventory_context( $default_code, $default_id );
         }
 
         /**
@@ -2886,22 +2779,7 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
          * @since 4.4.0
          */
         private function resolve_order_item_location_inventory_context( WC_Order $order, WC_Order_Item $item, string $default_code, string $default_id ) : array {
-                $location_id = '';
-
-                if (
-                        $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
-                        && $this->woo_contifico->multilocation->is_active()
-                ) {
-                        if ( method_exists( $this->woo_contifico->multilocation, 'get_order_item_location' ) ) {
-                                $location_id = (string) $this->woo_contifico->multilocation->get_order_item_location( $item );
-                        }
-
-                        if ( '' === $location_id ) {
-                                $location_id = (string) $this->woo_contifico->multilocation->get_order_location( $order );
-                        }
-                }
-
-                $context = $this->resolve_location_inventory_context_from_identifier( $location_id, $default_code, $default_id );
+                $context = $this->build_default_inventory_context( $default_code, $default_id );
 
                 return $this->maybe_apply_preferred_warehouse_context( $context, $order, $item );
         }
@@ -3363,66 +3241,6 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                 ];
         }
 
-        /**
-         * Resolve the Contífico identifiers mapped to a MultiLoca location.
-         *
-         * @since 4.4.0
-         */
-        private function resolve_location_inventory_context_from_identifier( string $location_id, string $default_code, string $default_id ) : array {
-                $context = $this->build_default_inventory_context( $default_code, $default_id );
-
-                if ( '' === $location_id ) {
-                        return $context;
-                }
-
-                if ( ! ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) ) {
-                        return $context;
-                }
-
-                if ( ! $this->woo_contifico->multilocation->is_active() ) {
-                        return $context;
-                }
-
-                $context['location_id'] = $location_id;
-                $location_label         = '';
-
-                if ( method_exists( $this->woo_contifico->multilocation, 'get_location_label' ) ) {
-                        $location_label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
-                }
-
-                $context['location_label'] = $location_label;
-
-                $warehouse_code = $this->resolve_location_warehouse_code( $location_id );
-
-                if ( '' === $warehouse_code ) {
-                        return $context;
-                }
-
-                $warehouse_id = (string) ( $this->contifico->get_id_bodega( $warehouse_code ) ?? '' );
-
-                if ( '' === $warehouse_id ) {
-                        return $context;
-                }
-
-                $resolved_label    = $location_label;
-
-                if ( '' === $resolved_label || $warehouse_code === $resolved_label ) {
-                        $fallback_label = $this->resolve_warehouse_location_label( $warehouse_code, $location_id );
-
-                        if ( '' !== $fallback_label ) {
-                                $resolved_label = $fallback_label;
-                        }
-                }
-
-                $context['id']            = $warehouse_id;
-                $context['code']          = $warehouse_code;
-                $context['mapped']        = true;
-                $context['location_label'] = '' !== $resolved_label ? $resolved_label : $location_label;
-                $context['label']         = '' !== $resolved_label ? $resolved_label : $warehouse_code;
-
-                return $context;
-        }
-
         private function build_store_location_line() : string {
                 $city          = (string) get_option( 'woocommerce_store_city' );
                 $base_location = wc_get_base_location();
@@ -3681,16 +3499,6 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
        private function describe_inventory_location_for_note( array $context ) : string {
                 $location_label = isset( $context['location_label'] ) ? (string) $context['location_label'] : '';
                 $location_id    = isset( $context['location_id'] ) ? (string) $context['location_id'] : '';
-
-                if (
-                        '' === $location_label
-                        && '' !== $location_id
-                        && $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
-                        && $this->woo_contifico->multilocation->is_active()
-                        && method_exists( $this->woo_contifico->multilocation, 'get_location_label' )
-                ) {
-                        $location_label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
-                }
 
                 $warehouse_code = isset( $context['code'] ) ? (string) $context['code'] : '';
 
@@ -4189,47 +3997,8 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                 return sprintf( __( 'Ubicaciones: %s', $this->plugin_name ), implode( ', ', $labels ) );
         }
 
-/**
- * Find the Contífico warehouse code configured for a MultiLoca location.
- *
- * @since 4.4.0
- */
-private function resolve_location_warehouse_code( string $location_id ) : string {
-                $location_id = trim( $location_id );
-
-                if ( '' === $location_id ) {
-                        return '';
-                }
-
-                $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
-
-                if ( ! is_array( $configured_locations ) || empty( $configured_locations ) ) {
-                        return '';
-                }
-
-                if ( isset( $configured_locations[ $location_id ] ) ) {
-                        return (string) $configured_locations[ $location_id ];
-                }
-
-                $normalized_location = sanitize_title( $location_id );
-
-                foreach ( $configured_locations as $configured_id => $code ) {
-                        $configured_key = (string) $configured_id;
-
-                        if ( $configured_key === $location_id ) {
-                                return (string) $code;
-                        }
-
-                        if ( '' !== $normalized_location && sanitize_title( $configured_key ) === $normalized_location ) {
-                                return (string) $code;
-                        }
-                }
-
-                return '';
-        }
-
         /**
-         * Format the annotation displayed when a MultiLoca location is available.
+         * Format the annotation displayed when an inventory location is available.
          *
          * @since 4.4.0
          *
@@ -4237,18 +4006,11 @@ private function resolve_location_warehouse_code( string $location_id ) : string
          * @return string
          */
         private function format_inventory_location_annotation( array $context ) : string {
-                $location_label = isset( $context['location_label'] ) ? (string) $context['location_label'] : '';
-                $is_mapped      = isset( $context['mapped'] ) ? (bool) $context['mapped'] : false;
-
-                if ( '' === $location_label || ! $is_mapped ) {
-                        return '';
-                }
-
-                return ' ' . sprintf( __( '(Ubicación MultiLoca: %s)', $this->plugin_name ), $location_label );
+                return '';
         }
 
         /**
-         * Resolve a user-friendly label for a warehouse code by checking the MultiLoca mapping.
+         * Resolve a user-friendly label for a warehouse code.
          *
          * @since 4.4.0
          */
@@ -4262,60 +4024,11 @@ private function resolve_location_warehouse_code( string $location_id ) : string
                         return $invoice_label;
                 }
 
-                if ( ! ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) ) {
-                        return '';
-                }
-
-                if ( method_exists( $this->woo_contifico->multilocation, 'get_locations' ) ) {
-                        $available_locations = $this->woo_contifico->multilocation->get_locations();
-
-                        if ( empty( $available_locations ) ) {
-                                return '';
-                        }
-                }
-
-                $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
-
-                if ( is_array( $configured_locations ) && ! empty( $configured_locations ) ) {
-                        foreach ( $configured_locations as $configured_location_id => $configured_code ) {
-                                $mapped_code            = (string) $configured_code;
-                                $configured_location_id = (string) $configured_location_id;
-
-                                if ( '' !== $warehouse_code && $warehouse_code !== $mapped_code ) {
-                                        continue;
-                                }
-
-                                if ( '' !== $location_id && $configured_location_id !== $location_id ) {
-                                        continue;
-                                }
-
-                                if ( method_exists( $this->woo_contifico->multilocation, 'get_location_label' ) ) {
-                                        $label = (string) $this->woo_contifico->multilocation->get_location_label( $configured_location_id );
-
-                                        if ( '' !== $label ) {
-                                                return $label;
-                                        }
-                                }
-                        }
-                }
-
-                if (
-                        '' === $warehouse_code
-                        && '' !== $location_id
-                        && method_exists( $this->woo_contifico->multilocation, 'get_location_label' )
-                ) {
-                        $label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
-
-                        if ( '' !== $label ) {
-                                return $label;
-                        }
-                }
-
                 return '';
         }
 
         /**
-         * Resolve a friendly label for the Contífico invoice warehouse when it is not mapped in MultiLoca.
+         * Resolve a friendly label for the Contífico invoice warehouse.
          *
          * @since 4.1.17
          */
@@ -5553,8 +5266,6 @@ $filters = [
 
                         # Fetch warehouse stock
                         $this->contifico->fetch_warehouses();
-                        $location_stock    = [];
-                        $location_map      = [];
                         $manage_stock      = wc_string_to_bool( get_option( 'woocommerce_manage_stock' ) );
                         $id_warehouse      = $this->contifico->get_id_bodega( $this->woo_contifico->settings['bodega'] );
                         $warehouses_map    = $this->contifico->get_warehouses_map();
@@ -5563,24 +5274,6 @@ $filters = [
                         if ( ! is_array( $debug_log_entries ) ) {
                                 $debug_log_entries = [];
                         }
-
-                if ( $manage_stock ) {
-                        if ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) {
-                                $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
-
-                                if ( is_array( $configured_locations ) ) {
-                                        foreach ( $configured_locations as $location_id => $warehouse_code ) {
-                                                $code = (string) $warehouse_code;
-
-                                                if ( '' === $code ) {
-                                                        continue;
-                                                }
-
-                                                $location_map[ (string) $location_id ] = $code;
-                                        }
-                                }
-                        }
-                }
 
                         # Get products of this batch
                         $fetched_products = $this->contifico->fetch_products( $step, $batch_size );
@@ -5815,30 +5508,6 @@ $filters = [
 
                                 $result['found'] = $result['found'] + count( $products );
 
-                                if ( $manage_stock && ! empty( $location_map ) && ! empty( $products ) ) {
-                                        $product_ids_for_batch = array_map(
-                                                static function ( array $product_entry ) : string {
-                                                        return isset( $product_entry['id'] ) ? (string) $product_entry['id'] : '';
-                                                },
-                                                $products
-                                        );
-
-                                        $product_ids_for_batch = array_values( array_filter( $product_ids_for_batch, 'strlen' ) );
-
-                                        if ( ! empty( $product_ids_for_batch ) ) {
-                                                $warehouses_stock = $this->contifico->get_warehouses_stock(
-                                                        array_values( $location_map ),
-                                                        $product_ids_for_batch
-                                                );
-
-                                                foreach ( $location_map as $location_id => $warehouse_code ) {
-                                                        $location_id                    = (string) $location_id;
-                                                        $warehouse_code                 = (string) $warehouse_code;
-                                                        $location_stock[ $location_id ] = $warehouses_stock[ $warehouse_code ] ?? [];
-                                                }
-                                        }
-                                }
-
                                 # Update new stock and price
                                 $product_stock_cache        = [];
                                 $warehouse_id_cache         = [];
@@ -5852,9 +5521,7 @@ $filters = [
                                                 $debug_log_entries,
                                                 $product_stock_cache,
                                                 $warehouse_id_cache,
-                                                $location_stock,
                                                 $warehouses_map,
-                                                $location_map,
                                                 (string) $id_warehouse
                                         );
 
@@ -6126,7 +5793,7 @@ $filters = [
          *
          * @since 4.2.0
          *
-         * @return array{manage_stock:bool,default_warehouse_id:string,warehouses_map:array,location_map:array}
+         * @return array{manage_stock:bool,default_warehouse_id:string,warehouses_map:array}
          */
         private function prepare_single_product_sync_environment() : array {
                 $this->contifico->fetch_warehouses();
@@ -6134,31 +5801,11 @@ $filters = [
                 $manage_stock   = wc_string_to_bool( get_option( 'woocommerce_manage_stock' ) );
                 $id_warehouse   = $this->contifico->get_id_bodega( $this->woo_contifico->settings['bodega'] );
                 $warehouses_map = $this->contifico->get_warehouses_map();
-                $location_map   = [];
-
-                if ( $manage_stock ) {
-                        if ( $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) {
-                                $configured_locations = $this->woo_contifico->settings['multiloca_locations'] ?? [];
-
-                                if ( is_array( $configured_locations ) ) {
-                                        foreach ( $configured_locations as $location_id => $warehouse_code ) {
-                                                $code = (string) $warehouse_code;
-
-                                                if ( '' === $code ) {
-                                                        continue;
-                                                }
-
-                                                $location_map[ (string) $location_id ] = $code;
-                                        }
-                                }
-                        }
-                }
 
                 return [
                         'manage_stock'         => $manage_stock,
                         'default_warehouse_id' => is_scalar( $id_warehouse ) ? (string) $id_warehouse : '',
                         'warehouses_map'       => is_array( $warehouses_map ) ? $warehouses_map : [],
-                        'location_map'         => $location_map,
                 ];
         }
 
@@ -6420,13 +6067,9 @@ $filters = [
                 $debug_log_entries   = [];
                 $product_stock_cache = [];
                 $warehouse_id_cache  = [];
-                $location_stock      = [];
 
                 $warehouses_map = isset( $environment['warehouses_map'] ) && is_array( $environment['warehouses_map'] )
                         ? $environment['warehouses_map']
-                        : [];
-                $location_map   = isset( $environment['location_map'] ) && is_array( $environment['location_map'] )
-                        ? $environment['location_map']
                         : [];
                 $default_warehouse = isset( $environment['default_warehouse_id'] )
                         ? (string) $environment['default_warehouse_id']
@@ -6438,9 +6081,7 @@ $filters = [
                         $debug_log_entries,
                         $product_stock_cache,
                         $warehouse_id_cache,
-                        $location_stock,
                         $warehouses_map,
-                        $location_map,
                         $default_warehouse,
                         true
                 );
@@ -6448,10 +6089,8 @@ $filters = [
                 $product_cache_key = isset( $product_entry['id'] ) ? (string) $product_entry['id'] : '';
 
                 $location_summary = $this->build_single_product_location_summary(
-                        $resolved_product,
-                        $location_map,
-                        $location_stock,
-                        $product_cache_key
+                        $product_cache_key,
+                        $warehouses_map
                 );
 
                 if ( $log_inventory_movement ) {
@@ -6491,104 +6130,39 @@ $filters = [
         }
 
         /**
-         * Build a per-location stock summary for a single product sync.
+         * Build a per-warehouse stock summary for a single product sync.
          *
-         * @param WC_Product $product        WooCommerce product instance.
-         * @param array      $location_map   Mapping of location IDs to warehouse codes.
-         * @param array      $location_stock Stock values indexed by location and product ID.
-         * @param string     $product_id     Contífico product identifier.
+         * @param string $product_id     Contífico product identifier.
+         * @param array  $warehouses_map Mapping of Contífico warehouse IDs to codes.
          *
          * @return array
          */
-        private function build_single_product_location_summary( $product, array $location_map, array $location_stock, string $product_id ) : array {
-                if ( ! is_object( $product ) || ! is_a( $product, 'WC_Product' ) ) {
+        private function build_single_product_location_summary( string $product_id, array $warehouses_map ) : array {
+                $product_id = trim( $product_id );
+
+                if ( '' === $product_id ) {
+                        return [];
+                }
+
+                $stock_by_warehouse = $this->contifico->get_product_stock_by_warehouses( $product_id, true );
+
+                if ( ! is_array( $stock_by_warehouse ) || empty( $stock_by_warehouse ) ) {
                         return [];
                 }
 
                 $summary = [];
-                $product_meta_id = $product->get_id();
 
-                foreach ( $location_map as $location_id => $warehouse_code ) {
-                        $location_id    = (string) $location_id;
-                        $warehouse_code = (string) $warehouse_code;
-                        $quantity       = 0;
-
-                        if ( '' !== $product_id && isset( $location_stock[ $location_id ][ $product_id ] ) ) {
-                                $quantity = (int) $location_stock[ $location_id ][ $product_id ];
-                        } else {
-                                $meta_value = get_post_meta( $product_meta_id, sprintf( 'wcmlim_stock_at_%s', $location_id ), true );
-                                if ( '' !== $meta_value ) {
-                                        $quantity = (int) $meta_value;
-                                }
-                        }
-
-                        $label = $location_id;
-
-                        if (
-                                $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
-                                && method_exists( $this->woo_contifico->multilocation, 'get_location_label' )
-                        ) {
-                                $location_label = (string) $this->woo_contifico->multilocation->get_location_label( $location_id );
-
-                                if ( '' !== $location_label ) {
-                                        $label = $location_label;
-                                }
-                        }
+                foreach ( $stock_by_warehouse as $warehouse_id => $quantity ) {
+                        $warehouse_id   = (string) $warehouse_id;
+                        $warehouse_code = isset( $warehouses_map[ $warehouse_id ] ) ? (string) $warehouses_map[ $warehouse_id ] : $warehouse_id;
+                        $extra_label    = '' !== $warehouse_id && $warehouse_code !== $warehouse_id ? $warehouse_id : '';
 
                         $summary[] = [
-                                'location_id'    => $location_id,
-                                'location_label' => $label,
-                                'warehouse_code' => $warehouse_code,
-                                'quantity'       => $quantity,
+                                'location_id'    => $warehouse_id,
+                                'location_label' => $warehouse_code,
+                                'warehouse_code' => $extra_label,
+                                'quantity'       => (float) $quantity,
                         ];
-                }
-
-                if (
-                        empty( $summary )
-                        && $this->woo_contifico->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility
-                        && method_exists( $this->woo_contifico->multilocation, 'get_locations' )
-                ) {
-                        $locations = $this->woo_contifico->multilocation->get_locations();
-
-                        foreach ( $locations as $location_key => $location_entry ) {
-                                $location_id = is_string( $location_key ) || is_int( $location_key )
-                                        ? (string) $location_key
-                                        : '';
-
-                                if ( '' === $location_id ) {
-                                        if ( is_array( $location_entry ) ) {
-                                                $location_id = (string) ( $location_entry['id'] ?? $location_entry['location_id'] ?? '' );
-                                        } elseif ( is_object( $location_entry ) ) {
-                                                $location_id = (string) ( $location_entry->id ?? $location_entry->location_id ?? $location_entry->ID ?? '' );
-                                        } else {
-                                                $location_id = (string) $location_entry;
-                                        }
-                                }
-
-                                if ( '' === $location_id ) {
-                                        continue;
-                                }
-
-                                $label = '';
-
-                                if ( is_array( $location_entry ) ) {
-                                        $label = (string) ( $location_entry['name'] ?? $location_entry['title'] ?? $location_entry['slug'] ?? '' );
-                                } elseif ( is_object( $location_entry ) ) {
-                                        $label = (string) ( $location_entry->name ?? $location_entry->title ?? $location_entry->post_title ?? '' );
-                                } elseif ( is_string( $location_entry ) ) {
-                                        $label = $location_entry;
-                                }
-
-                                $meta_value = get_post_meta( $product_meta_id, sprintf( 'wcmlim_stock_at_%s', $location_id ), true );
-                                $quantity = '' !== $meta_value ? (int) $meta_value : 0;
-
-                                $summary[] = [
-                                        'location_id'    => (string) $location_id,
-                                        'location_label' => '' !== $label ? $label : (string) $location_id,
-                                        'warehouse_code' => '',
-                                        'quantity'       => $quantity,
-                                ];
-                        }
                 }
 
                 return $summary;
@@ -6649,9 +6223,7 @@ $filters = [
          * @param array $debug_log_entries
          * @param array $product_stock_cache
          * @param array $warehouse_id_cache
-         * @param array $location_stock
          * @param array $warehouses_map
-         * @param array $location_map
          * @param string $default_warehouse_id
          *
          * @return array{
@@ -6673,9 +6245,7 @@ $filters = [
                 array &$debug_log_entries,
                 array &$product_stock_cache,
                 array &$warehouse_id_cache,
-                array &$location_stock,
                 array $warehouses_map,
-                array $location_map,
                 string $default_warehouse_id,
                 bool $force_refresh = false
         ) : array {
@@ -6722,50 +6292,7 @@ $filters = [
 
                         $new_stock = 0;
 
-                        if ( ! empty( $location_map ) ) {
-                                $global_quantity = 0;
-
-                                foreach ( $location_map as $location_id => $warehouse_code ) {
-                                        $location_id    = (string) $location_id;
-                                        $warehouse_code = (string) $warehouse_code;
-                                        $quantity       = null;
-
-                                if ( isset( $location_stock[ $location_id ][ $product_cache_key ] ) ) {
-                                        $quantity = (int) $location_stock[ $location_id ][ $product_cache_key ];
-                                }
-
-                                if ( null === $quantity ) {
-                                        if ( ! array_key_exists( $warehouse_code, $warehouse_id_cache ) ) {
-                                                $warehouse_id_cache[ $warehouse_code ] = (string) ( $this->contifico->get_id_bodega( $warehouse_code ) ?? '' );
-                                        }
-
-                                        $warehouse_id = $warehouse_id_cache[ $warehouse_code ];
-
-                                        if ( '' !== $warehouse_id && isset( $stock_by_warehouse[ $warehouse_id ] ) ) {
-                                                $quantity = (int) $stock_by_warehouse[ $warehouse_id ];
-                                        }
-
-                                        if ( null === $quantity && '' !== $warehouse_code && isset( $stock_by_warehouse[ $warehouse_code ] ) ) {
-                                                $quantity = (int) $stock_by_warehouse[ $warehouse_code ];
-                                        }
-                                }
-
-                                if ( null === $quantity ) {
-                                        $quantity = 0;
-                                }
-
-                                        $location_stock[ $location_id ][ $product_cache_key ] = $quantity;
-                                        $global_quantity                                      += $quantity;
-
-                                        if ( method_exists( $this->woo_contifico->multilocation, 'update_location_stock' ) ) {
-                                                $this->woo_contifico->multilocation->update_location_stock( $product, $location_id, $quantity );
-                                        }
-                                }
-
-                                $new_stock = $global_quantity;
-                        }
-
-                        if ( empty( $location_map ) && '' !== $default_warehouse_id ) {
+                        if ( '' !== $default_warehouse_id ) {
                                 if ( isset( $stock_by_warehouse[ $default_warehouse_id ] ) ) {
                                         $new_stock = (int) $stock_by_warehouse[ $default_warehouse_id ];
                                 }
@@ -7750,13 +7277,6 @@ $filters = [
                                         'pos'               => $this->woo_contifico->settings["{$env}_api_token"],
                                 ];
 
-                                if ( $group_context['mapped'] && '' !== $group_context['location_label'] ) {
-                                        $transfer_stock['descripcion'] .= ' ' . sprintf(
-                                                __( '(Ubicación MultiLoca: %s)', $this->plugin_name ),
-                                                $group_context['location_label']
-                                        );
-                                }
-
                                 $group_entries = [];
 
                                 foreach ( $group['items'] as $index => $item ) {
@@ -8306,13 +7826,6 @@ $filters = [
                                         'pos'               => $this->woo_contifico->settings["{$env}_api_token"],
                                 ];
 
-                                if ( $group_context['mapped'] && '' !== $group_context['location_label'] ) {
-                                        $restore_stock['descripcion'] .= ' ' . sprintf(
-                                                __( '(Ubicación MultiLoca: %s)', $this->plugin_name ),
-                                                $group_context['location_label']
-                                        );
-                                }
-
                                 foreach ( $group['items'] as $index => $item ) {
                                         $wc_product = $item->get_product();
 
@@ -8631,48 +8144,6 @@ $filters = [
 			$error = true;
 		}
 
-                $input['multiloca_manual_enable'] = isset( $input['multiloca_manual_enable'] );
-
-                if ( isset( $input['multiloca_manual_locations'] ) ) {
-                        $input['multiloca_manual_locations'] = sanitize_textarea_field( (string) $input['multiloca_manual_locations'] );
-                } else {
-                        $input['multiloca_manual_locations'] = '';
-                }
-
-                if ( isset( $input['multiloca_custom_locations'] ) && is_array( $input['multiloca_custom_locations'] ) ) {
-                        $custom_locations = [];
-
-                        foreach ( $input['multiloca_custom_locations'] as $entry ) {
-                                if ( ! is_array( $entry ) ) {
-                                        continue;
-                                }
-
-                                $location_id   = sanitize_text_field( (string) ( $entry['id'] ?? '' ) );
-                                $location_name = sanitize_text_field( (string) ( $entry['name'] ?? '' ) );
-
-                                if ( '' === $location_id && '' !== $location_name ) {
-                                        $location_id = sanitize_title( $location_name );
-                                }
-
-                                if ( '' === $location_id ) {
-                                        continue;
-                                }
-
-                                if ( '' === $location_name ) {
-                                        $location_name = $location_id;
-                                }
-
-                                $custom_locations[ $location_id ] = [
-                                        'id'   => $location_id,
-                                        'name' => $location_name,
-                                ];
-                        }
-
-                        $input['multiloca_custom_locations'] = array_values( $custom_locations );
-                } else {
-                        $input['multiloca_custom_locations'] = [];
-                }
-
                 # Re Schedule cron
                 try {
 			# Check if cron recurrence changed
@@ -8708,38 +8179,6 @@ $filters = [
 		# Remove contifico notice if changed from test to production
                 if( WOO_CONTIFICO_PRODUCTION == $input['ambiente'] ) {
                         $this->remove_notice('woo_contifico_environment');
-                }
-
-                if ( ! isset( $input['multiloca_locations'] ) && isset( $_POST['multiloca_locations'] ) ) {
-                        $input['multiloca_locations'] = (array) wp_unslash( $_POST['multiloca_locations'] );
-                }
-
-                if ( isset( $input['multiloca_locations'] ) && is_array( $input['multiloca_locations'] ) ) {
-                        $valid_locations = [];
-
-                        foreach ( $this->woo_contifico->settings_fields['woo_contifico_integration']['fields'] as $field ) {
-                                if ( isset( $field['multiloca_location_id'] ) ) {
-                                        $valid_locations[] = (string) $field['multiloca_location_id'];
-                                }
-                        }
-
-                        $sanitized_locations = [];
-
-                        foreach ( $input['multiloca_locations'] as $location_id => $warehouse_code ) {
-                                $location_key = (string) $location_id;
-
-                                if ( ! empty( $valid_locations ) && ! in_array( $location_key, $valid_locations, true ) ) {
-                                        continue;
-                                }
-
-                                $code = sanitize_text_field( (string) $warehouse_code );
-
-                                if ( '' !== $code ) {
-                                        $sanitized_locations[ $location_key ] = $code;
-                                }
-                        }
-
-                        $input['multiloca_locations'] = $sanitized_locations;
                 }
 
                 $this->update_config_status();
