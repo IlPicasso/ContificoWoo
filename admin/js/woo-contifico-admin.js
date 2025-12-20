@@ -210,6 +210,60 @@
                         $container.addClass( 'success' ).show();
                 }
 
+                function addLocationRow( $manager, index ) {
+                        const baseName = $manager.data( 'base-name' ) || '';
+                        const removeLabel = $manager.find( '.woo-contifico-location-remove' ).first().text() || 'Eliminar';
+
+                        if ( ! baseName ) {
+                                return;
+                        }
+
+                        const rowHtml = '<tr class="woo-contifico-location-row">' +
+                                '<td><input type="text" class="regular-text" name="' + baseName + '[' + index + '][id]" value="" /></td>' +
+                                '<td><input type="text" class="regular-text" name="' + baseName + '[' + index + '][name]" value="" /></td>' +
+                                '<td><button type="button" class="button link-delete woo-contifico-location-remove">' + removeLabel + '</button></td>' +
+                                '</tr>';
+
+                        $manager.find( 'tbody' ).append( rowHtml );
+                }
+
+                function initLocationManagers() {
+                        $( '.woo-contifico-location-manager' ).each( function() {
+                                const $manager = $( this );
+
+                                $manager.on( 'click', '.woo-contifico-location-add', function() {
+                                        let nextIndex = parseInt( $manager.data( 'next-index' ), 10 );
+
+                                        if ( Number.isNaN( nextIndex ) ) {
+                                                nextIndex = $manager.find( 'tbody tr' ).length;
+                                        }
+
+                                        addLocationRow( $manager, nextIndex );
+                                        $manager.data( 'next-index', nextIndex + 1 );
+                                } );
+
+                                $manager.on( 'click', '.woo-contifico-location-remove', function() {
+                                        const $row = $( this ).closest( 'tr' );
+                                        const $tbody = $manager.find( 'tbody' );
+
+                                        $row.remove();
+
+                                        if ( $tbody.find( 'tr' ).length === 0 ) {
+                                                let nextIndex = parseInt( $manager.data( 'next-index' ), 10 );
+
+                                                if ( Number.isNaN( nextIndex ) ) {
+                                                        nextIndex = 0;
+                                                }
+
+                                                addLocationRow( $manager, nextIndex );
+                                                $manager.data( 'next-index', nextIndex + 1 );
+                                        }
+                                } );
+                        } );
+                }
+
+                initLocationManagers();
+
                 function renderSingleSyncResult( $container, data ) {
                         if ( Array.isArray( data.items ) && data.items.length > 0 ) {
                                 renderMultipleSyncResult( $container, data );

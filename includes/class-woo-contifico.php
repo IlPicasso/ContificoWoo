@@ -161,19 +161,31 @@ class Woo_Contifico
             $this->settings['multiloca_manual_locations'] = (string) $this->settings['multiloca_manual_locations'];
         }
 
+        if ( ! isset( $this->settings['multiloca_custom_locations'] ) || ! is_array( $this->settings['multiloca_custom_locations'] ) ) {
+            $this->settings['multiloca_custom_locations'] = [];
+        }
+
         $manual_locations = [];
 
         if ( ! empty( $this->settings['multiloca_manual_locations'] ) ) {
             $manual_locations = $this->parse_manual_multiloca_locations( $this->settings['multiloca_manual_locations'] );
         }
 
+        $custom_locations = $this->parse_custom_multiloca_locations( $this->settings['multiloca_custom_locations'] );
+
         if ( $this->multilocation instanceof Woo_Contifico_MultiLocation_Compatibility ) {
             if ( method_exists( $this->multilocation, 'set_manual_activation' ) ) {
-                $this->multilocation->set_manual_activation( (bool) $this->settings['multiloca_manual_enable'] );
+                $this->multilocation->set_manual_activation(
+                    (bool) $this->settings['multiloca_manual_enable'] || ! empty( $custom_locations )
+                );
             }
 
             if ( method_exists( $this->multilocation, 'set_manual_locations' ) ) {
                 $this->multilocation->set_manual_locations( $manual_locations );
+            }
+
+            if ( method_exists( $this->multilocation, 'set_custom_locations' ) ) {
+                $this->multilocation->set_custom_locations( $custom_locations );
             }
         }
 
@@ -429,6 +441,18 @@ class Woo_Contifico
                                 'required' => false,
                                 'type' => 'textarea',
                                 'rows' => 5,
+                        ],
+                        [
+                                'id' => 'multiloca_custom_locations_title',
+                                'type' => 'title',
+                                'label' => __('<h3>Ubicaciones personalizadas</h3>', $this->plugin_name),
+                        ],
+                        [
+                                'id' => 'multiloca_custom_locations',
+                                'label' => __( 'Ubicaciones disponibles', $this->plugin_name ),
+                                'description' => __( 'Agrega las ubicaciones que quieras usar cuando no exista el plugin MultiLoca. El identificador se usa en el checkout y en el mapeo de bodegas.', $this->plugin_name ),
+                                'required' => false,
+                                'type' => 'multiloca_locations_manager',
                         ],
 
                 ]
@@ -694,6 +718,55 @@ class Woo_Contifico
 
             $id   = wp_strip_all_tags( (string) $id );
             $name = wp_strip_all_tags( (string) $name );
+
+            if ( '' === $id ) {
+                continue;
+            }
+
+            if ( '' === $name ) {
+                $name = $id;
+            }
+
+            $locations[ $id ] = [
+                'id'   => $id,
+                'name' => $name,
+            ];
+        }
+
+        return $locations;
+    }
+
+    /**
+     * Normalize custom MultiLoca locations saved in the integration settings.
+     *
+     * @param array $raw_locations
+     *
+     * @return array
+     */
+    private function parse_custom_multiloca_locations( array $raw_locations ) : array {
+        $locations = [];
+
+        foreach ( $raw_locations as $index => $entry ) {
+            $id   = '';
+            $name = '';
+
+            if ( is_array( $entry ) ) {
+                $id   = $entry['id'] ?? $entry['location_id'] ?? $index;
+                $name = $entry['name'] ?? $entry['title'] ?? '';
+            } elseif ( is_object( $entry ) ) {
+                $id   = $entry->id ?? $entry->location_id ?? $index;
+                $name = $entry->name ?? $entry->title ?? '';
+            } elseif ( is_string( $entry ) ) {
+                $id   = $entry;
+                $name = $entry;
+            }
+
+            $id   = wp_strip_all_tags( trim( (string) $id ) );
+            $name = wp_strip_all_tags( trim( (string) $name ) );
+
+            if ( '' === $id && '' !== $name ) {
+                $id = sanitize_title( $name );
+            }
 
             if ( '' === $id ) {
                 continue;

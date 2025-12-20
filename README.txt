@@ -83,6 +83,10 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.2.0 =
+* Se agrega un gestor de ubicaciones personalizado para MultiLoca desde la integración de Contífico.
+* Se incluye un selector de ubicación en checkout y se persiste el identificador por ítem para reutilizar la meta existente.
+
 = 4.1.99 =
 * Se asegura que el resumen por bodega en la sincronización individual lea los metadatos de stock aunque no exista el mapeo de ubicaciones, para visualizar cómo quedan las cantidades registradas.
 

@@ -120,6 +120,28 @@
     font-style: italic;
 }
 
+#woo-contifico-settings-page .woo-contifico-location-manager {
+    margin-top: 0.5em;
+}
+
+#woo-contifico-settings-page .woo-contifico-location-table {
+    margin-top: 0.25em;
+}
+
+#woo-contifico-settings-page .woo-contifico-location-table th {
+    width: 35%;
+}
+
+#woo-contifico-settings-page .woo-contifico-location-table th:last-child,
+#woo-contifico-settings-page .woo-contifico-location-table td:last-child {
+    width: 10%;
+    text-align: right;
+}
+
+#woo-contifico-settings-page .woo-contifico-location-add {
+    margin-top: 0.5em;
+}
+
 #woo-contifico-settings-page .manual-sync-section {
     max-width: 720px;
 }
