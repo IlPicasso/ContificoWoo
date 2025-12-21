@@ -53,7 +53,7 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 == Changelog ==
 
 = 4.2.14 =
-* El mensaje de stock en el frontend ahora suma las existencias visibles por bodega para que coincida con la tabla.
+* La sincronización de inventario ahora suma el stock de las bodegas configuradas como principal, secundaria y terciaria.
 
 = 4.2.13 =
 * El meta box de stock por bodega ahora considera variaciones con ID de Contífico cuando el producto variable no lo tiene.
