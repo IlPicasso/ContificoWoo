@@ -3042,6 +3042,73 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
         }
 
         /**
+         * Calculate the combined stock for the configured preferred warehouses.
+         *
+         * @since 4.2.14
+         *
+         * @param array<string,float> $stock_by_warehouse
+         * @param string[]            $preferred_codes
+         * @return float|null
+         */
+        private function calculate_preferred_stock_total( array $stock_by_warehouse, array $preferred_codes ) : ?float {
+                if ( empty( $preferred_codes ) || empty( $stock_by_warehouse ) ) {
+                        return null;
+                }
+
+                $normalized_stock = [];
+
+                foreach ( $stock_by_warehouse as $warehouse_key => $quantity ) {
+                        $normalized_stock[ strtoupper( (string) $warehouse_key ) ] = (float) $quantity;
+                }
+
+                $total       = 0.0;
+                $has_entries = false;
+                $seen_ids    = [];
+
+                foreach ( $preferred_codes as $code ) {
+                        $code = strtoupper( trim( (string) $code ) );
+
+                        if ( '' === $code ) {
+                                continue;
+                        }
+
+                        $warehouse_id = (string) ( $this->contifico->get_id_bodega( $code ) ?? '' );
+
+                        if ( '' !== $warehouse_id ) {
+                                if ( isset( $seen_ids[ $warehouse_id ] ) ) {
+                                        continue;
+                                }
+
+                                if ( array_key_exists( $warehouse_id, $stock_by_warehouse ) ) {
+                                        $total += (float) $stock_by_warehouse[ $warehouse_id ];
+                                        $has_entries = true;
+                                        $seen_ids[ $warehouse_id ] = true;
+                                        continue;
+                                }
+
+                                $warehouse_id_upper = strtoupper( $warehouse_id );
+                                if ( isset( $normalized_stock[ $warehouse_id_upper ] ) ) {
+                                        $total += (float) $normalized_stock[ $warehouse_id_upper ];
+                                        $has_entries = true;
+                                        $seen_ids[ $warehouse_id ] = true;
+                                        continue;
+                                }
+                        }
+
+                        if ( isset( $normalized_stock[ $code ] ) ) {
+                                $total += (float) $normalized_stock[ $code ];
+                                $has_entries = true;
+                        }
+                }
+
+                if ( $has_entries ) {
+                        return $total;
+                }
+
+                return null;
+        }
+
+        /**
          * Retrieve the registered warehouse codes that should be shown in items.
          *
          * @since 4.2.3
@@ -6684,7 +6751,19 @@ $filters = [
 
                         $new_stock = 0;
 
-                        if ( '' !== $default_warehouse_id ) {
+                        $preferred_codes = $this->get_preferred_warehouse_codes();
+                        $preferred_stock = null;
+
+                        if ( ! empty( $preferred_codes ) ) {
+                                $preferred_stock = $this->calculate_preferred_stock_total(
+                                        $stock_by_warehouse,
+                                        $preferred_codes
+                                );
+                        }
+
+                        if ( null !== $preferred_stock ) {
+                                $new_stock = (int) $preferred_stock;
+                        } elseif ( '' !== $default_warehouse_id ) {
                                 if ( isset( $stock_by_warehouse[ $default_warehouse_id ] ) ) {
                                         $new_stock = (int) $stock_by_warehouse[ $default_warehouse_id ];
                                 }

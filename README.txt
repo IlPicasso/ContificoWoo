@@ -52,6 +52,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.2.14 =
+* La sincronización de inventario ahora suma el stock de las bodegas configuradas como principal, secundaria y terciaria.
+
 = 4.2.13 =
 * El meta box de stock por bodega ahora considera variaciones con ID de Contífico cuando el producto variable no lo tiene.
 
