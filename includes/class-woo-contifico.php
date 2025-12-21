@@ -666,6 +666,7 @@ class Woo_Contifico
                 10,
                 3
         );
+        $this->loader->add_action( 'add_meta_boxes', $plugin_admin, 'register_product_warehouse_stock_meta_box' );
 
         # Stock manage hooks
 	    $this->loader->add_action('woocommerce_reduce_order_stock', $plugin_admin, 'transfer_contifico_stock');
