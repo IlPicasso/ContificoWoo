@@ -150,6 +150,23 @@
       locationNode.appendChild( table );
     };
 
+    const resolveStockTotal = ( entries ) => {
+      const filteredEntries = filterLocationStockEntries( entries );
+
+      if ( filteredEntries.length === 0 ) {
+        return null;
+      }
+
+      return filteredEntries.reduce( ( total, entry ) => {
+        const quantity = entry && entry.quantity !== undefined && entry.quantity !== null
+          ? parseFloat( entry.quantity )
+          : 0;
+        const safeQuantity = Number.isFinite( quantity ) ? quantity : 0;
+
+        return total + safeQuantity;
+      }, 0 );
+    };
+
     const buildRequestData = ( productId, sku ) => {
       const requestData = new URLSearchParams();
       requestData.append( 'action', 'woo_contifico_sync_single_product' );
@@ -214,12 +231,18 @@
           if ( response && response.success && response.data ) {
             const data = response.data;
 
-            if ( typeof data.stock_quantity === 'number' ) {
-              updateStockNode( data.stock_quantity );
-            }
-
             if ( Array.isArray( data.location_stock ) ) {
               renderLocationStock( data.location_stock );
+            }
+
+            const locationTotal = resolveStockTotal( data.location_stock );
+            if ( locationTotal !== null ) {
+              updateStockNode( locationTotal );
+              return;
+            }
+
+            if ( typeof data.stock_quantity === 'number' ) {
+              updateStockNode( data.stock_quantity );
             }
 
             return;
