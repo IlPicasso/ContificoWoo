@@ -52,6 +52,9 @@ No, para poder usar este plugin es necesario que tengas una cuenta de Contífico
 
 == Changelog ==
 
+= 4.2.13 =
+* El meta box de stock por bodega ahora considera variaciones con ID de Contífico cuando el producto variable no lo tiene.
+
 = 4.2.12 =
 * Se añade un meta box en productos para listar stock por bodega según el ID de Contífico y las bodegas visibles configuradas.
 

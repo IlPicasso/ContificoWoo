@@ -593,11 +593,18 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                         return;
                 }
 
-                $contifico_id   = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
-                $warehouse_rows = [];
-                $empty_message  = '';
+                $contifico_id     = (string) $product->get_meta( self::PRODUCT_ID_META_KEY, true );
+                $warehouse_rows   = [];
+                $stock_groups     = [];
+                $empty_message    = '';
 
-                if ( '' === $contifico_id ) {
+                if ( '' === $contifico_id && $product->is_type( 'variable' ) ) {
+                        $stock_groups = $this->build_variable_product_warehouse_stock_groups( $product );
+
+                        if ( empty( $stock_groups ) ) {
+                                $empty_message = __( 'Las variaciones no tienen un ID de Contífico asignado.', 'woo-contifico' );
+                        }
+                } elseif ( '' === $contifico_id ) {
                         $empty_message = __( 'Este producto no tiene un ID de Contífico asignado.', 'woo-contifico' );
                 } else {
                         $warehouse_rows = $this->build_product_warehouse_stock_rows( $contifico_id );
@@ -607,8 +614,9 @@ private const ORDER_ITEM_ALLOCATION_META_KEY = '_woo_contifico_source_allocation
                         }
                 }
 
-                $stock_title     = __( 'Bodegas y cantidades', 'woo-contifico' );
-                $contifico_label = __( 'ID de Contífico:', 'woo-contifico' );
+                $stock_title      = __( 'Bodegas y cantidades', 'woo-contifico' );
+                $contifico_label  = __( 'ID de Contífico:', 'woo-contifico' );
+                $variation_title  = __( 'Variación', 'woo-contifico' );
 
                 require plugin_dir_path( __FILE__ ) . 'partials/woo-contifico-product-warehouse-stock.php';
         }
@@ -6500,6 +6508,56 @@ $filters = [
                 }
 
                 return array_values( $rows_by_id );
+        }
+
+        /**
+         * Build warehouse stock groups for variable products without a parent Contífico ID.
+         *
+         * @since 4.2.13
+         *
+         * @param WC_Product $product
+         *
+         * @return array
+         */
+        private function build_variable_product_warehouse_stock_groups( $product ) : array {
+                if ( ! $product || ! is_object( $product ) || ! method_exists( $product, 'get_children' ) ) {
+                        return [];
+                }
+
+                $groups = [];
+                $variation_ids = $product->get_children();
+
+                if ( empty( $variation_ids ) ) {
+                        return [];
+                }
+
+                foreach ( $variation_ids as $variation_id ) {
+                        $variation = wc_get_product( $variation_id );
+
+                        if ( ! $variation ) {
+                                continue;
+                        }
+
+                        $contifico_id = (string) $variation->get_meta( self::PRODUCT_ID_META_KEY, true );
+
+                        if ( '' === $contifico_id ) {
+                                continue;
+                        }
+
+                        $warehouse_rows = $this->build_product_warehouse_stock_rows( $contifico_id );
+
+                        if ( empty( $warehouse_rows ) ) {
+                                continue;
+                        }
+
+                        $groups[] = [
+                                'label'        => $variation->get_formatted_name(),
+                                'contifico_id' => $contifico_id,
+                                'rows'         => $warehouse_rows,
+                        ];
+                }
+
+                return $groups;
         }
 
         /**
